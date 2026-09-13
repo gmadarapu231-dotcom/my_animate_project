@@ -30,7 +30,12 @@ careeros = "careeros.cli:main"
 include = ["careeros*"]
 
 [tool.setuptools.package-data]
-careeros = ["config/countries/*.yaml", "config/taxonomy/*.yaml", "dashboard/*.html"]
+careeros = [
+    "config/countries/*.yaml",
+    "config/taxonomy/*.yaml",
+    "config/sources/*.yaml",
+    "dashboard/*.html",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

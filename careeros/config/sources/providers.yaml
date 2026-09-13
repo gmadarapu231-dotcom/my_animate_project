@@ -1,0 +1,740 @@
+# Job-source providers.
+#
+# Every provider is data, not code. `kind` picks the connector that knows how
+# to talk to that shape of endpoint; everything else -- URL, auth, paging,
+# field mapping -- lives here. Adding a board is an entry in this file.
+#
+# `access` is the compliance tier and it is enforced, not documentation:
+#
+#   official_api         the site's own documented API, called with the user's
+#                        own credentials.
+#   licensed_aggregator  a third party whose business is licensing search
+#                        results (Google's own Custom Search API, SerpApi).
+#   public_feed          an RSS/Atom/JSON feed the site publishes to be read.
+#   public_page          an ordinary page fetched once, honouring robots.txt,
+#                        reading the schema.org JobPosting the site publishes
+#                        precisely so that job engines can read it.
+#   prohibited           terms forbid automated collection and there is no open
+#                        API. Registered so the UI can explain it and point at
+#                        the route that does work; fetch() refuses.
+#
+# No provider may bypass CAPTCHA, MFA, bot protection or an authentication
+# wall. A 403/429/challenge response disables the host for the run; it is never
+# retried through.
+
+version: 1
+
+defaults:
+  timeout_seconds: 20
+  rate_limit_per_minute: 20
+  page_size: 50
+  max_pages: 4
+  user_agent: "CareerOS/0.1 (+https://github.com/gmadarapu231-dotcom/my_animate_project)"
+
+providers:
+
+  # ---------------------------------------------------------------------------
+  # Google. The route to every major board at once: Google Jobs indexes
+  # LinkedIn, Indeed, ZipRecruiter, Glassdoor, Monster, CareerBuilder and Dice
+  # listings with those boards' participation, which is what Google Jobs is
+  # for. Plain Google Search plus schema.org parsing reaches company career
+  # pages that no aggregator carries.
+  # ---------------------------------------------------------------------------
+  - id: google_jobs
+    label: Google Jobs
+    kind: serpapi_google_jobs
+    access: licensed_aggregator
+    countries: []
+    requires_key: true
+    auth:
+      style: query
+      params:
+        api_key: {env: CAREEROS_SERPAPI_KEY}
+    request:
+      url: "https://serpapi.com/search.json"
+      params:
+        engine: google_jobs
+        q: "{query}"
+        location: "{location}"
+        hl: en
+        gl: "{country_lower}"
+    response:
+      items: jobs_results
+      page_param: start
+      page_stride: 10
+      first_page: 0
+    map:
+      external_id: {first: [job_id, title]}
+      title: title
+      company: company_name
+      description: description
+      location: location
+      url: {first: [share_link, "apply_options.0.link", related_links.0.link]}
+      employment_type: {path: "detected_extensions.schedule_type"}
+      salary_raw: {first: ["detected_extensions.salary", "salary"]}
+      posted_on: {path: "detected_extensions.posted_at", transform: relative_date}
+      board: via
+    notes: |
+      Surfaces the boards you asked for in one query: each result carries a
+      `via` field naming where Google found it (LinkedIn, Indeed, ZipRecruiter,
+      Glassdoor, Monster, CareerBuilder, Dice, or the employer directly), which
+      is stored as the job's board so per-board conversion analytics still work.
+      SerpApi has a free tier; the key is yours.
+    docs: "https://serpapi.com/google-jobs-api"
+
+  - id: google_search_careers
+    label: Google Search → company career pages
+    kind: google_cse
+    access: licensed_aggregator
+    countries: []
+    requires_key: true
+    auth:
+      style: query
+      params:
+        key: {env: CAREEROS_GOOGLE_CSE_KEY}
+        cx: {env: CAREEROS_GOOGLE_CSE_CX}
+    request:
+      url: "https://www.googleapis.com/customsearch/v1"
+      params:
+        q: "{query}"
+        num: 10
+        gl: "{country_lower}"
+    response:
+      items: items
+      page_param: start
+      page_stride: 10
+      first_page: 1
+    resolve:
+      # Search returns links; the posting itself is read from the page's own
+      # schema.org JobPosting block.
+      strategy: jsonld
+      link: link
+      require_job_posting: true
+    notes: |
+      Google's own Programmable Search JSON API (100 queries/day free). Used to
+      find postings on employers' own career sites -- Workday, Taleo, iCIMS,
+      SuccessFactors, bespoke pages -- that never reach an aggregator. Each hit
+      is fetched once, robots.txt permitting, and the posting is read from the
+      schema.org JobPosting the page publishes for exactly this purpose.
+    docs: "https://developers.google.com/custom-search/v1/overview"
+
+  # ---------------------------------------------------------------------------
+  # Aggregators with open developer APIs. These carry a large share of the
+  # LinkedIn/Indeed/Monster inventory under licence, in both the US and India.
+  # ---------------------------------------------------------------------------
+  - id: adzuna
+    label: Adzuna
+    kind: rest
+    access: official_api
+    countries: [US, IN, GB, CA, AU, DE, FR, NL, SG, ZA]
+    requires_key: true
+    auth:
+      style: query
+      params:
+        app_id: {env: CAREEROS_ADZUNA_APP_ID}
+        app_key: {env: CAREEROS_ADZUNA_APP_KEY}
+    request:
+      url: "https://api.adzuna.com/v1/api/jobs/{country_lower}/search/{page}"
+      params:
+        what: "{query}"
+        where: "{location}"
+        results_per_page: "{page_size}"
+        content-type: application/json
+    response:
+      items: results
+      total: count
+      page_param: "{path}"
+      first_page: 1
+    map:
+      external_id: id
+      title: title
+      company: company.display_name
+      description: description
+      url: redirect_url
+      location: location.display_name
+      employment_type: contract_time
+      posted_on: {path: created, transform: date}
+      salary_raw: {template: "{salary_min} - {salary_max} {currency}", require: [salary_min]}
+    notes: |
+      Free developer key, generous limits, real coverage in both the United
+      States and India. The broadest single source that does not need a paid
+      plan.
+    docs: "https://developer.adzuna.com/"
+
+  - id: jooble
+    label: Jooble
+    kind: rest
+    access: official_api
+    countries: [US, IN, GB, CA, AU, DE, PL]
+    requires_key: true
+    auth:
+      style: path
+      params:
+        key: {env: CAREEROS_JOOBLE_KEY}
+    request:
+      url: "https://jooble.org/api/{key}"
+      method: POST
+      json:
+        keywords: "{query}"
+        location: "{location}"
+        page: "{page}"
+    response:
+      items: jobs
+      total: totalCount
+      page_param: json
+      first_page: 1
+    map:
+      external_id: id
+      title: title
+      company: company
+      description: snippet
+      url: link
+      location: location
+      employment_type: type
+      salary_raw: salary
+      posted_on: {path: updated, transform: date}
+    notes: "Free API key. Aggregates boards and company sites, strong in India."
+    docs: "https://jooble.org/api/about"
+
+  - id: careerjet
+    label: Careerjet
+    kind: rest
+    access: official_api
+    countries: [US, IN, GB, CA, AU, DE, FR, SG]
+    requires_key: true
+    auth:
+      style: query
+      params:
+        affid: {env: CAREEROS_CAREERJET_AFFID}
+    request:
+      url: "https://public.api.careerjet.net/search"
+      params:
+        keywords: "{query}"
+        location: "{location}"
+        locale_code: "{careerjet_locale}"
+        pagesize: "{page_size}"
+        page: "{page}"
+        user_ip: "127.0.0.1"
+        user_agent: "{user_agent}"
+    response:
+      items: jobs
+      total: hits
+      page_param: page
+      first_page: 1
+    map:
+      external_id: {first: [url, title]}
+      title: title
+      company: company
+      description: description
+      url: url
+      location: locations
+      salary_raw: salary
+      posted_on: {path: date, transform: date}
+    notes: "Free affiliate key. Country coverage set by locale_code."
+    docs: "https://www.careerjet.com/partners/api/"
+
+  - id: usajobs
+    label: USAJOBS (federal)
+    kind: rest
+    access: official_api
+    countries: [US]
+    requires_key: true
+    auth:
+      style: header
+      params:
+        Authorization-Key: {env: CAREEROS_USAJOBS_KEY}
+        User-Agent: {env: CAREEROS_USAJOBS_EMAIL}
+    request:
+      url: "https://data.usajobs.gov/api/search"
+      headers:
+        Host: data.usajobs.gov
+      params:
+        Keyword: "{query}"
+        LocationName: "{location}"
+        ResultsPerPage: "{page_size}"
+        Page: "{page}"
+    response:
+      items: "SearchResult.SearchResultItems"
+      total: "SearchResult.SearchResultCountAll"
+      page_param: Page
+      first_page: 1
+    map:
+      external_id: "MatchedObjectId"
+      title: "MatchedObjectDescriptor.PositionTitle"
+      company: "MatchedObjectDescriptor.OrganizationName"
+      description: "MatchedObjectDescriptor.UserArea.Details.JobSummary"
+      url: "MatchedObjectDescriptor.PositionURI"
+      location: "MatchedObjectDescriptor.PositionLocationDisplay"
+      employment_type: "MatchedObjectDescriptor.PositionSchedule.0.Name"
+      posted_on: {path: "MatchedObjectDescriptor.PublicationStartDate", transform: date}
+      deadline_on: {path: "MatchedObjectDescriptor.ApplicationCloseDate", transform: date}
+      salary_raw:
+        template: "{MatchedObjectDescriptor.PositionRemuneration.0.MinimumRange} - {MatchedObjectDescriptor.PositionRemuneration.0.MaximumRange} per {MatchedObjectDescriptor.PositionRemuneration.0.RateIntervalCode}"
+        require: ["MatchedObjectDescriptor.PositionRemuneration.0.MinimumRange"]
+    notes: |
+      Free key, and the only source here that reliably carries a real
+      application deadline -- which the priority engine ranks above score.
+    docs: "https://developer.usajobs.gov/"
+
+  - id: themuse
+    label: The Muse
+    kind: rest
+    access: official_api
+    countries: []
+    requires_key: false
+    auth:
+      style: query
+      params:
+        api_key: {env: CAREEROS_THEMUSE_KEY, optional: true}
+    request:
+      url: "https://www.themuse.com/api/public/jobs"
+      params:
+        page: "{page}"
+        location: "{location}"
+        descending: "true"
+    response:
+      items: results
+      page_param: page
+      first_page: 0
+    map:
+      external_id: id
+      title: name
+      company: company.name
+      description: contents
+      url: refs.landing_page
+      location: locations.0.name
+      posted_on: {path: publication_date, transform: date}
+    notes: "Works with no key at all. Curated employers, mostly US."
+    docs: "https://www.themuse.com/developers/api/v2"
+
+  - id: remotive
+    label: Remotive (remote)
+    kind: rest
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://remotive.com/api/remote-jobs"
+      params:
+        search: "{query}"
+        limit: "{page_size}"
+    response:
+      items: jobs
+      single_page: true
+    map:
+      external_id: id
+      title: title
+      company: company_name
+      description: description
+      url: url
+      location: candidate_required_location
+      employment_type: job_type
+      salary_raw: salary
+      posted_on: {path: publication_date, transform: date}
+    notes: "No key. Remote-only, any country."
+    docs: "https://remotive.com/api-documentation"
+
+  - id: arbeitnow
+    label: Arbeitnow
+    kind: rest
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://www.arbeitnow.com/api/job-board-api"
+      params:
+        page: "{page}"
+    response:
+      items: data
+      page_param: page
+      first_page: 1
+    map:
+      external_id: slug
+      title: title
+      company: company_name
+      description: description
+      url: url
+      location: location
+      employment_type: {path: job_types.0}
+      posted_on: {path: created_at, transform: epoch}
+    notes: "No key. Europe-heavy, plus remote roles open worldwide."
+    docs: "https://documenter.getpostman.com/view/18545278/UVJbJdKh"
+
+  - id: jobicy
+    label: Jobicy (remote)
+    kind: rest
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://jobicy.com/api/v2/remote-jobs"
+      params:
+        count: "{page_size}"
+        tag: "{query}"
+    response:
+      items: jobs
+      single_page: true
+    map:
+      external_id: id
+      title: jobTitle
+      company: companyName
+      description: jobDescription
+      url: url
+      location: jobGeo
+      employment_type: {path: jobType.0}
+      salary_raw: {template: "{annualSalaryMin} - {annualSalaryMax} {salaryCurrency}", require: [annualSalaryMin]}
+      posted_on: {path: pubDate, transform: date}
+    notes: "No key. Remote roles."
+    docs: "https://jobicy.com/jobs-rss-feed"
+
+  - id: findwork
+    label: Findwork
+    kind: rest
+    access: official_api
+    countries: []
+    requires_key: true
+    auth:
+      style: header
+      params:
+        Authorization: {env: CAREEROS_FINDWORK_KEY, prefix: "Token "}
+    request:
+      url: "https://findwork.dev/api/jobs/"
+      params:
+        search: "{query}"
+        location: "{location}"
+        page: "{page}"
+    response:
+      items: results
+      total: count
+      page_param: page
+      first_page: 1
+    map:
+      external_id: id
+      title: role
+      company: company_name
+      description: text
+      url: url
+      location: location
+      employment_type: employment_type
+      posted_on: {path: date_posted, transform: date}
+    notes: "Free key. Technology roles."
+    docs: "https://findwork.dev/developers/"
+
+  # ---------------------------------------------------------------------------
+  # Partner APIs. These boards have real programmes; they issue you a key and
+  # then the API is the sanctioned route. No key, no provider -- the connector
+  # reports "needs credentials" rather than falling back to scraping.
+  # ---------------------------------------------------------------------------
+  - id: ziprecruiter
+    label: ZipRecruiter (partner API)
+    kind: rest
+    access: official_api
+    countries: [US, CA]
+    requires_key: true
+    auth:
+      style: query
+      params:
+        api_key: {env: CAREEROS_ZIPRECRUITER_KEY}
+    request:
+      url: "https://api.ziprecruiter.com/jobs/v1"
+      params:
+        search: "{query}"
+        location: "{location}"
+        jobs_per_page: "{page_size}"
+        page: "{page}"
+    response:
+      items: jobs
+      total: total_jobs
+      page_param: page
+      first_page: 1
+    map:
+      external_id: id
+      title: name
+      company: hiring_company.name
+      description: snippet
+      url: url
+      location: location
+      salary_raw: {template: "{salary_min_annual} - {salary_max_annual} per year", require: [salary_min_annual]}
+      posted_on: {path: posted_time, transform: date}
+    notes: |
+      Requires a ZipRecruiter publisher/partner key. Until you have one, their
+      listings still arrive through google_jobs, which indexes ZipRecruiter.
+    docs: "https://www.ziprecruiter.com/partner"
+
+  - id: careerbuilder
+    label: CareerBuilder (partner API)
+    kind: rest
+    access: official_api
+    countries: [US]
+    requires_key: true
+    auth:
+      style: bearer
+      params:
+        token: {env: CAREEROS_CAREERBUILDER_TOKEN}
+    request:
+      url: "https://api.careerbuilder.com/core/jobsearch/v1"
+      params:
+        keywords: "{query}"
+        location: "{location}"
+        page_number: "{page}"
+        per_page: "{page_size}"
+    response:
+      items: "Results"
+      page_param: page_number
+      first_page: 1
+    map:
+      external_id: "DID"
+      title: "DisplayJobTitle"
+      company: "Company"
+      description: "DescriptionTeaser"
+      url: "JobDetailsURL"
+      location: "Location"
+      employment_type: "EmploymentType"
+      posted_on: {path: "PostedDate", transform: date}
+    notes: |
+      Requires a CareerBuilder developer token. Their listings also arrive
+      through google_jobs in the meantime.
+    docs: "https://developer.careerbuilder.com/"
+
+  - id: dice
+    label: Dice (partner API)
+    kind: rest
+    access: official_api
+    countries: [US]
+    requires_key: true
+    auth:
+      style: header
+      params:
+        X-Api-Key: {env: CAREEROS_DICE_KEY}
+    request:
+      url: "https://marketplace-api.dice.com/dhi/marketplace/v1/jobs/search"
+      params:
+        q: "{query}"
+        location: "{location}"
+        pageSize: "{page_size}"
+        page: "{page}"
+    response:
+      items: data
+      page_param: page
+      first_page: 1
+    map:
+      external_id: id
+      title: title
+      company: {first: [companyName, company.name]}
+      description: {first: [summary, description]}
+      url: {first: [detailsPageUrl, url]}
+      location: {first: [jobLocation.displayName, location]}
+      employment_type: employmentType
+      salary_raw: salary
+      posted_on: {path: postedDate, transform: date}
+    notes: |
+      Dice's marketplace API needs a key from their partner programme. Endpoint
+      and field names are per their current docs and are not verified here --
+      run `careeros sources check dice` once you have a key.
+    verified: false
+    docs: "https://www.dice.com/partners"
+
+  - id: monster
+    label: Monster (partner feed)
+    kind: rss
+    access: public_feed
+    countries: [US, IN]
+    requires_key: false
+    request:
+      feeds: {env: CAREEROS_MONSTER_FEEDS, split: ","}
+    notes: |
+      Monster serves search results as RSS per saved search. Create the search
+      on Monster, copy its feed URL, and set CAREEROS_MONSTER_FEEDS to a
+      comma-separated list. Nothing is guessed on your behalf.
+    verified: false
+    docs: "https://www.monster.com/"
+
+  - id: rss
+    label: Any RSS/Atom job feed
+    kind: rss
+    access: public_feed
+    countries: []
+    requires_key: false
+    request:
+      feeds: {env: CAREEROS_RSS_FEEDS, split: ","}
+    notes: |
+      Generic feed reader for anything that publishes one: a company's careers
+      feed, a niche board, a saved search on a board that offers RSS. Set
+      CAREEROS_RSS_FEEDS to a comma-separated list of URLs.
+    docs: ""
+
+  # ---------------------------------------------------------------------------
+  # Company career sites. These ATS vendors publish an open JSON board API per
+  # employer precisely so that job engines can read it -- the cleanest and most
+  # complete source for a company you are actually targeting.
+  # ---------------------------------------------------------------------------
+  - id: greenhouse
+    label: Greenhouse boards
+    kind: ats_board
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://boards-api.greenhouse.io/v1/boards/{token}/jobs"
+      params:
+        content: "true"
+      tokens: {env: CAREEROS_GREENHOUSE_BOARDS, split: ","}
+    response:
+      items: jobs
+      single_page: true
+    map:
+      external_id: id
+      title: title
+      description: {path: content, transform: html}
+      url: absolute_url
+      location: location.name
+      posted_on: {path: updated_at, transform: date}
+      company: "{token}"
+    notes: "One entry per employer board token, e.g. stripe,figma,airbnb."
+    docs: "https://developers.greenhouse.io/job-board.html"
+
+  - id: lever
+    label: Lever boards
+    kind: ats_board
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://api.lever.co/v0/postings/{token}"
+      params:
+        mode: json
+      tokens: {env: CAREEROS_LEVER_BOARDS, split: ","}
+    response:
+      items: "{root}"
+      single_page: true
+    map:
+      external_id: id
+      title: text
+      description: {path: descriptionPlain, transform: text}
+      url: hostedUrl
+      location: categories.location
+      employment_type: categories.commitment
+      posted_on: {path: createdAt, transform: epoch}
+      company: "{token}"
+    docs: "https://github.com/lever/postings-api"
+
+  - id: ashby
+    label: Ashby boards
+    kind: ats_board
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://api.ashbyhq.com/posting-api/job-board/{token}"
+      params:
+        includeCompensation: "true"
+      tokens: {env: CAREEROS_ASHBY_BOARDS, split: ","}
+    response:
+      items: jobs
+      single_page: true
+    map:
+      external_id: id
+      title: title
+      description: {path: descriptionPlain, transform: text}
+      url: jobUrl
+      location: location
+      employment_type: employmentType
+      posted_on: {path: publishedAt, transform: date}
+      company: "{token}"
+    docs: "https://developers.ashbyhq.com/reference/job-posting-api"
+
+  - id: smartrecruiters
+    label: SmartRecruiters boards
+    kind: ats_board
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://api.smartrecruiters.com/v1/companies/{token}/postings"
+      params:
+        limit: "{page_size}"
+      tokens: {env: CAREEROS_SMARTRECRUITERS_BOARDS, split: ","}
+    response:
+      items: content
+      single_page: true
+    map:
+      external_id: id
+      title: name
+      description: {first: [jobAd.sections.jobDescription.text, name]}
+      url: ref
+      location: {template: "{location.city}, {location.country}", require: ["location.city"]}
+      employment_type: typeOfEmployment.label
+      posted_on: {path: releasedDate, transform: date}
+      company: company.name
+    docs: "https://dev.smartrecruiters.com/customer-api/posting-api/"
+
+  - id: workable
+    label: Workable boards
+    kind: ats_board
+    access: official_api
+    countries: []
+    requires_key: false
+    request:
+      url: "https://apply.workable.com/api/v1/widget/accounts/{token}"
+      params:
+        details: "true"
+      tokens: {env: CAREEROS_WORKABLE_BOARDS, split: ","}
+    response:
+      items: jobs
+      single_page: true
+    map:
+      external_id: {first: [shortcode, id]}
+      title: title
+      description: {path: description, transform: html}
+      url: {first: [url, application_url]}
+      location: {template: "{city}, {country}", require: [city]}
+      employment_type: employment_type
+      posted_on: {path: published_on, transform: date}
+      company: "{token}"
+    docs: "https://workable.readme.io/"
+
+  # ---------------------------------------------------------------------------
+  # Registered and refused. These exist so the dashboard can say *why* a board
+  # you named is not being scraped, and which route carries it instead.
+  # ---------------------------------------------------------------------------
+  - id: linkedin_direct
+    label: LinkedIn (direct)
+    kind: prohibited
+    access: prohibited
+    countries: [US, IN]
+    reason: |
+      LinkedIn's User Agreement forbids automated collection, and job search
+      sits behind bot protection and an authentication wall. Getting past
+      either is exactly what this system will not do.
+    use_instead: [google_jobs, adzuna, jooble]
+    partner_route: "LinkedIn Talent Solutions job-posting APIs are partner-gated; if you are granted access, add it as a `rest` provider here."
+
+  - id: indeed_direct
+    label: Indeed (direct)
+    kind: prohibited
+    access: prohibited
+    countries: [US, IN]
+    reason: |
+      Indeed retired its open Publisher API and its terms forbid scraping
+      search results. It is Cloudflare-protected.
+    use_instead: [google_jobs, adzuna, careerjet]
+    partner_route: "Indeed's employer/ATS integrations and its Partner programme are the sanctioned routes."
+
+  - id: glassdoor_direct
+    label: Glassdoor (direct)
+    kind: prohibited
+    access: prohibited
+    countries: [US, IN]
+    reason: "Glassdoor's job APIs were withdrawn and its terms forbid automated collection."
+    use_instead: [google_jobs, adzuna]
+
+  - id: naukri_direct
+    label: Naukri (direct)
+    kind: prohibited
+    access: prohibited
+    countries: [IN]
+    reason: |
+      Naukri has no public job-search API and its terms forbid automated
+      collection. It is the largest board in India, so this one costs you real
+      coverage -- Adzuna, Jooble and Google Jobs are the substitutes.
+    use_instead: [google_jobs, adzuna, jooble]
