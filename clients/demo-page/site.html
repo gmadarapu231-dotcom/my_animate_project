@@ -393,6 +393,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
       your behalf.</p>
     <div class="cta">
       <a class="go" href="#console">Open the live demo ↓</a>
+      <a href="#sourcing">Where jobs come from</a>
       <a href="https://github.com/gmadarapu231-dotcom/my_animate_project" target="_blank" rel="noopener">Read the source →</a>
     </div>
     <div class="facts" id="facts"></div>
@@ -443,9 +444,84 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
   </div>
 </section>
 
+<section class="band" id="sourcing">
+  <div class="wrap">
+    <p class="eyebrow dark">03 — Where the jobs come from</p>
+    <h2 class="sec">Every board, by a route it actually permits.</h2>
+    <div class="split">
+      <div>
+        <p class="body prose">Twenty-five providers, declared as data. <strong>Google Jobs</strong>
+          returns LinkedIn, Indeed, ZipRecruiter, Glassdoor, Monster, CareerBuilder and Dice listings
+          in one query, each naming its origin — which is kept as the job's board, so per-board
+          conversion analytics still mean something. <strong>Google Search</strong> reaches the
+          Workday, Taleo and iCIMS pages no aggregator carries, reading each posting from the
+          schema.org block the employer publishes for exactly that purpose.</p>
+        <p class="body prose">Then the open developer APIs — Adzuna and Jooble cover both the United
+          States and India — the partner APIs, the RSS feeds, and the per-employer board APIs for a
+          company you are specifically targeting. Four work with no key at all.</p>
+        <p class="body prose">Four boards are <strong>registered and refused</strong>. LinkedIn,
+          Indeed, Glassdoor and Naukri forbid automated collection and sit behind bot protection;
+          getting past either is the one thing this system will not do. They stay first-class
+          entries so the screen can name the board, give the reason, and point at what carries its
+          postings — a board missing from your list is never a mystery. Naukri is the one that costs
+          real coverage in India, and it says so.</p>
+      </div>
+      <div>
+        <div class="note">
+          <h4>Provider states</h4>
+          <div class="tw"><table id="sourceTable"></table></div>
+          <p style="margin-top:12px" id="sourceSummary"></p>
+        </div>
+        <div class="note" style="margin-top:14px">
+          <h4>Enforced, not documented</h4>
+          <p>A 401, 403, 429 or CAPTCHA page raises and blocks that host for the run. There is no
+            retry with different headers, no rotation, nothing that solves anything — the refusal is
+            the whole response.</p>
+          <p>Free-web page fetches check robots.txt first. An API called with your own key does not:
+            that is a sanctioned client, not a crawler.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="signin">
+  <div class="wrap">
+    <p class="eyebrow dark">04 — Signing in</p>
+    <h2 class="sec">Your email is the account. There is no password.</h2>
+    <div class="split">
+      <div>
+        <p class="body prose">Two ways in: Google's consent screen, or a six-digit code emailed to
+          the address. The <span class="inline">user</span> table has no password column, there is no
+          hashing anywhere, and no route accepts one — a test asserts the absence rather than
+          trusting it. The rule was never to request or store mail credentials, and the cheapest way
+          to keep a promise like that is to have nowhere to put one.</p>
+        <p class="body prose">Google is the authorization-code flow with PKCE, and identity comes
+          from Google's userinfo endpoint called with a token this server fetched itself — so there is
+          no ID token to verify and no crypto dependency. <span class="inline">email_verified</span>
+          is checked: an unverified address is not an identity. One consent can cover Gmail too, read
+          and draft only, so connecting your mail signs you in at the same time.</p>
+        <p class="body prose">Emailed codes are stored as a hash salted with the address, capped at
+          five attempts, single-use, and expire in ten minutes. Sessions are signed with a secret
+          generated once at <span class="inline">0600</span> outside the database, so a database
+          backup cannot mint one.</p>
+      </div>
+      <div>
+        <div class="note">
+          <h4>Sign-in surface</h4>
+          <div class="tw"><table id="authTable"></table></div>
+          <p style="margin-top:12px"><span class="small muted">Sign-in turns itself on as soon as a
+            method is configured. With neither, the API stays open — the single-user localhost case —
+            rather than locking a door with no key.</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="band" id="evidence">
   <div class="wrap">
-    <p class="eyebrow dark">03 — Evidence</p>
+    <p class="eyebrow dark">05 — Evidence</p>
     <h2 class="sec">A résumé is a query over verified facts.</h2>
     <div class="split">
       <div>
@@ -474,7 +550,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="auth">
   <div class="wrap">
-    <p class="eyebrow dark">04 — Authorization</p>
+    <p class="eyebrow dark">06 — Authorization</p>
     <h2 class="sec">Silence is never read as a yes.</h2>
     <div class="split">
       <div>
@@ -506,7 +582,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="domains">
   <div class="wrap">
-    <p class="eyebrow dark">05 — Coverage</p>
+    <p class="eyebrow dark">07 — Coverage</p>
     <h2 class="sec">No job category is written into the code.</h2>
     <div class="split">
       <div>
@@ -533,7 +609,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="limits">
   <div class="wrap">
-    <p class="eyebrow dark">06 — Limits</p>
+    <p class="eyebrow dark">08 — Limits</p>
     <h2 class="sec">The safest tool is the one that does not exist.</h2>
     <p class="body prose">The agent is not restricted from these actions by a prompt or a policy check.
       The tools were never built, so there is nothing to jailbreak. Every registry build asserts the list
@@ -547,7 +623,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="run">
   <div class="wrap">
-    <p class="eyebrow dark">07 — Running it</p>
+    <p class="eyebrow dark">09 — Running it</p>
     <h2 class="sec">The demo is frozen. The system is not.</h2>
     <p class="body prose">Everything above is captured output. To run the real thing — live job sources,
       a real agent loop, Gmail drafts that wait for your approval — clone the repository and start the
@@ -622,6 +698,37 @@ cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
   const present = new Set(F.facets.domains.map((d) => d.id));
   document.getElementById("domainChips").innerHTML = F.seedDomains
     .map((d) => `<span class="chip${present.has(d.id) ? " dom" : ""}">${esc(d.label)}</span>`).join("");
+
+  const src = F.sources;
+  const shownStates = [
+    ["ready", "Ready now", "ok"],
+    ["needs_credentials", "One key away", "warn"],
+    ["not_permitted", "Not fetched", "bad"],
+  ];
+  document.getElementById("sourceTable").innerHTML =
+    `<thead><tr><th>State</th><th class="n">Providers</th><th>Examples</th></tr></thead><tbody>` +
+    shownStates.map(([state, label, tone]) => {
+      const rows = src.providers.filter((r) => r.state === state);
+      return `<tr>
+        <td><span class="chip ${tone}">${label}</span></td>
+        <td class="n mono">${rows.length}</td>
+        <td class="muted">${esc(rows.slice(0, 3).map((r) => r.label).join(", "))}${rows.length > 3 ? "…" : ""}</td>
+      </tr>`;
+    }).join("") + `</tbody>`;
+  document.getElementById("sourceSummary").innerHTML =
+    `<span class="small muted">${src.count} declared. Adding one is an entry in
+     <span class="inline">providers.yaml</span> — no new code.</span>`;
+
+  const a = F.authDescribe;
+  document.getElementById("authTable").innerHTML =
+    `<thead><tr><th>Method</th><th>Proves</th><th>Stores</th></tr></thead><tbody>
+      <tr><td>Sign in with Google</td><td class="muted">Google confirms the address</td>
+        <td class="muted">Nothing of yours</td></tr>
+      <tr><td>Emailed code</td><td class="muted">You can read that mailbox</td>
+        <td class="muted">A salted hash, for ${a.email_code.expires_in_seconds / 60} minutes</td></tr>
+      <tr><td style="color:var(--bad)">Password</td><td class="muted">—</td>
+        <td class="mono" style="color:var(--bad)">no such column</td></tr>
+    </tbody>`;
 
   document.getElementById("withheldHead").textContent =
     `Withheld capabilities — ${t.withheld_capabilities.length} of them`;
