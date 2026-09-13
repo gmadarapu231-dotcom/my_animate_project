@@ -5,9 +5,10 @@
  * loading/error/refetch and nothing more, and a small readable hook is easier
  * to reason about than a cache invalidation policy nobody configured.
  */
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ApiError, CareerOsClient, Health } from './api';
+import { DemoClient, isDemo } from './demo';
 import { Settings, defaultBaseUrl, loadSettings, saveSettings } from './settings';
 
 // ---------------------------------------------------------------------------
@@ -15,6 +16,8 @@ import { Settings, defaultBaseUrl, loadSettings, saveSettings } from './settings
 // ---------------------------------------------------------------------------
 export type Session = {
   client: CareerOsClient;
+  /** True in the published demo build: fixed data, no live model, no writes. */
+  demo: boolean;
   settings: Settings;
   ready: boolean;
   health: Health | null;
@@ -39,6 +42,10 @@ export function useSessionState(): Session {
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
+    if (isDemo()) {
+      setReady(true);
+      return;
+    }
     let live = true;
     loadSettings().then((loaded) => {
       if (!live) return;
@@ -50,7 +57,13 @@ export function useSessionState(): Session {
     };
   }, []);
 
-  const client = new CareerOsClient({ baseUrl: settings.baseUrl, token: settings.token });
+  // In the demo build the client is swapped wholesale, so no screen has to
+  // branch on demo mode to fetch data.
+  const demo = isDemo();
+  const client = useMemo(
+    () => (demo ? new DemoClient() : new CareerOsClient({ baseUrl: settings.baseUrl, token: settings.token })),
+    [demo, settings.baseUrl, settings.token],
+  );
 
   useEffect(() => {
     if (!ready) return;
@@ -77,7 +90,7 @@ export function useSessionState(): Session {
 
   const recheck = useCallback(() => setNonce((n) => n + 1), []);
 
-  return { client, settings, ready, health, healthError, update, recheck };
+  return { client, demo, settings, ready, health, healthError, update, recheck };
 }
 
 // ---------------------------------------------------------------------------

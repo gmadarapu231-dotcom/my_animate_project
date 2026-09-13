@@ -95,7 +95,14 @@ npm --prefix clients/app run export:web   # web build
 careeros serve                            # served at http://127.0.0.1:8000/
 
 npm --prefix clients/app start            # device: press i / a, or Expo Go
+
+npm --prefix clients/app run export:demo  # self-contained build, no backend
 ```
+
+The demo build bakes in responses captured from the real engines, so it runs on
+any static host with nothing behind it. It is explicit about its limits: search
+only answers recorded queries, the agent labels its reply as a recording, and
+edits are not saved.
 
 Screens: **Jobs** (ranked, filters, natural-language search) · **Today**
 (what to apply for + learning signals) · **Pipeline** (lifecycle) ·

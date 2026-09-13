@@ -52,7 +52,7 @@ export function JobCardView({ job }: { job: Job }) {
   const classification = job.classification;
 
   return (
-    <Link href={`/job/${job.id}`} asChild>
+    <Link href={`/job?id=${job.id}`} asChild>
       <Pressable accessibilityRole="link">
         {({ pressed }) => (
           <Panel

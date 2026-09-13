@@ -20,6 +20,7 @@ client_secret*.json
 # --- clients ---
 node_modules/
 clients/app/dist/
+clients/app/dist-demo/
 clients/app/.expo/
 clients/app/web-build/
 *.tsbuildinfo

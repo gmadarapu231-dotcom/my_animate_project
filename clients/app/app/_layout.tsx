@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
+import { View, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { DemoBanner } from '../src/components/DemoBanner';
 import { SessionContext, useSessionState } from '../src/hooks';
 import { usePalette } from '../src/theme';
 
@@ -20,6 +21,7 @@ export default function RootLayout() {
       <SessionContext.Provider value={session}>
         <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
           <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          {session.demo ? <DemoBanner /> : null}
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: p.panel },
@@ -29,7 +31,7 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="job/[id]" options={{ title: 'Job' }} />
+            <Stack.Screen name="job" options={{ title: 'Job' }} />
             <Stack.Screen name="settings" options={{ title: 'Settings', presentation: 'modal' }} />
           </Stack>
         </ThemeProvider>

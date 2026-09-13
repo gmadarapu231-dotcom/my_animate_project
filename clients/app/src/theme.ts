@@ -6,6 +6,7 @@
  * urgent it is before you read a word. Colour is never the only cue -- every
  * deadline flag pairs its colour with an emoji and a text label.
  */
+import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
 export type Palette = {
@@ -73,12 +74,43 @@ export const type = {
   },
 };
 
+/**
+ * The effective colour scheme.
+ *
+ * `useColorScheme` reads the OS preference, which is right on device and right
+ * for a browser at its default setting. But a web host can also stamp an
+ * explicit choice on the root element as `data-theme="dark" | "light"` -- and
+ * if the app ignored that stamp, the host would paint one theme's ground
+ * behind the other theme's content. So an explicit stamp wins, and a
+ * MutationObserver keeps up if the viewer toggles it while the page is open.
+ */
+function useResolvedScheme(): 'light' | 'dark' {
+  const system = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const [stamped, setStamped] = useState<'light' | 'dark' | null>(readStamp);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => setStamped(readStamp()));
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return stamped ?? system;
+}
+
+function readStamp(): 'light' | 'dark' | null {
+  if (typeof document === 'undefined') return null;
+  const value = document.documentElement.getAttribute('data-theme');
+  return value === 'dark' || value === 'light' ? value : null;
+}
+
 export function usePalette(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+  return useResolvedScheme() === 'dark' ? dark : light;
 }
 
 export function useIsDark(): boolean {
-  return useColorScheme() === 'dark';
+  return useResolvedScheme() === 'dark';
 }
 
 /** Deadline bucket -> the colour that carries it. */

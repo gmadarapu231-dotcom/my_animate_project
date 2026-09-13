@@ -39,7 +39,7 @@ export default function TodayScreen() {
             ) : null}
 
             {(recommendation.data?.top_jobs ?? []).map((job, index) => (
-              <Link key={job.job_id} href={`/job/${job.job_id}`} asChild>
+              <Link key={job.job_id} href={`/job?id=${job.job_id}`} asChild>
                 <Pressable accessibilityRole="link">
                   {({ pressed }) => (
                     <View

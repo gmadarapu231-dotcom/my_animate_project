@@ -1,6 +1,10 @@
 /**
  * Job detail -- everything behind a card, plus the actions.
  *
+ * Addressed as `/job?id=N` rather than `/job/N` on purpose: a nested path
+ * makes the browser resolve the bundle's relative asset URLs against `/job/`,
+ * which 404s on any static host that serves the app from a directory.
+ *
  * `tailor_resume` is the one action with a gate the UI must respect: a resume
  * that failed the factuality check comes back `is_final: false`, and this
  * screen reports that plainly rather than presenting the document as ready.
@@ -8,7 +12,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Linking, View } from 'react-native';
 
-import { VerdictBanner } from '../../src/components/JobCard';
+import { VerdictBanner } from '../src/components/JobCard';
 import {
   Body,
   Button,
@@ -23,10 +27,10 @@ import {
   Screen,
   ScoreTile,
   Small,
-} from '../../src/components/ui';
-import { clamp, deadlineFlag, score } from '../../src/format';
-import { useAction, useQuery, useSession } from '../../src/hooks';
-import { bucketColor, spacing, type, usePalette } from '../../src/theme';
+} from '../src/components/ui';
+import { clamp, deadlineFlag, score } from '../src/format';
+import { useAction, useQuery, useSession } from '../src/hooks';
+import { bucketColor, spacing, type, usePalette } from '../src/theme';
 
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
