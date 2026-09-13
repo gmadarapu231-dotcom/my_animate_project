@@ -604,6 +604,51 @@ class Recommendation(Base, TimestampMixin):
     narrative: Mapped[Optional[str]] = mapped_column(Text)
 
 
+class AgentRun(Base):
+    """One agentic conversation: prompt in, answer out, every tool call recorded.
+
+    The agent is autonomous over *strategy*, never over truthfulness, so the
+    record of what it actually did has to be inspectable after the fact.
+    """
+
+    __tablename__ = "agent_run"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"))
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    prompt: Mapped[str] = mapped_column(Text)
+    answer: Mapped[Optional[str]] = mapped_column(Text)
+    stop_reason: Mapped[Optional[str]] = mapped_column(String(32))
+    turns: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    ok: Mapped[bool] = mapped_column(Boolean, default=False)
+    error: Mapped[Optional[str]] = mapped_column(Text)
+
+    tool_calls: Mapped[list["AgentToolCall"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class AgentToolCall(Base):
+    """A single tool invocation inside an agent run."""
+
+    __tablename__ = "agent_tool_call"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("agent_run.id", ondelete="CASCADE"))
+    turn: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(64))
+    arguments: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    result_summary: Mapped[Optional[str]] = mapped_column(Text)
+    mutating: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_error: Mapped[bool] = mapped_column(Boolean, default=False)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    run: Mapped[AgentRun] = relationship(back_populates="tool_calls")
+
+
 class PipelineRun(Base):
     """Audit trail for the daily automation."""
 

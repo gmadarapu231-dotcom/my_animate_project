@@ -200,3 +200,40 @@ def test_dashboard_is_served(client):
     response = client.get("/")
     assert response.status_code == 200
     assert "CareerOS" in response.text
+
+
+# ---------------------------------------------------------------------------
+# Agent endpoints
+# ---------------------------------------------------------------------------
+def test_agent_tools_endpoint_publishes_the_surface_and_the_withholdings(client):
+    body = client.get("/api/agent/tools").json()
+    assert body["count"] >= 15
+    names = {t["name"] for t in body["tools"]}
+    assert "tailor_resume" in names and "get_match_detail" in names
+
+    withheld = {w["name"] for w in body["withheld_capabilities"]}
+    assert {"add_evidence", "send_email", "mark_resume_final"} <= withheld
+    assert names.isdisjoint(withheld), "a withheld capability is exposed as a tool"
+    assert all(w["reason"] for w in body["withheld_capabilities"])
+
+
+def test_agent_ask_returns_503_without_model_access(client, monkeypatch):
+    """The deterministic pipeline works offline; the reasoning loop cannot."""
+    response = client.post("/api/agent/ask", json={"prompt": "what should I do today?"})
+    assert response.status_code == 503
+    assert "ANTHROPIC_API_KEY" in response.json()["detail"]
+
+
+def test_agent_ask_validates_input(client):
+    assert client.post("/api/agent/ask", json={"prompt": ""}).status_code == 422
+    assert client.post(
+        "/api/agent/ask", json={"prompt": "x", "max_turns": 99}
+    ).status_code == 422
+    assert client.post(
+        "/api/agent/ask", json={"prompt": "x", "effort": "turbo"}
+    ).status_code == 422
+
+
+def test_agent_runs_endpoint(client):
+    body = client.get("/api/agent/runs").json()
+    assert "runs" in body and "count" in body

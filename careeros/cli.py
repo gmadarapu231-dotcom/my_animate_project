@@ -12,6 +12,8 @@
     careeros analytics                  funnel + career learning signals
     careeros email-sync MAILBOX.json    classify job mail, draft replies
     careeros gmail-auth                 OAuth consent flow (never a password)
+    careeros agent "QUESTION"           ask the agentic loop (needs model access)
+    careeros agent-runs                 audit trail of past agent runs
     careeros serve                      dashboard + API
 """
 
@@ -65,7 +67,6 @@ def cmd_load_profile(args: argparse.Namespace) -> None:
     from careeros.profile_io import load_profile
     from careeros.services import load_evidence_records
 
-    init_db()
     with session_scope() as session:
         user = load_profile(session, args.path)
         session.flush()
@@ -77,7 +78,6 @@ def cmd_load_profile(args: argparse.Namespace) -> None:
 def cmd_ingest(args: argparse.Namespace) -> None:
     from careeros.sources.jsonfile import JsonFileSource
 
-    init_db()
     with session_scope() as session:
         user = _require_user(session)
         pipe = _pipeline(session)
@@ -90,7 +90,6 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 def cmd_run_daily(args: argparse.Namespace) -> None:
     from careeros.sources.jsonfile import JsonFileSource
 
-    init_db()
     with session_scope() as session:
         user = _require_user(session)
         pipe = _pipeline(session)
@@ -255,10 +254,82 @@ def cmd_gmail_auth(args: argparse.Namespace) -> None:
     _p(f"Token written to {token_path} (mode 600). Scopes: {', '.join(scopes)}")
 
 
+def cmd_agent(args: argparse.Namespace) -> None:
+    """Run the agentic loop: Claude drives the engines as tools."""
+    from careeros.agent import AgentUnavailable, CareerAgent
+
+    with session_scope() as session:
+        user = _require_user(session)
+        agent = CareerAgent(
+            session,
+            user,
+            max_turns=args.max_turns,
+            effort=args.effort,
+            use_ai_inside_tools=not args.no_ai_in_tools,
+        )
+        try:
+            result = agent.run(args.prompt)
+        except AgentUnavailable as exc:
+            sys.exit(str(exc))
+        session.flush()
+
+        if args.json:
+            _p(json.dumps(result.to_dict(), indent=2, default=str))
+            return
+
+        if args.show_tools:
+            _p(f"{DIM}{len(agent.tools)} tools available{RESET}")
+        for call in result.tool_calls:
+            flag = "!" if call.is_error else ("*" if call.mutating else " ")
+            args_text = ", ".join(f"{k}={v}" for k, v in call.arguments.items())
+            _p(f"{DIM}  {flag} turn {call.turn}  {call.name}({args_text}){RESET}")
+
+        _p("")
+        _p(result.answer)
+        _p("")
+        summary = (
+            f"{result.turns} turn(s), {len(result.tool_calls)} tool call(s), "
+            f"{result.input_tokens + result.output_tokens} tokens"
+        )
+        if result.mutations:
+            summary += f", changed: {', '.join(sorted(set(result.mutations)))}"
+        _p(f"{DIM}{summary}{RESET}")
+        if not result.ok:
+            _p(f"  ! {result.error}")
+
+
+def cmd_agent_runs(args: argparse.Namespace) -> None:
+    from sqlalchemy import select
+
+    from careeros.db.models import AgentRun, AgentToolCall
+
+    with session_scope() as session:
+        _require_user(session)
+        runs = session.scalars(
+            select(AgentRun).order_by(AgentRun.id.desc()).limit(args.limit)
+        ).all()
+        if not runs:
+            _p(f"{DIM}No agent runs recorded yet.{RESET}")
+            return
+        for run in runs:
+            status = "ok" if run.ok else "FAILED"
+            _p(f"{BOLD}#{run.id}{RESET} [{status}] {run.started_at:%Y-%m-%d %H:%M} "
+               f"- {run.turns} turn(s), {run.input_tokens + run.output_tokens} tokens")
+            _p(f'  prompt: "{run.prompt[:100]}"')
+            calls = session.scalars(
+                select(AgentToolCall).where(AgentToolCall.run_id == run.id)
+                .order_by(AgentToolCall.id)
+            ).all()
+            for call in calls:
+                flag = "!" if call.is_error else ("*" if call.mutating else " ")
+                _p(f"{DIM}    {flag} {call.name}{RESET}")
+            if run.error:
+                _p(f"  ! {run.error}")
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn  # noqa: PLC0415
 
-    init_db()
     _p(f"Dashboard  http://{args.host}:{args.port}/")
     _p(f"API docs   http://{args.host}:{args.port}/docs")
     uvicorn.run("careeros.api.app:app", host=args.host, port=args.port, reload=args.reload)
@@ -349,6 +420,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out")
     p.set_defaults(func=cmd_export)
 
+    p = sub.add_parser("agent", help="ask the agentic loop (requires model access)")
+    p.add_argument("prompt")
+    p.add_argument("--max-turns", type=int, default=12)
+    p.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
+    p.add_argument("--json", action="store_true", help="full transcript as JSON")
+    p.add_argument("--show-tools", action="store_true")
+    p.add_argument(
+        "--no-ai-in-tools",
+        action="store_true",
+        help="tools use their deterministic paths (cheaper; the loop still needs the model)",
+    )
+    p.set_defaults(func=cmd_agent)
+
+    p = sub.add_parser("agent-runs", help="audit trail of past agent runs")
+    p.add_argument("--limit", type=int, default=10)
+    p.set_defaults(func=cmd_agent_runs)
+
     p = sub.add_parser("serve", help="run the dashboard + API")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
@@ -358,8 +446,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+#: Commands that never open the database.
+_NO_DB_COMMANDS = frozenset({"gmail-auth"})
+
+
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if args.command not in _NO_DB_COMMANDS:
+        # Idempotent, and it brings a database created by an older version up to
+        # the current schema rather than failing on a missing table.
+        init_db()
     try:
         args.func(args)
     except BrokenPipeError:

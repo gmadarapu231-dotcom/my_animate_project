@@ -12,6 +12,34 @@ Country → Work authorization → Career track → Job → Eligibility
         → Priority → Resume → Application → Email → Interview → Outcome
 ```
 
+## Two ways to run
+
+**The pipeline** (`careeros run-daily`) is the scheduled, deterministic path:
+fixed stages, no API key needed, every job processed the same way every morning.
+
+**The agent** (`careeros agent "…"`) is the interactive one: Claude drives the
+same engines as tools and decides what to investigate.
+
+```bash
+$ careeros agent "Why am I not getting interviews for cloud roles?"
+  · turn 1  get_analytics()
+  · turn 1  get_profile()
+  · turn 2  search_jobs(query=cloud jobs)
+  · turn 2  get_match_detail(job_id=2)
+  · turn 3  get_ats_report(job_id=2)
+
+  [answer]
+
+  3 turns, 5 tool calls, 14,208 tokens
+```
+
+They share every engine — if the agent and the pipeline disagreed about a match
+score, that would be a bug. The agent has autonomy over **strategy** and none
+over **truthfulness**: there is no tool to add evidence, override a visa
+verdict, mark a resume final, or send mail. Those capabilities do not exist, so
+no prompt reaches them — and `GET /api/agent/tools` publishes the withheld list
+with the reason for each. See [`docs/11-agent-architecture.md`](docs/11-agent-architecture.md).
+
 ## What "domain-agnostic" means here
 
 A Network Engineer job today, an SAP Security job tomorrow, a Data Scientist, a
@@ -67,10 +95,12 @@ careeros jobs
 careeros serve                       # dashboard at http://127.0.0.1:8000
 ```
 
-No API key required. Everything above runs on deterministic engines. Set
-`ANTHROPIC_API_KEY` (or run `ant auth login`) and the same commands get sharper —
-better classification, invented domains for unfamiliar professions, reworded
-resume bullets, natural email replies.
+No API key required for any of that. Everything above runs on deterministic
+engines. Set `ANTHROPIC_API_KEY` (or run `ant auth login`) and the same commands
+get sharper — better classification, invented domains for unfamiliar
+professions, reworded resume bullets, natural email replies — and
+`careeros agent` becomes available, which is the one path that genuinely needs
+the model.
 
 ```
   ID    PRI  MATCH  ELIG  DEADLINE                    DOMAIN         JOB
@@ -101,6 +131,8 @@ careeros tailor JOB_ID [--print]   tailor a resume + factuality check
 careeros search "QUERY"            natural-language search
 careeros recommend                 what should I apply for today?
 careeros analytics                 funnel + career learning signals
+careeros agent "QUESTION"          the agentic loop (needs model access)
+careeros agent-runs                audit trail of past agent runs
 careeros email-sync [MAILBOX]      classify job mail, draft replies
 careeros gmail-auth                OAuth consent flow (never a password)
 careeros export-profile            dump the profile back to YAML
@@ -135,7 +167,8 @@ careeros search "jobs where my match is above 85%"
 | Gmail classification, extraction, drafts, high-impact block | ✅ |
 | Rejection intelligence (stated vs hypothesised) | ✅ |
 | Analytics + career learning loop | ✅ |
-| REST API (36 endpoints), dashboard, CLI | ✅ |
+| Agentic tool-use loop (18 tools, withheld-capability guards, audit trail) | ✅ |
+| REST API (39 endpoints), dashboard, CLI | ✅ |
 | Live job-board connectors | Phase 2 — interface done, integrations need API agreements |
 | PDF/DOCX rendering | Phase 2 |
 | Browser-assisted form filling | Phase 3 — ASSISTED only, pauses before submit |
@@ -145,8 +178,8 @@ careeros search "jobs where my match is above 85%"
 
 [`docs/00-index.md`](docs/00-index.md) — architecture, database schema, AI
 architecture, job-source architecture, resume architecture, work-authorization
-architecture, Gmail architecture, dashboard design, security architecture and
-the roadmap.
+architecture, Gmail architecture, dashboard design, security architecture, the
+roadmap, and agent architecture.
 
 ## Configuration
 
@@ -163,7 +196,7 @@ the roadmap.
 ## Tests
 
 ```bash
-pytest            # 104 tests
+pytest            # 139 tests
 ```
 
 The suite runs with `CAREEROS_LLM=off` throughout — the point is to prove the
@@ -181,3 +214,9 @@ and, with the AI layer on, gets its own persisted domain.
 
 **A new job source:** subclass `JobSource`, yield `RawJob`s, register it.
 Dedupe, normalisation, classification and ranking are already handled.
+
+**A new agent tool:** add a factory to `careeros/agent/tools.py` and list it in
+`_FACTORIES`. Keep the output compact (it re-enters the context window), and if
+it mutates anything, put its safety check *inside* the tool so the agent cannot
+perform the action without it. `assert_tool_surface_is_safe()` will reject a
+tool that reintroduces a withheld capability.

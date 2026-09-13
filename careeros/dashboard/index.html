@@ -95,6 +95,7 @@ th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;le
     <button data-tab="applications" onclick="setTab('applications')">Applications</button>
     <button data-tab="analytics" onclick="setTab('analytics')">Analytics</button>
     <button data-tab="email" onclick="setTab('email')">Email</button>
+    <button data-tab="agent" onclick="setTab('agent')">Agent</button>
   </div>
 
   <section id="tab-jobs">
@@ -111,6 +112,24 @@ th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;le
 
   <section id="tab-applications" hidden><div class="panel"><h2>Application pipeline</h2><div id="apps">…</div></div></section>
   <section id="tab-analytics" hidden><div id="analytics">…</div></section>
+  <section id="tab-agent" hidden>
+    <div class="panel">
+      <h2>Ask the agent</h2>
+      <p class="muted" style="margin-top:0">
+        Claude drives the CareerOS engines as tools and decides what to look at.
+        It has autonomy over strategy, never over truthfulness &mdash;
+        <a href="#" onclick="showTools();return false">see the tool surface</a>.
+      </p>
+      <div class="search" style="max-width:none">
+        <input id="agentQ" placeholder='e.g. "Why am I not getting interviews for cloud roles?"'
+               onkeydown="if(event.key==='Enter')askAgent()">
+        <button class="primary" onclick="askAgent()">Ask</button>
+      </div>
+      <div id="agentOut" style="margin-top:14px"></div>
+    </div>
+    <div class="panel"><h2>Run history</h2><div id="agentRuns">…</div></div>
+  </section>
+
   <section id="tab-email" hidden>
     <div class="panel"><h2>Classified messages</h2><div id="emails">…</div></div>
     <div class="panel"><h2>Reply drafts</h2><div id="drafts">…</div></div>
@@ -128,9 +147,10 @@ function toast(msg){const t=document.createElement('div');t.className='toast';t.
 
 function setTab(name){
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
-  ['jobs','today','applications','analytics','email'].forEach(t=>document.getElementById('tab-'+t).hidden=(t!==name));
+  ['jobs','today','applications','analytics','email','agent'].forEach(t=>document.getElementById('tab-'+t).hidden=(t!==name));
   if(name==='today')loadToday(); if(name==='applications')loadApps();
   if(name==='analytics')loadAnalytics(); if(name==='email')loadEmail();
+  if(name==='agent')loadAgentRuns();
 }
 
 async function boot(){
@@ -331,6 +351,59 @@ async function loadEmail(){
             :`<button class="small" onclick="act('/api/email/drafts/${x.id}/approve',null,'Approved')">Approve</button>`}</div>`).join('')
       : '<span class="muted">No drafts.</span>';
   }catch(e){document.getElementById('drafts').textContent=e.message}
+}
+
+async function askAgent(){
+  const q=document.getElementById('agentQ').value.trim(); if(!q)return;
+  const out=document.getElementById('agentOut');
+  out.innerHTML='<span class="muted">Thinking… the agent may call several tools.</span>';
+  try{
+    const r=await post('/api/agent/ask',{prompt:q,max_turns:12,effort:'high'});
+    const calls=(r.tool_calls||[]).map(c=>
+      `<div class="kw" style="opacity:${c.is_error?0.6:1}">${c.is_error?'!':(c.mutating?'*':'·')} turn ${c.turn} <b>${esc(c.name)}</b>(${esc(Object.entries(c.arguments||{}).map(([k,v])=>k+'='+v).join(', '))})</div>`
+    ).join('');
+    out.innerHTML=
+      (calls?`<div class="panel" style="margin-bottom:12px"><h2>Tool calls</h2>${calls}
+        <div class="muted" style="margin-top:8px;font-size:11.5px">· read &nbsp; * changed something &nbsp; ! error</div></div>`:'')
+      +`<pre class="narrative">${esc(r.answer)}</pre>`
+      +`<div class="muted" style="margin-top:10px">${r.turns} turn(s) · ${(r.tool_calls||[]).length} tool call(s) · ${r.input_tokens+r.output_tokens} tokens`
+      +(r.mutations&&r.mutations.length?` · changed: ${esc([...new Set(r.mutations)].join(', '))}`:'')
+      +`</div>`
+      +(r.ok?'':`<div class="verdict not_compatible" style="margin-top:10px">${esc(r.error||'failed')}</div>`);
+    loadAgentRuns();
+  }catch(e){
+    out.innerHTML=`<div class="verdict not_compatible">${esc(e.message)}</div>`;
+  }
+}
+
+async function showTools(){
+  const out=document.getElementById('agentOut');
+  try{
+    const t=await api('/api/agent/tools');
+    out.innerHTML=`<div class="panel"><h2>${t.count} tools</h2>
+      <table><tr><th>Tool</th><th>Type</th><th>What it does</th></tr>
+      ${t.tools.map(x=>`<tr><td class="kw">${esc(x.name)}</td><td>${x.mutating?'changes data':'read'}</td><td class="muted">${esc(x.description.slice(0,150))}</td></tr>`).join('')}
+      </table></div>
+      <div class="panel"><h2>Deliberately withheld</h2>
+      <p class="muted" style="margin-top:0">${esc(t.note)}</p>
+      <table><tr><th>Capability</th><th>Why it does not exist</th></tr>
+      ${t.withheld_capabilities.map(x=>`<tr><td class="kw">${esc(x.name)}</td><td class="muted">${esc(x.reason)}</td></tr>`).join('')}
+      </table></div>`;
+  }catch(e){out.innerHTML=`<div class="verdict not_compatible">${esc(e.message)}</div>`}
+}
+
+async function loadAgentRuns(){
+  try{
+    const d=await api('/api/agent/runs?limit=10');
+    document.getElementById('agentRuns').innerHTML = d.count
+      ? d.runs.map(r=>`<div style="margin-bottom:12px">
+          <b>#${r.run_id}</b> <span class="chip">${r.ok?'ok':'failed'}</span>
+          <span class="muted">${r.turns} turn(s) · ${r.input_tokens+r.output_tokens} tokens</span>
+          <div class="muted" style="margin:4px 0">"${esc(r.prompt.slice(0,140))}"</div>
+          <div class="kw muted">${r.tool_calls.map(c=>esc(c.name)).join(' → ')||'no tool calls'}</div>
+        </div>`).join('')
+      : '<span class="muted">No agent runs yet.</span>';
+  }catch(e){document.getElementById('agentRuns').textContent=e.message}
 }
 
 boot();

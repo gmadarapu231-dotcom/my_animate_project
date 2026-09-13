@@ -24,6 +24,15 @@ a finance role or a veterinary practice manager next week — with no code chang
 | 8 | [Dashboard Design](08-dashboard-design.md) | Information hierarchy, the job card, deadline flags, the API behind it |
 | 9 | [Security Architecture](09-security-architecture.md) | Credentials, automation limits, send gates, truthfulness as a security property |
 | 10 | [Development Roadmap](10-roadmap.md) | What Phase 1 shipped, Phases 2–5, risks |
+| 11 | [Agent Architecture](11-agent-architecture.md) | The tool-use loop, the 18-tool surface, and the capabilities deliberately withheld |
+
+## Two ways to run
+
+`careeros.pipeline` is the scheduled, deterministic path — fixed stages, runs
+with no API key, processes every job the same way every morning.
+`careeros.agent` is the interactive one — Claude drives the same engines as
+tools and decides what to investigate. See doc 11 for how they differ and why
+the agent has autonomy over strategy but none over truthfulness.
 
 ## The two invariants
 

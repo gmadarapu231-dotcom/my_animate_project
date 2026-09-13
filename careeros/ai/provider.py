@@ -66,6 +66,7 @@ class HeuristicProvider:
 
     name = "heuristic"
     available = False
+    client = None
 
     def structured(self, **_kwargs: Any) -> None:
         return None
@@ -113,6 +114,18 @@ class AnthropicProvider:
                 )
         except Exception as exc:  # pragma: no cover - depends on local creds
             logger.info("Anthropic client unavailable (%s); falling back to heuristics", exc)
+
+    @property
+    def client(self) -> Any:
+        """The raw SDK client.
+
+        Needed by the agent loop, which drives tool use directly rather than
+        through the `structured`/`text` primitives. Returns None when no
+        credentials resolved -- there is no heuristic substitute for an
+        open-ended reasoning loop, and callers must say so rather than
+        silently degrading.
+        """
+        return self._client if self.available else None
 
     # -- internals ---------------------------------------------------------
     @staticmethod

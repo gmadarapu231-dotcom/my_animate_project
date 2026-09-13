@@ -49,17 +49,22 @@ runtime. See §"Domain-agnosticism" below.
 | Orchestration | `careeros/pipeline.py` | The daily run |
 | Email | `careeros/gmail/` | OAuth client, classification, drafts, sync |
 | Intelligence | `careeros/analytics.py`, `careeros/search.py` | Funnel, learning loop, NL search |
+| Agent | `careeros/agent/` | Tool-use loop: Claude drives the engines (doc 11) |
 | Interface | `careeros/api/`, `careeros/dashboard/`, `careeros/cli.py` | REST, dashboard, CLI |
 
 ### Dependency direction
 
 ```
-cli / api ──► pipeline ──► engines ──► config
-                 │            ▲
-                 ├──► services┘
-                 ├──► sources
-                 └──► ai
+cli / api ──┬──► pipeline ──► engines ──► config
+            │       │            ▲
+            │       ├──► services┘
+            │       ├──► sources
+            │       └──► ai
+            └──► agent ──► (the same engines, as tools)
 ```
+
+The agent is a second front end over the same engines, not a parallel
+implementation. Both paths call `SkillMatcher.match`, so they cannot disagree.
 
 Engines never import the ORM. They take plain dataclasses, which is why every
 engine is unit-testable with no database and no network, and why the whole
@@ -132,6 +137,7 @@ blocks the resume if any claim does not trace back. See doc 5.
 | One job source down | Other sources ingest; error recorded on the run |
 | Malformed posting | Skipped, error recorded, run continues |
 | No Gmail token | Email layer inert; the rest is unaffected |
+| No credentials, agent invoked | `AgentUnavailable` / HTTP 503 with the pipeline named as the working alternative — an open-ended reasoning loop has no heuristic substitute |
 
 This is deliberate: a career agent that stops working when an API key expires is
 worse than useless, because you stop checking it.
