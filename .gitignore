@@ -16,3 +16,10 @@ htmlcov/
 gmail_token.json
 client_secret*.json
 .env
+
+# --- clients ---
+node_modules/
+clients/app/dist/
+clients/app/.expo/
+clients/app/web-build/
+*.tsbuildinfo

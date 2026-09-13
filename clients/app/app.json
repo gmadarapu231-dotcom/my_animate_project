@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "CareerOS",
+    "slug": "careeros",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "careeros",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.careeros.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#2f5fd0",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.careeros.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "CareerOS",
+      "shortName": "CareerOS",
+      "themeColor": "#2f5fd0",
+      "backgroundColor": "#f6f7f9"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "description": "Universal AI career operating system - any profession, any country."
+  }
+}

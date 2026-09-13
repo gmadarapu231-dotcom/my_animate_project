@@ -25,6 +25,7 @@ a finance role or a veterinary practice manager next week — with no code chang
 | 9 | [Security Architecture](09-security-architecture.md) | Credentials, automation limits, send gates, truthfulness as a security property |
 | 10 | [Development Roadmap](10-roadmap.md) | What Phase 1 shipped, Phases 2–5, risks |
 | 11 | [Agent Architecture](11-agent-architecture.md) | The tool-use loop, the 18-tool surface, and the capabilities deliberately withheld |
+| 12 | [Client Architecture](12-client-architecture.md) | The universal app (iOS/Android/web from one component tree), transport security, and what is and isn't verified |
 
 ## Two ways to run
 

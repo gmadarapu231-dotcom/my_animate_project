@@ -330,8 +330,28 @@ def cmd_agent_runs(args: argparse.Namespace) -> None:
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn  # noqa: PLC0415
 
-    _p(f"Dashboard  http://{args.host}:{args.port}/")
-    _p(f"API docs   http://{args.host}:{args.port}/docs")
+    from careeros.api.app import EXPO_WEB_DIR
+    from careeros.api.security import auth_required
+
+    base = f"http://{args.host}:{args.port}"
+    if EXPO_WEB_DIR.exists():
+        _p(f"Web app    {base}/            (universal app, same code as iOS/Android)")
+    else:
+        _p(f"Dashboard  {base}/            (built-in; no build step)")
+        _p(f"{DIM}           build the universal web app with:"
+           f" npm --prefix clients/app run export:web{RESET}")
+    _p(f"Classic    {base}/classic")
+    _p(f"API docs   {base}/docs")
+
+    if args.host not in {"127.0.0.1", "localhost"} and not auth_required():
+        # Binding to a network interface without a token exposes the whole
+        # career history to anyone on that network.
+        _p("")
+        _p(f"{BOLD}WARNING{RESET}: serving on {args.host} with no API token.")
+        _p("  Anyone on this network can read and change your data. Set one first:")
+        _p("    export CAREEROS_API_TOKEN=$(openssl rand -hex 24)")
+        _p("  then enter the same value in the app's Settings screen.")
+    _p("")
     uvicorn.run("careeros.api.app:app", host=args.host, port=args.port, reload=args.reload)
 
 

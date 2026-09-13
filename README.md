@@ -83,6 +83,49 @@ Tailoring a networking background to a Senior SAP Security Consultant posting:
   mentions "sap"?  False    mentions "pfcg"?  False    mentions "grc"?  False
 ```
 
+## Apps
+
+`clients/app/` is one Expo + expo-router codebase that compiles to **iOS,
+Android and web** — the same screens, components and navigation on all three.
+
+```bash
+npm --prefix clients/app install
+
+npm --prefix clients/app run export:web   # web build
+careeros serve                            # served at http://127.0.0.1:8000/
+
+npm --prefix clients/app start            # device: press i / a, or Expo Go
+```
+
+Screens: **Jobs** (ranked, filters, natural-language search) · **Today**
+(what to apply for + learning signals) · **Pipeline** (lifecycle) ·
+**Insights** (funnel + breakdowns) · **Agent** (the loop, with its tool trace) ·
+job detail with the tailor/cover-letter/prepare actions · Settings.
+
+The clients never re-derive what the backend decides — they do not re-sort the
+job list, so "deadline today ranks first" lives in exactly one place. They also
+don't soften its guarantees: a resume that fails the factuality check shows
+**"BLOCKED — not sendable"** with each unsupported claim, `unknown` work
+authorization is never coloured green, and rejection hypotheses stay labelled
+as guesses.
+
+**Connecting a phone** — the API is localhost-only and open by default. Give it
+a token before exposing it to your network:
+
+```bash
+export CAREEROS_API_TOKEN=$(openssl rand -hex 24)
+careeros serve --host 0.0.0.0
+```
+
+Then enter the LAN address and the same token in the app's Settings screen.
+`--host 0.0.0.0` without a token prints a warning telling you exactly this.
+
+*Verified: the web target is built, served by the real API and driven in a
+browser with zero console errors, at desktop and phone widths. The iOS and
+Android targets typecheck and bundle but were **not run** — there is no mobile
+simulator in the environment this was built in. See
+[`docs/12-client-architecture.md`](docs/12-client-architecture.md).*
+
 ## Quick start
 
 ```bash
@@ -92,7 +135,7 @@ careeros init
 careeros load-profile data/sample_profile.yaml
 careeros run-daily data/sample_jobs.json
 careeros jobs
-careeros serve                       # dashboard at http://127.0.0.1:8000
+careeros serve                       # app at http://127.0.0.1:8000
 ```
 
 No API key required for any of that. Everything above runs on deterministic
@@ -168,7 +211,10 @@ careeros search "jobs where my match is above 85%"
 | Rejection intelligence (stated vs hypothesised) | ✅ |
 | Analytics + career learning loop | ✅ |
 | Agentic tool-use loop (18 tools, withheld-capability guards, audit trail) | ✅ |
-| REST API (39 endpoints), dashboard, CLI | ✅ |
+| REST API (39 endpoints), CLI, zero-build dashboard | ✅ |
+| Universal app: web verified in-browser; iOS/Android typecheck + bundle only | ✅ |
+| Bearer-token auth + CORS policy for networked/mobile access | ✅ |
+| Push notifications for deadline alerts | Phase 2 — the main reason the native target exists |
 | Live job-board connectors | Phase 2 — interface done, integrations need API agreements |
 | PDF/DOCX rendering | Phase 2 |
 | Browser-assisted form filling | Phase 3 — ASSISTED only, pauses before submit |
@@ -179,7 +225,7 @@ careeros search "jobs where my match is above 85%"
 [`docs/00-index.md`](docs/00-index.md) — architecture, database schema, AI
 architecture, job-source architecture, resume architecture, work-authorization
 architecture, Gmail architecture, dashboard design, security architecture, the
-roadmap, and agent architecture.
+roadmap, agent architecture, and client architecture.
 
 ## Configuration
 
@@ -190,13 +236,16 @@ roadmap, and agent architecture.
 | `CAREEROS_LLM_MODEL` | `claude-opus-5` | Model id |
 | `ANTHROPIC_API_KEY` | — | Optional; an `ant auth login` profile also works |
 | `CAREEROS_GMAIL_TOKEN` | `~/.careeros/gmail_token.json` | OAuth token (chmod 600) |
+| `CAREEROS_API_TOKEN` | — | Required bearer token. **Set this before serving on a network.** |
+| `CAREEROS_CORS_ORIGINS` | local dev origins | Comma list; `*` honoured only when a token is set |
 | `CAREEROS_LOCAL_MAILBOX` | — | JSON mailbox instead of Gmail |
 | `CAREEROS_COUNTRIES_DIR` / `CAREEROS_TAXONOMY_DIR` | bundled | Point at your own packs |
 
 ## Tests
 
 ```bash
-pytest            # 139 tests
+pytest                                     # 152 tests
+npm --prefix clients/app run typecheck     # the app
 ```
 
 The suite runs with `CAREEROS_LLM=off` throughout — the point is to prove the
@@ -214,6 +263,11 @@ and, with the AI layer on, gets its own persisted domain.
 
 **A new job source:** subclass `JobSource`, yield `RawJob`s, register it.
 Dedupe, normalisation, classification and ranking are already handled.
+
+**A new screen:** add a file under `clients/app/app/` — expo-router's file tree
+is the route tree, and the screen works on all three platforms at once. Compose
+it from `src/components/ui.tsx` so it inherits the theme and the light/dark
+palette.
 
 **A new agent tool:** add a factory to `careeros/agent/tools.py` and list it in
 `_FACTORIES`. Keep the output compact (it re-enters the context window), and if
