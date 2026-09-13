@@ -1,0 +1,118 @@
+# ---------------------------------------------------------------------------
+# Country pack: India
+# ---------------------------------------------------------------------------
+country_code: IN
+country_name: India
+aliases: [india, bharat, "in"]
+
+locale:
+  currency: INR
+  currency_symbol: "₹"
+  date_format: "%d/%m/%Y"
+  location_format: "{city}, {region}"
+  default_salary_period: year
+  terminology:
+    notice_period: "Notice period (commonly 30-90 days)"
+    resume_noun: "Resume / CV"
+    region_noun: "State"
+
+work_authorization:
+  statuses:
+    - id: indian_citizen
+      label: Indian Citizen
+      needs_sponsorship_now: false
+      needs_sponsorship_future: false
+      satisfies: [citizen, permanent, any_authorized]
+      aliases: [citizen, indian]
+    - id: oci
+      label: OCI Cardholder
+      needs_sponsorship_now: false
+      needs_sponsorship_future: false
+      satisfies: [permanent, any_authorized]
+      aliases: [oci, "overseas citizen of india"]
+    - id: pio
+      label: PIO
+      needs_sponsorship_now: false
+      needs_sponsorship_future: false
+      satisfies: [any_authorized]
+      aliases: [pio]
+    - id: employment_visa
+      label: Employment Visa (foreign national)
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: []
+      aliases: ["employment visa", "e-visa"]
+    - id: other
+      label: Other
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: []
+      aliases: []
+    - id: unknown
+      label: Work authorization unknown
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: []
+      aliases: []
+
+  employment_types:
+    - {id: full_time, label: Full-Time, contract: false}
+    - {id: contract, label: Contract, contract: true}
+    - {id: c2h, label: Contract-to-Hire, contract: true}
+    - {id: internship, label: Internship, contract: false}
+    - {id: part_time, label: Part-Time, contract: false}
+    - {id: freelance, label: Freelance, contract: true}
+
+  jd_signals:
+    citizenship_required:
+      severity: blocking
+      requires: citizen
+      patterns:
+        - "indian nationals only"
+        - "indian citizens only"
+        - "must be an indian citizen"
+    sponsorship_unavailable:
+      severity: blocking_if_needs_sponsorship
+      patterns:
+        - "no visa sponsorship"
+        - "candidates must be authorized to work in india"
+        - "work permit will not be provided"
+    sponsorship_available:
+      severity: enabling
+      patterns:
+        - "employment visa provided"
+        - "relocation and visa support"
+    employment_type_hints:
+      full_time: ["full-time", "full time", "permanent", "fte"]
+      contract: ["contract role", "contractual", "on contract", "6 months contract"]
+      c2h: ["contract to hire", "c2h"]
+      internship: ["internship", "intern"]
+      part_time: ["part-time", "part time"]
+      freelance: ["freelance", "freelancing"]
+
+salary:
+  formats:
+    # LPA / CTC are India-first formats. `multiplier` converts the numeric
+    # token into the base currency unit (INR) before period normalisation.
+    - {id: lpa,     period: year,  multiplier: 100000, patterns: ["lpa", "lakhs per annum", "lacs per annum", "lpa ctc"]}
+    - {id: lakh,    period: year,  multiplier: 100000, patterns: ["lakh", "lakhs", "lac", "lacs"]}
+    - {id: crore,   period: year,  multiplier: 10000000, patterns: ["crore", "cr"]}
+    - {id: monthly, period: month, multiplier: 1, patterns: ["/month", "per month", "pm", "monthly"]}
+    - {id: annual,  period: year,  multiplier: 1, patterns: ["per annum", "/year", "per year", "pa", "annually", "ctc"]}
+    - {id: hourly,  period: hour,  multiplier: 1, patterns: ["/hr", "per hour", "hourly"]}
+  hours_per_year: 2080
+  months_per_year: 12
+  # Compensation components that should be preserved verbatim, not normalised
+  # away -- an "18 LPA CTC" offer is not the same as an 18 LPA base.
+  components: [base, variable, ctc, bonus, esop, retention]
+
+job_boards:
+  - {id: naukri, label: Naukri, connector: naukri, enabled: false}
+  - {id: linkedin_in, label: LinkedIn India, connector: linkedin, enabled: false}
+  - {id: instahyre, label: Instahyre, connector: instahyre, enabled: false}
+  - {id: cutshort, label: Cutshort, connector: cutshort, enabled: false}
+
+application_rules:
+  reminders:
+    - "Confirm the notice period expected by the employer before committing to a start date."
+    - "CTC figures often bundle variable pay - check the base component."

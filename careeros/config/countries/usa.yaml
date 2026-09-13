@@ -1,0 +1,209 @@
+# ---------------------------------------------------------------------------
+# Country pack: United States
+#
+# Country packs are pure DATA. Adding a country means adding a YAML file here
+# -- no Python changes. The work-authorization engine, salary normaliser and
+# location formatter are all driven by these keys.
+# ---------------------------------------------------------------------------
+country_code: US
+country_name: United States
+aliases: [usa, u.s., u.s.a., united states, united states of america, america]
+
+locale:
+  currency: USD
+  currency_symbol: "$"
+  date_format: "%m/%d/%Y"
+  location_format: "{city}, {region}"
+  default_salary_period: year
+  # Terminology the UI should use for this country.
+  terminology:
+    notice_period: "Two weeks' notice"
+    resume_noun: "Resume"
+    region_noun: "State"
+
+# --- Work authorisation -----------------------------------------------------
+work_authorization:
+  # Every status the user may hold. `needs_sponsorship_now` means the employer
+  # must file/transfer a petition to hire today. `needs_sponsorship_future`
+  # means the status expires and will need employer action later.
+  statuses:
+    - id: us_citizen
+      label: US Citizen
+      needs_sponsorship_now: false
+      needs_sponsorship_future: false
+      satisfies: [citizen, permanent, any_authorized]
+      aliases: [citizen, usc, "u.s. citizen"]
+    - id: green_card
+      label: Permanent Resident / Green Card
+      needs_sponsorship_now: false
+      needs_sponsorship_future: false
+      satisfies: [permanent, any_authorized]
+      aliases: [gc, "permanent resident", lpr, "green card"]
+    - id: ead
+      label: EAD (Employment Authorization Document)
+      needs_sponsorship_now: false
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      aliases: [ead, "work permit", "l2 ead", "h4 ead"]
+    - id: h1b
+      label: H1B (current holder)
+      needs_sponsorship_now: true        # a transfer is a petition
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      transfer_required: true
+      aliases: ["h-1b", h1b, "h1 b"]
+    - id: h1b_transfer
+      label: H1B - seeking transfer
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      transfer_required: true
+      aliases: ["h1b transfer", "h-1b transfer"]
+    - id: h1b_sponsorship_required
+      label: H1B sponsorship required (cap subject)
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: []
+      aliases: ["needs sponsorship", "requires sponsorship"]
+    - id: opt
+      label: OPT
+      needs_sponsorship_now: false
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      aliases: [opt, "f1 opt", "f-1 opt"]
+    - id: stem_opt
+      label: STEM OPT
+      needs_sponsorship_now: false
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      aliases: ["stem opt", "stem-opt"]
+    - id: tn
+      label: TN (USMCA)
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      aliases: [tn, "tn visa", "tn-1"]
+    - id: l1
+      label: L1
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      aliases: [l1, "l-1", l1a, l1b]
+    - id: o1
+      label: O1
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: [any_authorized]
+      aliases: [o1, "o-1"]
+    - id: other
+      label: Other
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: []
+      aliases: []
+    - id: unknown
+      label: Work authorization unknown
+      needs_sponsorship_now: true
+      needs_sponsorship_future: true
+      satisfies: []
+      aliases: []
+
+  employment_types:
+    - {id: w2, label: W2, contract: false}
+    - {id: c2c, label: C2C (Corp-to-Corp), contract: true}
+    - {id: c2h, label: Contract-to-Hire, contract: true}
+    - {id: contract, label: Contract, contract: true}
+    - {id: full_time, label: Full-Time, contract: false}
+    - {id: part_time, label: Part-Time, contract: false}
+    - {id: temporary, label: Temporary, contract: true}
+    - {id: internship, label: Internship, contract: false}
+
+  # Phrases found in a job description that change the verdict. Each pattern is
+  # matched case-insensitively against the normalised JD text; the matched span
+  # is stored as the *evidence* for the verdict so the UI can always show its
+  # source.
+  jd_signals:
+    citizenship_required:
+      severity: blocking
+      requires: citizen
+      patterns:
+        - "must be a us citizen"
+        - "must be a u.s. citizen"
+        - "us citizens only"
+        - "u.s. citizens only"
+        - "citizenship is required"
+        - "sole us citizen"
+    clearance_required:
+      severity: blocking_if_no_clearance
+      patterns:
+        - "security clearance"
+        - "active clearance"
+        - "ts/sci"
+        - "top secret"
+        - "public trust clearance"
+    permanent_status_required:
+      severity: blocking
+      requires: permanent
+      patterns:
+        - "us citizen or green card"
+        - "citizens or permanent residents"
+        - "gc or citizen"
+        - "usc/gc only"
+        - "green card holders only"
+    sponsorship_unavailable:
+      severity: blocking_if_needs_sponsorship
+      patterns:
+        - "no sponsorship"
+        - "not able to sponsor"
+        - "unable to sponsor"
+        - "will not sponsor"
+        - "does not provide sponsorship"
+        - "not provide visa sponsorship"
+        - "no visa sponsorship"
+        - "sponsorship is not available"
+        - "not offer sponsorship"
+        - "without sponsorship now or in the future"
+    sponsorship_available:
+      severity: enabling
+      patterns:
+        - "will sponsor"
+        - "sponsorship available"
+        - "we sponsor"
+        - "h1b sponsorship"
+        - "h-1b sponsorship"
+        - "h1b transfer"
+        - "visa sponsorship provided"
+        - "open to sponsorship"
+        - "cap-exempt"
+    employment_type_hints:
+      w2: ["w2 only", "w-2 only", "w2 position", "w2 contract"]
+      c2c: ["c2c", "corp to corp", "corp-to-corp", "corp 2 corp"]
+      c2h: ["contract to hire", "contract-to-hire", "c2h"]
+      contract: ["contract role", "contract position", "6 month contract", "12 month contract"]
+      full_time: ["full-time", "full time", "fte", "permanent role"]
+      part_time: ["part-time", "part time"]
+      internship: ["internship", "intern position", "summer intern"]
+
+# --- Salary parsing ---------------------------------------------------------
+salary:
+  # Ordered: the first pattern that matches wins.
+  formats:
+    - {id: hourly, period: hour, patterns: ["/hr", "per hour", "an hour", "hourly"]}
+    - {id: annual, period: year, patterns: ["/yr", "per year", "per annum", "annually", "/year"]}
+    - {id: monthly, period: month, patterns: ["/mo", "per month", "monthly"]}
+  hours_per_year: 2080
+  months_per_year: 12
+
+# --- Job boards (Phase 2 connectors; declared here so the pack is complete) --
+job_boards:
+  - {id: linkedin, label: LinkedIn, connector: linkedin, enabled: false}
+  - {id: indeed, label: Indeed, connector: indeed, enabled: false}
+  - {id: dice, label: Dice, connector: dice, enabled: false}
+  - {id: greenhouse, label: Greenhouse, connector: greenhouse_board, enabled: false}
+  - {id: lever, label: Lever, connector: lever_board, enabled: false}
+
+application_rules:
+  # Free-form, surfaced in the UI as reminders. No legal conclusions encoded.
+  reminders:
+    - "Work-authorization verdicts are an AI assessment - verify with the employer or recruiter."
+    - "Do not state a visa status on an application that differs from your Master Profile."

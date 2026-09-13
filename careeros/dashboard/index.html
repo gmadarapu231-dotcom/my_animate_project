@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CareerOS</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --ink:#16181d; --muted:#646a75; --line:#e3e6eb;
+  --accent:#2f5fd0; --accent-soft:#eaf0fe;
+  --ok:#1f8a53; --warn:#b4740b; --bad:#c0392b; --chip:#eef1f5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14161a; --panel:#1c1f25; --ink:#e8eaee; --muted:#9aa1ad; --line:#2b2f37;
+    --accent:#7aa2f7; --accent-soft:#20293d;
+    --ok:#4ec98a; --warn:#e0a44a; --bad:#f0776a; --chip:#252a33;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 20px;position:sticky;top:0;z-index:10}
+.head-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{font-size:17px;margin:0;letter-spacing:-.2px}
+h1 span{color:var(--muted);font-weight:400;font-size:13px;margin-left:8px}
+.wrap{max-width:1200px;margin:0 auto;padding:18px 20px 60px}
+.search{display:flex;gap:8px;flex:1;min-width:260px;max-width:560px}
+.search input{flex:1;padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font-size:13px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:7px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.small{padding:4px 9px;font-size:12px}
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 6px}
+.filters button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.panel h2{font-size:13px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+pre.narrative{white-space:pre-wrap;margin:0;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.card.today{border-left-color:var(--bad)}
+.card.within_48h{border-left-color:#e67e22}
+.card.within_7d{border-left-color:var(--warn)}
+.card.future{border-left-color:var(--ok)}
+.card.expired{border-left-color:var(--muted);opacity:.6}
+.card-top{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:flex-start}
+.title{font-weight:640;font-size:15px}
+.co{color:var(--muted);font-size:13px}
+.flag{font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0}
+.chip{background:var(--chip);border-radius:20px;padding:2px 9px;font-size:11.5px;color:var(--muted)}
+.chip.dom{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.scores{display:flex;flex-wrap:wrap;gap:14px;margin:9px 0 4px}
+.score{min-width:64px}
+.score b{display:block;font-size:16px;line-height:1.2}
+.score span{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.verdict{font-size:12px;padding:7px 10px;border-radius:7px;margin:8px 0;background:var(--chip)}
+.verdict.compatible{background:rgba(31,138,83,.12);color:var(--ok)}
+.verdict.potentially_compatible{background:rgba(180,116,11,.13);color:var(--warn)}
+.verdict.unknown{background:var(--chip);color:var(--muted)}
+.verdict.not_compatible{background:rgba(192,57,43,.12);color:var(--bad)}
+.verdict .disc{display:block;margin-top:4px;font-size:11px;opacity:.85;font-style:italic}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:13px}
+.detail h4{margin:10px 0 5px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.detail ul{margin:4px 0;padding-left:18px}
+.kw{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+.muted{color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.tabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;z-index:50}
+@media (max-width:520px){.wrap{padding:14px 16px 40px}.scores{gap:10px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="head-row">
+    <h1>CareerOS <span id="sub">loading…</span></h1>
+    <div class="search">
+      <input id="q" placeholder='e.g. "H1B-friendly cybersecurity jobs in Texas"'>
+      <button class="primary" onclick="runSearch()">Search</button>
+      <button onclick="loadJobs()">Reset</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="on" data-tab="jobs" onclick="setTab('jobs')">Jobs</button>
+    <button data-tab="today" onclick="setTab('today')">Today</button>
+    <button data-tab="applications" onclick="setTab('applications')">Applications</button>
+    <button data-tab="analytics" onclick="setTab('analytics')">Analytics</button>
+    <button data-tab="email" onclick="setTab('email')">Email</button>
+  </div>
+
+  <section id="tab-jobs">
+    <div class="filters" id="domainFilters"></div>
+    <div class="filters" id="countryFilters"></div>
+    <div id="searchNote"></div>
+    <div id="jobs"></div>
+  </section>
+
+  <section id="tab-today" hidden>
+    <div class="panel"><h2>What should I apply for today?</h2><pre class="narrative" id="rec">…</pre></div>
+    <div class="panel"><h2>Career learning signals</h2><div id="learning">…</div></div>
+  </section>
+
+  <section id="tab-applications" hidden><div class="panel"><h2>Application pipeline</h2><div id="apps">…</div></div></section>
+  <section id="tab-analytics" hidden><div id="analytics">…</div></section>
+  <section id="tab-email" hidden>
+    <div class="panel"><h2>Classified messages</h2><div id="emails">…</div></div>
+    <div class="panel"><h2>Reply drafts</h2><div id="drafts">…</div></div>
+  </section>
+</div>
+
+<script>
+const state={domain:null,country:null,jobs:[],open:new Set()};
+const api=async(p,o)=>{const r=await fetch(p,o);if(!r.ok){throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail)}return r.json()};
+const post=(p,b)=>api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const n=v=>v==null?'—':(Math.round(v*10)/10);
+
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3200)}
+
+function setTab(name){
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
+  ['jobs','today','applications','analytics','email'].forEach(t=>document.getElementById('tab-'+t).hidden=(t!==name));
+  if(name==='today')loadToday(); if(name==='applications')loadApps();
+  if(name==='analytics')loadAnalytics(); if(name==='email')loadEmail();
+}
+
+async function boot(){
+  try{
+    const h=await api('/api/health');
+    document.getElementById('sub').textContent =
+      `${h.countries.join(' · ')} · ${h.seed_domains} seed domains · ${h.skill_nodes} skills · AI: ${h.llm_available?h.llm_provider:'heuristic only'}`;
+    const f=await api('/api/jobs/facets');
+    renderFilters(f);
+  }catch(e){document.getElementById('sub').textContent='not initialised'}
+  loadJobs();
+}
+
+function renderFilters(f){
+  const d=document.getElementById('domainFilters');
+  d.innerHTML=`<button class="on" onclick="pick('domain',null,this)">All domains</button>`+
+    f.domains.map(x=>`<button onclick="pick('domain','${x.id}',this)">${esc(x.label)} (${x.job_count})${x.origin==='inferred'?' ✨':''}</button>`).join('');
+  const c=document.getElementById('countryFilters');
+  c.innerHTML=`<button class="on" onclick="pick('country',null,this)">All countries</button>`+
+    f.countries.map(x=>`<button onclick="pick('country','${x.code}',this)">${esc(x.name)}</button>`).join('');
+}
+
+function pick(kind,value,btn){
+  state[kind]=value;
+  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  loadJobs();
+}
+
+async function loadJobs(){
+  document.getElementById('searchNote').innerHTML='';
+  const p=new URLSearchParams();
+  if(state.domain)p.set('domain',state.domain);
+  if(state.country)p.set('country',state.country);
+  try{const d=await api('/api/jobs?'+p);state.jobs=d.jobs;renderJobs(d.jobs)}
+  catch(e){document.getElementById('jobs').innerHTML=`<div class="panel">${esc(e.message)}</div>`}
+}
+
+async function runSearch(){
+  const q=document.getElementById('q').value.trim(); if(!q)return loadJobs();
+  try{
+    const d=await post('/api/jobs/search',{query:q,use_ai:true});
+    document.getElementById('searchNote').innerHTML=
+      `<div class="panel"><h2>Interpreted query</h2><span class="kw">${esc(d.filters_description)}</span> — ${d.count} result(s)</div>`;
+    state.jobs=d.jobs; renderJobs(d.jobs);
+  }catch(e){toast(e.message)}
+}
+
+function renderJobs(jobs){
+  const el=document.getElementById('jobs');
+  if(!jobs.length){el.innerHTML='<div class="panel muted">No jobs match. Run a daily ingest, or clear the filters.</div>';return}
+  el.innerHTML=jobs.map(card).join('');
+}
+
+function card(j){
+  const p=j.priority||{}, s=j.scores||{}, c=j.classification||{}, e=j.eligibility;
+  const open=state.open.has(j.id);
+  return `<div class="card ${esc(p.bucket||'none')}">
+    <div class="card-top">
+      <div>
+        <div class="title">${esc(j.title)}</div>
+        <div class="co">${esc(j.company)} · ${esc(j.location||j.country_name)} · ${esc(j.source)}</div>
+      </div>
+      <div class="flag">${esc(p.flag||'')}</div>
+    </div>
+    <div class="chips">
+      <span class="chip dom">${esc(c.domain_label||'unclassified')}</span>
+      ${c.specialization?`<span class="chip">${esc(c.specialization)}</span>`:''}
+      ${c.seniority?`<span class="chip">${esc(c.seniority)}</span>`:''}
+      <span class="chip">${esc(j.country)}</span>
+      ${j.work_arrangement?`<span class="chip">${esc(j.work_arrangement)}</span>`:''}
+      ${j.employment_type?`<span class="chip">${esc(j.employment_type)}</span>`:''}
+      <span class="chip">${esc(j.salary.display)}</span>
+      ${j.applicant_count!=null?`<span class="chip">${j.applicant_count} applicants</span>`:''}
+      ${j.posted_on?`<span class="chip">posted ${esc(j.posted_on)}</span>`:''}
+      ${j.deadline_on?`<span class="chip">closes ${esc(j.deadline_on)}</span>`:''}
+      ${j.application?`<span class="chip">${esc(j.application.status)}</span>`:''}
+    </div>
+    <div class="scores">
+      <div class="score"><b>${n(s.priority)}</b><span>Priority</span></div>
+      <div class="score"><b>${n(s.match)}</b><span>Match</span></div>
+      <div class="score"><b>${n(s.ats)}</b><span>ATS</span></div>
+      <div class="score"><b>${n(s.eligibility)}</b><span>Eligibility</span></div>
+      <div class="score"><b>${n(s.urgency)}</b><span>Urgency</span></div>
+      <div class="score"><b>${n(s.competition)}</b><span>Competition</span></div>
+    </div>
+    ${e?`<div class="verdict ${esc(e.verdict)}"><b>Work authorization: ${esc(e.verdict.replace(/_/g,' '))}</b>
+      ${e.reasons&&e.reasons.length?` — ${esc(e.reasons[0])}`:''}
+      ${e.evidence&&e.evidence.length?`<span class="disc">Source: “${esc(e.evidence[0].quote.slice(0,150))}”</span>`:''}
+      <span class="disc">${esc(e.disclaimer)}</span></div>`:''}
+    <div class="actions">
+      <button class="small" onclick="toggle(${j.id})">${open?'Hide':'Details'}</button>
+      <button class="small" onclick="act('/api/jobs/${j.id}/analyze',null,'Analyzed')">Analyze</button>
+      <button class="small" onclick="act('/api/resumes/tailor',{job_id:${j.id}},'Resume tailored')">Tailor Resume</button>
+      <button class="small" onclick="act('/api/resumes/cover-letter',{job_id:${j.id}},'Cover letter drafted')">Cover Letter</button>
+      <button class="small" onclick="act('/api/applications/prepare',{job_id:${j.id}},'Application packet ready')">Prepare</button>
+      ${j.url?`<button class="small" onclick="window.open('${esc(j.url)}','_blank','noopener')">Open posting</button>`:''}
+      ${j.application?`
+      <button class="small" onclick="setStatus(${j.application.id},'saved')">Save</button>
+      <button class="small" onclick="setStatus(${j.application.id},'applied')">Mark applied</button>
+      <button class="small" onclick="setStatus(${j.application.id},'withdrawn')">Reject</button>
+      <button class="small" onclick="addNote(${j.application.id})">Add note</button>`:''}
+    </div>
+    ${open?detail(j):''}
+  </div>`;
+}
+
+function detail(j){
+  const c=j.classification||{},p=j.priority||{};
+  const skills=a=>(a||[]).map(x=>`<span class="chip">${esc(x.name)}</span>`).join('')||'<span class="muted">none detected</span>';
+  return `<div class="detail">
+    <h4>Why this rank</h4><ul>${(p.explanation||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+    <h4>Required skills</h4><div class="chips">${skills(c.required_skills)}</div>
+    <h4>Preferred skills</h4><div class="chips">${skills(c.preferred_skills)}</div>
+    ${c.required_certifications&&c.required_certifications.length?`<h4>Certifications named</h4><div class="chips">${c.required_certifications.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:''}
+    <h4>ATS keywords derived from this posting</h4>
+    <div class="kw muted">${(c.ats_keywords||[]).slice(0,24).map(esc).join(' · ')}</div>
+    <h4>Classification</h4>
+    <div class="muted">${esc(c.domain_id)} / ${esc(c.function||'—')} · confidence ${n(c.confidence)} · method ${esc(c.method)}<br>${esc(c.rationale||'')}</div>
+  </div>`;
+}
+
+async function toggle(id){
+  if(state.open.has(id))state.open.delete(id);else state.open.add(id);
+  renderJobs(state.jobs);
+}
+
+async function act(path,body,msg){
+  try{const r=await post(path,body);
+    if(r.blockers&&r.blockers.length)toast(r.blockers[0]);
+    else if(r.factuality&&!r.factuality.passed)toast('Factuality check FAILED — '+r.factuality.summary);
+    else toast(msg);
+  }catch(e){toast(e.message)}
+}
+async function setStatus(id,status){try{await post(`/api/applications/${id}/status`,{status});toast('Status → '+status);loadJobs()}catch(e){toast(e.message)}}
+async function addNote(id){const t=prompt('Note:');if(!t)return;try{await post(`/api/applications/${id}/notes`,{notes:t});toast('Note saved')}catch(e){toast(e.message)}}
+
+async function loadToday(){
+  try{const r=await api('/api/recommendations?refresh=true');document.getElementById('rec').textContent=r.narrative||'No recommendation yet.'}
+  catch(e){document.getElementById('rec').textContent=e.message}
+  try{const l=await api('/api/analytics/learning');
+    document.getElementById('learning').innerHTML = l.count
+      ? l.signals.map(s=>`<div style="margin-bottom:10px"><b>${esc(s.kind.replace(/_/g,' '))}: ${esc(s.subject)}</b><br><span class="muted">${esc(s.rationale)} <em>(confidence: ${esc(s.confidence)})</em></span></div>`).join('')
+        +`<div class="muted" style="margin-top:10px;font-style:italic">${esc(l.disclaimer)}</div>`
+      : '<span class="muted">Not enough outcome history yet — apply to a few roles and check back.</span>';
+  }catch(e){document.getElementById('learning').textContent=e.message}
+}
+
+async function loadApps(){
+  try{const d=await api('/api/applications');
+    document.getElementById('apps').innerHTML = d.count
+      ? `<table><tr><th>Job</th><th>Company</th><th>Country</th><th>Status</th><th>Priority</th></tr>`+
+        d.applications.map(a=>`<tr><td>${esc(a.title)}</td><td>${esc(a.company)}</td><td>${esc(a.country)}</td><td>${esc(a.status)}</td><td>${n(a.priority)}</td></tr>`).join('')+`</table>`
+      : '<span class="muted">No applications tracked yet.</span>';
+  }catch(e){document.getElementById('apps').textContent=e.message}
+}
+
+async function loadAnalytics(){
+  try{
+    const a=await api('/api/analytics'), o=a.overall;
+    const tbl=(title,rows)=>!rows.length?'':`<div class="panel"><h2>${title}</h2><table>
+      <tr><th>Group</th><th>Apps</th><th>Responses</th><th>Interviews</th><th>Offers</th><th>Response %</th><th>Interview %</th></tr>
+      ${rows.map(r=>`<tr><td>${esc(r.label)}${r.confident?'':' <span class="muted">(low sample)</span>'}</td><td>${r.applications}</td><td>${r.responses}</td><td>${r.interviews}</td><td>${r.offers}</td><td>${r.response_rate}</td><td>${r.interview_rate}</td></tr>`).join('')}</table></div>`;
+    document.getElementById('analytics').innerHTML=
+      `<div class="panel"><h2>Funnel</h2><div class="grid">
+        <div class="stat"><b>${o.applications}</b><span>Applications</span></div>
+        <div class="stat"><b>${o.responses}</b><span>Responses</span></div>
+        <div class="stat"><b>${o.interviews}</b><span>Interviews</span></div>
+        <div class="stat"><b>${o.assessments}</b><span>Assessments</span></div>
+        <div class="stat"><b>${o.offers}</b><span>Offers</span></div>
+        <div class="stat"><b>${o.rejections}</b><span>Rejections</span></div>
+        <div class="stat"><b>${o.response_rate}%</b><span>Response rate</span></div>
+        <div class="stat"><b>${o.interview_rate}%</b><span>Interview rate</span></div>
+        <div class="stat"><b>${o.offer_rate}%</b><span>Offer rate</span></div>
+      </div>${o.note?`<p class="muted">${esc(o.note)}</p>`:''}</div>`
+      +tbl('By career track',a.by_track)+tbl('By domain',a.by_domain)+tbl('By country',a.by_country)
+      +tbl('By visa verdict',a.by_visa_verdict)+tbl('By match band',a.by_match_band)+tbl('By source',a.by_source)
+      +`<div class="panel"><h2>Rejections</h2>
+        <p>${a.rejections.total} recorded · ${a.rejections.explicit_count} with a stated reason.</p>
+        ${a.rejections.hypotheses.length?`<h4 class="muted">Hypotheses (not employer statements)</h4><ul>${a.rejections.hypotheses.map(h=>`<li>${esc(h.reason)} — ${h.count}× <em class="muted">${esc(h.disclaimer)}</em></li>`).join('')}</ul>`:''}
+      </div>`;
+  }catch(e){document.getElementById('analytics').textContent=e.message}
+}
+
+async function loadEmail(){
+  try{const m=await api('/api/email/messages');
+    document.getElementById('emails').innerHTML = m.count
+      ? `<table><tr><th>Category</th><th>Subject</th><th>From</th><th>Action</th></tr>`+
+        m.messages.map(x=>`<tr><td>${esc(x.category)}</td><td>${esc(x.subject)}</td><td>${esc(x.sender)}</td><td>${x.requires_action?'yes':''}</td></tr>`).join('')+`</table>`
+      : '<span class="muted">No messages synced. POST /api/email/sync with a mailbox path.</span>';
+  }catch(e){document.getElementById('emails').textContent=e.message}
+  try{const d=await api('/api/email/drafts');
+    document.getElementById('drafts').innerHTML = d.count
+      ? d.drafts.map(x=>`<div style="margin-bottom:14px"><b>${esc(x.intent)}</b> — <span class="chip">${esc(x.state)}</span>
+          ${x.high_impact_topics.length?`<span class="chip" style="color:var(--bad)">held: ${x.high_impact_topics.map(esc).join(', ')}</span>`:''}
+          <pre class="narrative" style="margin-top:6px">${esc(x.body)}</pre>
+          ${x.high_impact_topics.length?'<div class="muted" style="font-style:italic">CareerOS never auto-sends on this topic.</div>'
+            :`<button class="small" onclick="act('/api/email/drafts/${x.id}/approve',null,'Approved')">Approve</button>`}</div>`).join('')
+      : '<span class="muted">No drafts.</span>';
+  }catch(e){document.getElementById('drafts').textContent=e.message}
+}
+
+boot();
+</script>
+</body>
+</html>

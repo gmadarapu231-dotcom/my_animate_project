@@ -1,0 +1,540 @@
+# ---------------------------------------------------------------------------
+# Skill graph -- powers CROSS-DOMAIN / TRANSFERABLE skill matching.
+#
+# Each node is a canonical skill. `aliases` fold surface forms onto the node
+# (DIRECT match). `related` are semantically adjacent skills: holding one is
+# evidence of RELATED / TRANSFERABLE capability, never of direct experience.
+# `broader` / `narrower` give hierarchy -- holding a narrower skill partially
+# satisfies the broader requirement (PARTIAL match).
+#
+# Weights used by the matcher:
+#   direct      1.00   alias or exact hit
+#   narrower    0.80   candidate holds a more specific form of the requirement
+#   broader     0.55   candidate holds the umbrella, not the specific tool
+#   related     0.45   adjacent skill -- surfaced as TRANSFERABLE, flagged
+# ---------------------------------------------------------------------------
+version: 1
+
+weights:
+  direct: 1.0
+  narrower: 0.8
+  broader: 0.55
+  related: 0.45
+
+skills:
+  # --- Identity / access ----------------------------------------------------
+  - id: iam
+    label: Identity & Access Management
+    aliases: ["identity and access management", "iam", "identity management", "access management", "identity governance", "iga"]
+    domains: [cybersecurity, cloud, sap]
+    narrower: [active_directory, azure_ad, okta, sailpoint, rbac, sso, mfa, pam, sap_authorization]
+  - id: active_directory
+    label: Active Directory
+    aliases: ["active directory", "ad", "ldap", "domain controller", "group policy"]
+    domains: [cybersecurity, cloud]
+    broader: [iam]
+    related: [azure_ad, sso, rbac]
+  - id: azure_ad
+    label: Azure AD / Entra ID
+    aliases: ["azure ad", "azure active directory", "entra id", "entra"]
+    domains: [cybersecurity, cloud]
+    broader: [iam]
+    related: [active_directory, sso, mfa, conditional_access]
+  - id: okta
+    label: Okta
+    aliases: [okta]
+    domains: [cybersecurity]
+    broader: [iam]
+    related: [sso, mfa, sailpoint]
+  - id: sailpoint
+    label: SailPoint
+    aliases: [sailpoint, "identityiq", "identitynow"]
+    domains: [cybersecurity]
+    broader: [iam]
+    related: [okta, rbac, access_certification]
+  - id: rbac
+    label: Role-Based Access Control
+    aliases: ["rbac", "role based access control", "role-based access control", "least privilege", "access governance"]
+    domains: [cybersecurity, sap]
+    broader: [iam]
+    related: [sap_authorization, access_certification, sod]
+  - id: sso
+    label: Single Sign-On
+    aliases: ["sso", "single sign-on", "saml", "oauth", "oidc", "openid connect", "federation"]
+    domains: [cybersecurity, software]
+    broader: [iam]
+    related: [azure_ad, okta, mfa]
+  - id: mfa
+    label: Multi-Factor Authentication
+    aliases: ["mfa", "multi-factor authentication", "2fa", "two-factor"]
+    domains: [cybersecurity]
+    broader: [iam]
+    related: [sso, conditional_access]
+  - id: conditional_access
+    label: Conditional Access
+    aliases: ["conditional access", "access policies"]
+    domains: [cybersecurity, cloud]
+    broader: [iam]
+    related: [azure_ad, zero_trust]
+  - id: pam
+    label: Privileged Access Management
+    aliases: ["pam", "privileged access management", "privileged account", "cyberark", "beyondtrust", "delinea"]
+    domains: [cybersecurity]
+    broader: [iam]
+    related: [rbac, sap_firefighter, least_privilege_review]
+  - id: access_certification
+    label: Access Review / Certification
+    aliases: ["access review", "access certification", "user access review", "recertification", "attestation"]
+    domains: [cybersecurity, sap, business]
+    broader: [iam]
+    related: [rbac, sod, audit]
+  - id: least_privilege_review
+    label: Least-Privilege Review
+    aliases: ["least privilege", "entitlement review", "privilege creep"]
+    domains: [cybersecurity, sap]
+    related: [rbac, access_certification]
+
+  # --- SAP ------------------------------------------------------------------
+  - id: sap_authorization
+    label: SAP Authorization / Roles
+    aliases: ["sap authorization", "sap authorizations", "pfcg", "sap roles", "su01", "authorization objects", "sap role design", "sap role redesign", "derived roles", "composite roles"]
+    domains: [sap]
+    broader: [iam]
+    related: [sap_grc, rbac, sod, sap_basis]
+  - id: sap_grc
+    label: SAP GRC Access Control
+    aliases: ["sap grc", "grc access control", "sap grc ac", "access risk analysis", "ara", "arm", "emergency access management", "sap iag"]
+    domains: [sap, cybersecurity]
+    related: [sap_authorization, sod, sap_firefighter, access_certification, grc]
+  - id: sap_firefighter
+    label: SAP Firefighter / EAM
+    aliases: ["firefighter", "fire fighter", "emergency access", "eam"]
+    domains: [sap]
+    broader: [pam]
+    related: [sap_grc, sap_authorization]
+  - id: sod
+    label: Segregation of Duties
+    aliases: ["segregation of duties", "sod", "separation of duties", "sod ruleset", "risk ruleset"]
+    domains: [sap, cybersecurity, finance]
+    related: [sap_grc, rbac, audit, sox]
+  - id: sap_basis
+    label: SAP Basis
+    aliases: ["sap basis", "netweaver", "sap netweaver", "solution manager", "system refresh", "transport management"]
+    domains: [sap]
+    related: [sap_authorization, s4hana]
+  - id: s4hana
+    label: SAP S/4HANA
+    aliases: ["s/4hana", "s4 hana", "s4hana", "fiori", "hana"]
+    domains: [sap]
+    related: [sap_basis, sap_authorization]
+
+  # --- Security operations --------------------------------------------------
+  - id: siem
+    label: SIEM
+    aliases: ["siem", "security information and event management", "log correlation"]
+    domains: [cybersecurity]
+    narrower: [splunk, sentinel, qradar]
+    related: [soc_operations, incident_response, soar]
+  - id: splunk
+    label: Splunk
+    aliases: [splunk, "spl", "splunk es"]
+    domains: [cybersecurity, data_analytics]
+    broader: [siem]
+    related: [sentinel, qradar]
+  - id: sentinel
+    label: Microsoft Sentinel
+    aliases: ["microsoft sentinel", "azure sentinel", "sentinel", "kql"]
+    domains: [cybersecurity, cloud]
+    broader: [siem]
+    related: [splunk, azure_ad]
+  - id: qradar
+    label: IBM QRadar
+    aliases: [qradar, "ibm qradar"]
+    domains: [cybersecurity]
+    broader: [siem]
+    related: [splunk]
+  - id: soar
+    label: SOAR / Security Automation
+    aliases: [soar, "security orchestration", "playbook automation", "phantom", "xsoar"]
+    domains: [cybersecurity]
+    related: [siem, incident_response, scripting]
+  - id: soc_operations
+    label: SOC Operations
+    aliases: ["soc", "security operations center", "tier 1 analyst", "tier 2 analyst", "alert triage", "monitoring and triage"]
+    domains: [cybersecurity]
+    related: [siem, incident_response, threat_hunting, edr]
+  - id: incident_response
+    label: Incident Response
+    aliases: ["incident response", "ir", "dfir", "forensics", "containment", "post-incident review"]
+    domains: [cybersecurity]
+    related: [soc_operations, threat_hunting, edr, siem]
+  - id: threat_hunting
+    label: Threat Hunting
+    aliases: ["threat hunting", "threat intelligence", "mitre att&ck", "ioc", "ttp"]
+    domains: [cybersecurity]
+    related: [incident_response, soc_operations, edr]
+  - id: edr
+    label: EDR / XDR
+    aliases: ["edr", "xdr", "endpoint detection", "crowdstrike", "defender for endpoint", "sentinelone", "carbon black"]
+    domains: [cybersecurity]
+    related: [soc_operations, incident_response, threat_hunting]
+  - id: vulnerability_management
+    label: Vulnerability Management
+    aliases: ["vulnerability management", "nessus", "qualys", "rapid7", "tenable", "patch management", "cve remediation"]
+    domains: [cybersecurity]
+    related: [pentest, grc, risk_assessment]
+  - id: pentest
+    label: Penetration Testing
+    aliases: ["penetration testing", "pen test", "ethical hacking", "burp suite", "metasploit", "red team", "oscp"]
+    domains: [cybersecurity]
+    related: [vulnerability_management, appsec]
+  - id: appsec
+    label: Application Security
+    aliases: ["application security", "appsec", "sast", "dast", "owasp", "secure code review", "software composition analysis"]
+    domains: [cybersecurity, software]
+    related: [devsecops, pentest, secure_sdlc]
+  - id: devsecops
+    label: DevSecOps
+    aliases: ["devsecops", "security in ci/cd", "shift left security", "pipeline security"]
+    domains: [cybersecurity, cloud]
+    related: [appsec, cicd, cloud_security]
+  - id: secure_sdlc
+    label: Secure SDLC
+    aliases: ["secure sdlc", "threat modeling", "security requirements"]
+    domains: [cybersecurity, software]
+    related: [appsec, devsecops]
+  - id: cloud_security
+    label: Cloud Security
+    aliases: ["cloud security", "cspm", "cwpp", "aws security", "azure security", "security groups", "iam policies"]
+    domains: [cybersecurity, cloud]
+    related: [zero_trust, devsecops, aws, azure, iam]
+  - id: zero_trust
+    label: Zero Trust Architecture
+    aliases: ["zero trust", "ztna", "microsegmentation", "beyondcorp"]
+    domains: [cybersecurity, networking]
+    related: [conditional_access, network_security, iam]
+  - id: grc
+    label: Governance, Risk & Compliance
+    aliases: ["grc", "governance risk and compliance", "compliance", "iso 27001", "soc 2", "nist csf", "nist 800-53", "pci dss", "control testing"]
+    domains: [cybersecurity, finance, business]
+    narrower: [sox, hipaa_compliance, risk_assessment, audit]
+    related: [sod, access_certification, policy_management]
+  - id: risk_assessment
+    label: Risk Assessment
+    aliases: ["risk assessment", "risk analysis", "risk register", "risk management", "threat modeling"]
+    domains: [cybersecurity, finance, business]
+    broader: [grc]
+    related: [audit, vulnerability_management]
+  - id: audit
+    label: Audit
+    aliases: ["audit", "internal audit", "external audit", "audit support", "evidence collection", "audit remediation"]
+    domains: [cybersecurity, finance, sap, business]
+    broader: [grc]
+    related: [sox, access_certification, risk_assessment]
+  - id: sox
+    label: SOX Compliance
+    aliases: ["sox", "sarbanes-oxley", "sox itgc", "itgc"]
+    domains: [finance, cybersecurity, sap]
+    broader: [grc]
+    related: [audit, sod, access_certification]
+  - id: policy_management
+    label: Security Policy & Standards
+    aliases: ["security policy", "policy management", "standards development", "procedure documentation"]
+    domains: [cybersecurity, business]
+    broader: [grc]
+  - id: hipaa_compliance
+    label: HIPAA Compliance
+    aliases: ["hipaa", "phi", "protected health information", "hitech"]
+    domains: [healthcare, cybersecurity]
+    broader: [grc]
+    related: [audit, healthcare_data]
+
+  # --- Networking -----------------------------------------------------------
+  - id: routing_switching
+    label: Routing & Switching
+    aliases: ["routing and switching", "routing", "switching", "bgp", "ospf", "eigrp", "vlan", "spanning tree", "stp"]
+    domains: [networking]
+    related: [network_security, sd_wan, data_center_networking, mpls]
+  - id: mpls
+    label: MPLS / WAN
+    aliases: ["mpls", "wan", "dmvpn", "wan optimization", "circuits"]
+    domains: [networking]
+    related: [routing_switching, sd_wan]
+  - id: sd_wan
+    label: SD-WAN
+    aliases: ["sd-wan", "sdwan", "viptela", "velocloud", "silver peak", "meraki sd-wan"]
+    domains: [networking]
+    related: [mpls, routing_switching, cloud_networking]
+  - id: network_security
+    label: Network Security
+    aliases: ["network security", "firewall", "palo alto", "fortinet", "checkpoint", "asa", "ips", "ids", "nac", "cisco ise", "ipsec", "vpn"]
+    domains: [networking, cybersecurity]
+    related: [zero_trust, routing_switching, cloud_security]
+  - id: data_center_networking
+    label: Data Center Networking
+    aliases: ["data center network", "nexus", "vxlan", "evpn", "aci", "leaf-spine", "fabric"]
+    domains: [networking]
+    related: [routing_switching, cloud_networking]
+  - id: cloud_networking
+    label: Cloud Networking
+    aliases: ["cloud networking", "transit gateway", "vpc peering", "direct connect", "expressroute", "vnet", "cloud interconnect"]
+    domains: [networking, cloud]
+    related: [aws, azure, sd_wan, data_center_networking]
+  - id: wireless
+    label: Wireless Networking
+    aliases: ["wireless", "wi-fi", "wlan", "wireless lan controller", "aruba", "meraki wireless", "site survey"]
+    domains: [networking]
+    related: [routing_switching, network_security]
+  - id: network_monitoring
+    label: Network Monitoring & Troubleshooting
+    aliases: ["network monitoring", "solarwinds", "packet capture", "wireshark", "netflow", "troubleshooting", "rca", "root cause analysis"]
+    domains: [networking]
+    related: [routing_switching, observability]
+
+  # --- Cloud / platform -----------------------------------------------------
+  - id: aws
+    label: AWS
+    aliases: ["aws", "amazon web services", "ec2", "s3", "lambda", "eks", "vpc", "cloudformation", "iam roles"]
+    domains: [cloud, data_engineering, ai_ml]
+    related: [azure, gcp, terraform, kubernetes, cloud_security]
+  - id: azure
+    label: Microsoft Azure
+    aliases: ["azure", "microsoft azure", "aks", "azure functions", "azure devops", "arm templates", "bicep"]
+    domains: [cloud, data_engineering]
+    related: [aws, gcp, terraform, azure_ad]
+  - id: gcp
+    label: Google Cloud
+    aliases: ["gcp", "google cloud", "google cloud platform", "gke", "bigquery", "cloud run"]
+    domains: [cloud, data_engineering]
+    related: [aws, azure, kubernetes]
+  - id: kubernetes
+    label: Kubernetes
+    aliases: ["kubernetes", "k8s", "eks", "aks", "gke", "helm", "openshift"]
+    domains: [cloud, software]
+    related: [docker, terraform, cicd, observability]
+  - id: docker
+    label: Docker / Containers
+    aliases: ["docker", "containers", "containerization", "podman", "container image"]
+    domains: [cloud, software]
+    related: [kubernetes, cicd]
+  - id: terraform
+    label: Terraform / IaC
+    aliases: ["terraform", "infrastructure as code", "iac", "cloudformation", "pulumi", "ansible", "bicep"]
+    domains: [cloud]
+    related: [aws, azure, gcp, cicd]
+  - id: cicd
+    label: CI/CD
+    aliases: ["ci/cd", "cicd", "jenkins", "github actions", "gitlab ci", "azure pipelines", "argocd", "gitops", "build pipeline"]
+    domains: [cloud, software]
+    related: [terraform, docker, devsecops]
+  - id: observability
+    label: Observability & Monitoring
+    aliases: ["observability", "prometheus", "grafana", "datadog", "new relic", "elk", "logging", "alerting", "slo", "sli"]
+    domains: [cloud, software, networking]
+    related: [sre, network_monitoring]
+  - id: sre
+    label: Site Reliability Engineering
+    aliases: ["sre", "site reliability", "reliability engineering", "error budget", "on-call rotation", "incident management"]
+    domains: [cloud]
+    related: [observability, kubernetes, incident_response]
+  - id: scripting
+    label: Scripting & Automation
+    aliases: ["scripting", "bash", "shell scripting", "powershell", "automation scripts", "python scripting"]
+    domains: [cloud, networking, cybersecurity, software]
+    related: [python, soar, cicd]
+
+  # --- Data / AI ------------------------------------------------------------
+  - id: python
+    label: Python
+    aliases: ["python", "pandas", "numpy", "pytest"]
+    domains: [software, data_engineering, ai_ml]
+    related: [scripting, sql, machine_learning]
+  - id: sql
+    label: SQL
+    aliases: ["sql", "t-sql", "pl/sql", "queries", "stored procedures", "joins"]
+    domains: [data_engineering, data_analytics, software]
+    related: [data_modeling, python, etl]
+  - id: etl
+    label: ETL / Data Pipelines
+    aliases: ["etl", "elt", "data pipeline", "data ingestion", "airflow", "dbt", "informatica", "azure data factory", "glue"]
+    domains: [data_engineering]
+    related: [sql, spark, data_modeling, data_warehousing]
+  - id: spark
+    label: Apache Spark
+    aliases: ["spark", "pyspark", "databricks", "distributed processing"]
+    domains: [data_engineering, ai_ml]
+    related: [etl, data_warehousing, python]
+  - id: data_warehousing
+    label: Data Warehousing
+    aliases: ["data warehouse", "snowflake", "redshift", "bigquery", "synapse", "star schema", "dimensional modeling", "data lake", "lakehouse"]
+    domains: [data_engineering, data_analytics]
+    related: [etl, sql, data_modeling]
+  - id: data_modeling
+    label: Data Modeling
+    aliases: ["data modeling", "erd", "normalization", "schema design", "data architecture"]
+    domains: [data_engineering, data_analytics]
+    related: [sql, data_warehousing]
+  - id: bi_reporting
+    label: BI & Reporting
+    aliases: ["power bi", "tableau", "looker", "qlik", "dax", "dashboards", "reporting", "data visualization", "ssrs"]
+    domains: [data_analytics, business, healthcare, finance]
+    related: [sql, excel, data_warehousing]
+  - id: excel
+    label: Advanced Excel
+    aliases: ["excel", "advanced excel", "pivot tables", "vlookup", "power query", "macros", "vba"]
+    domains: [finance, business, data_analytics, healthcare]
+    related: [bi_reporting, financial_modeling]
+  - id: machine_learning
+    label: Machine Learning
+    aliases: ["machine learning", "ml", "scikit-learn", "supervised learning", "model training", "feature engineering", "xgboost", "regression", "classification"]
+    domains: [ai_ml]
+    narrower: [deep_learning, nlp, computer_vision, genai]
+    related: [python, statistics, mlops]
+  - id: deep_learning
+    label: Deep Learning
+    aliases: ["deep learning", "neural network", "pytorch", "tensorflow", "keras", "cnn", "transformer"]
+    domains: [ai_ml]
+    broader: [machine_learning]
+    related: [nlp, computer_vision, genai]
+  - id: nlp
+    label: Natural Language Processing
+    aliases: ["nlp", "natural language processing", "text classification", "named entity recognition", "embeddings", "tokenization"]
+    domains: [ai_ml]
+    broader: [machine_learning]
+    related: [genai, deep_learning]
+  - id: computer_vision
+    label: Computer Vision
+    aliases: ["computer vision", "image classification", "object detection", "opencv", "image segmentation", "semantic segmentation"]
+    domains: [ai_ml]
+    broader: [machine_learning]
+    related: [deep_learning]
+  - id: genai
+    label: Generative AI / LLMs
+    aliases: ["generative ai", "genai", "llm", "large language model", "rag", "retrieval augmented generation", "prompt engineering", "fine-tuning", "vector database", "langchain", "hugging face"]
+    domains: [ai_ml]
+    broader: [machine_learning]
+    related: [nlp, mlops, deep_learning]
+  - id: mlops
+    label: MLOps
+    aliases: ["mlops", "mlflow", "model deployment", "model monitoring", "feature store", "sagemaker", "vertex ai", "model registry"]
+    domains: [ai_ml, cloud]
+    related: [cicd, kubernetes, machine_learning, observability]
+  - id: statistics
+    label: Statistics & Experimentation
+    aliases: ["statistics", "statistical analysis", "hypothesis testing", "a/b testing", "experimentation", "regression analysis", "confidence interval"]
+    domains: [ai_ml, data_analytics, healthcare]
+    related: [machine_learning, bi_reporting]
+
+  # --- Software -------------------------------------------------------------
+  - id: backend_dev
+    label: Backend Development
+    aliases: ["backend", "back-end", "server-side", "rest api", "api development", "microservices", "spring boot", "django", "node.js", "graphql", ".net", "c#", "asp.net", "java", "golang"]
+    domains: [software]
+    related: [frontend_dev, sql, docker, system_design]
+  - id: frontend_dev
+    label: Frontend Development
+    aliases: ["frontend", "front-end", "react", "angular", "vue", "javascript", "typescript", "html", "css", "responsive design"]
+    domains: [software]
+    related: [backend_dev, ui_ux]
+  - id: ui_ux
+    label: UI / UX
+    aliases: ["ui/ux", "user experience", "figma", "wireframes", "usability", "design system"]
+    domains: [software, product_program]
+    related: [frontend_dev]
+  - id: system_design
+    label: System Design & Architecture
+    aliases: ["system design", "software architecture", "scalability", "distributed systems", "high availability", "solution architecture", "enterprise architecture"]
+    domains: [software, cloud]
+    related: [backend_dev, kubernetes, sre]
+  - id: qa_testing
+    label: QA & Test Automation
+    aliases: ["qa", "quality assurance", "test automation", "selenium", "cypress", "playwright", "sdet", "regression testing", "test cases"]
+    domains: [software]
+    related: [cicd, backend_dev]
+
+  # --- Business / finance / healthcare / people ------------------------------
+  - id: requirements_analysis
+    label: Requirements & Business Analysis
+    aliases: ["business analysis", "requirements gathering", "brd", "frd", "user stories", "gap analysis", "process mapping", "stakeholder interviews"]
+    domains: [business, product_program, healthcare]
+    related: [project_management, process_improvement, agile]
+  - id: project_management
+    label: Project & Program Management
+    aliases: ["project management", "program management", "pmp", "gantt", "resource planning", "status reporting", "risk register", "delivery management"]
+    domains: [product_program, business, healthcare]
+    related: [agile, requirements_analysis, stakeholder_management]
+  - id: agile
+    label: Agile / Scrum
+    aliases: ["agile", "scrum", "kanban", "sprint planning", "backlog grooming", "retrospective", "jira", "safe"]
+    domains: [product_program, software]
+    related: [project_management, product_strategy]
+  - id: product_strategy
+    label: Product Strategy
+    aliases: ["product strategy", "roadmap", "product vision", "go-to-market", "competitive analysis", "okr", "prioritization"]
+    domains: [product_program, sales_marketing]
+    related: [agile, stakeholder_management, requirements_analysis]
+  - id: stakeholder_management
+    label: Stakeholder Management
+    aliases: ["stakeholder management", "executive communication", "cross-functional collaboration", "vendor management", "client management"]
+    domains: [business, product_program, sales_marketing, hr]
+    related: [project_management, product_strategy]
+  - id: process_improvement
+    label: Process Improvement
+    aliases: ["process improvement", "six sigma", "lean", "continuous improvement", "sop", "workflow optimization", "automation of manual processes"]
+    domains: [business, healthcare]
+    related: [requirements_analysis, project_management]
+  - id: financial_modeling
+    label: Financial Modeling & Analysis
+    aliases: ["financial modeling", "financial analysis", "forecasting", "budgeting", "variance analysis", "p&l", "valuation", "dcf", "fp&a"]
+    domains: [finance]
+    related: [excel, accounting, bi_reporting]
+  - id: accounting
+    label: Accounting
+    aliases: ["accounting", "gaap", "ifrs", "general ledger", "reconciliation", "accounts payable", "accounts receivable", "month-end close", "journal entries"]
+    domains: [finance]
+    related: [financial_modeling, audit, sap_fico]
+  - id: sap_fico
+    label: SAP FICO
+    aliases: ["sap fico", "sap fi", "sap co", "finance module"]
+    domains: [finance, sap]
+    related: [accounting, s4hana]
+  - id: supply_chain
+    label: Supply Chain & Operations
+    aliases: ["supply chain", "logistics", "inventory management", "procurement", "demand planning", "s&op"]
+    domains: [business]
+    related: [process_improvement, bi_reporting]
+  - id: healthcare_data
+    label: Healthcare Data & Informatics
+    aliases: ["healthcare analytics", "clinical data", "health informatics", "ehr", "emr", "epic", "cerner", "hl7", "fhir", "icd-10", "cpt", "claims data", "revenue cycle", "population health"]
+    domains: [healthcare]
+    related: [hipaa_compliance, bi_reporting, statistics]
+  - id: crm_sales
+    label: CRM & Sales Operations
+    aliases: ["salesforce", "hubspot", "crm", "pipeline management", "quota attainment", "lead generation", "account management", "upsell", "renewals"]
+    domains: [sales_marketing]
+    related: [stakeholder_management, digital_marketing]
+  - id: digital_marketing
+    label: Digital Marketing
+    aliases: ["digital marketing", "seo", "sem", "google analytics", "ppc", "content marketing", "email campaigns", "social media marketing", "conversion rate"]
+    domains: [sales_marketing]
+    related: [crm_sales, bi_reporting]
+  - id: recruiting
+    label: Recruiting & Talent Acquisition
+    aliases: ["recruiting", "talent acquisition", "full-cycle recruiting", "sourcing", "ats", "candidate pipeline", "interview coordination", "offer negotiation"]
+    domains: [hr]
+    related: [hris, stakeholder_management]
+  - id: hris
+    label: HRIS & People Systems
+    aliases: ["hris", "workday", "successfactors", "adp", "employee data", "hr analytics", "benefits administration", "onboarding"]
+    domains: [hr]
+    related: [recruiting, bi_reporting]
+  - id: technical_writing
+    label: Documentation & Technical Writing
+    aliases: ["documentation", "technical writing", "runbook", "sop documentation", "knowledge base", "confluence"]
+    domains: [software, networking, cybersecurity, business]
+    related: [policy_management, process_improvement]
+  - id: training_mentoring
+    label: Training & Mentoring
+    aliases: ["mentoring", "training", "knowledge transfer", "coaching", "onboarding engineers", "led workshops"]
+    domains: [hr, business, software]
+    related: [stakeholder_management, technical_writing]

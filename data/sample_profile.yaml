@@ -1,0 +1,195 @@
+# ---------------------------------------------------------------------------
+# Sample Master Profile + Career Evidence Database.
+#
+# `evidence` is the important part: atomic, verified facts. Resumes are
+# ASSEMBLED from these rows, never written freehand, which is what stops a
+# tailored resume from acquiring experience the person does not have.
+# ---------------------------------------------------------------------------
+personal:
+  full_name: Priya Raman
+  email: priya.raman@example.com
+  phone: "+1 (512) 555-0143"
+  country: US
+  city: Austin
+  region: TX
+  preferred_locations: ["Austin, TX", "Dallas, TX", "Remote - US", "Bengaluru, India"]
+  remote_preference: any
+  open_to_relocation: true
+  links:
+    LinkedIn: https://linkedin.com/in/example
+    GitHub: https://github.com/example
+
+professional:
+  current_title: Senior Network Security Engineer
+  total_experience_years: 8.5
+  industries: [financial services, technology / saas]
+  certifications:
+    - {name: CCNP Enterprise, issuer: Cisco, issued_on: 2021-06-01, verified: true}
+    - {name: CompTIA Security+, issuer: CompTIA, issued_on: 2022-03-15, verified: true}
+    - {name: AZ-500, issuer: Microsoft, issued_on: 2024-01-20, verified: true}
+  education:
+    - degree: Bachelor of Technology
+      field: Electronics and Communication Engineering
+      institution: Anna University
+      country: IN
+      completed_on: 2016-05-01
+
+work_authorization:
+  - country: US
+    status: h1b
+    valid_until: 2027-09-30
+    needs_sponsorship: true
+    employment_preferences: [w2, full_time, c2h]
+    notes: "Transfer required for a new employer."
+  - country: IN
+    status: indian_citizen
+    needs_sponsorship: false
+    employment_preferences: [full_time, contract]
+
+career_tracks:
+  - name: Network Engineering
+    domain: networking
+    priority: 2
+    preferred_titles: [Senior Network Engineer, Network Security Engineer, Network Architect]
+    core_skills: [routing_switching, network_security, sd_wan, cloud_networking]
+    min_match_score: 65
+    countries: [US, IN]
+  - name: Cybersecurity
+    domain: cybersecurity
+    priority: 1
+    preferred_titles: [Security Engineer, IAM Engineer, Cloud Security Engineer, SOC Analyst]
+    core_skills: [network_security, iam, cloud_security, zero_trust, siem]
+    min_match_score: 60
+    countries: [US, IN]
+  - name: Cloud Engineering
+    domain: cloud
+    priority: 3
+    preferred_titles: [Cloud Engineer, Cloud Network Engineer, Platform Engineer]
+    core_skills: [azure, aws, terraform, cloud_networking]
+    min_match_score: 60
+    countries: [US]
+  - name: SAP Security
+    domain: sap
+    priority: 4
+    preferred_titles: [SAP Security Consultant, SAP GRC Consultant]
+    core_skills: [sap_grc, sap_authorization, sod]
+    min_match_score: 55
+    countries: [US, IN]
+
+employers:
+  - name: Meridian Financial
+    industry: financial services
+    location: Austin, TX
+    country: US
+    employment_type: full_time
+    start_date: 2021-03-01
+    titles: [Senior Network Security Engineer]
+  - name: Northwind Systems
+    industry: technology / saas
+    location: Bengaluru, India
+    country: IN
+    employment_type: full_time
+    start_date: 2016-07-01
+    end_date: 2021-02-01
+    titles: [Network Engineer, Associate Network Engineer]
+
+evidence:
+  # --- Meridian Financial ------------------------------------------------
+  - kind: achievement
+    text: "Reduced mean time to resolution for network incidents by 35% by building Splunk dashboards and alerting across 30 branch sites"
+    employer: Meridian Financial
+    role_title: Senior Network Security Engineer
+    technologies: [Splunk, SolarWinds]
+    metrics: {reduction_pct: 35, sites: 30}
+    start_date: 2022-01-01
+    verified: true
+    strength: 0.9
+  - kind: responsibility
+    text: "Administered Active Directory and Azure AD (Entra ID) for 4,000 users, including conditional access policies and RBAC role assignment"
+    employer: Meridian Financial
+    role_title: Senior Network Security Engineer
+    technologies: [Active Directory, Azure AD]
+    metrics: {users: 4000}
+    start_date: 2021-03-01
+    verified: true
+    strength: 0.85
+  - kind: project
+    text: "Led a Zero Trust network segmentation project covering 12 business units, replacing flat VLANs with policy-based microsegmentation enforced by Cisco ISE"
+    employer: Meridian Financial
+    role_title: Senior Network Security Engineer
+    project: Zero Trust Segmentation
+    technologies: [Cisco ISE, Palo Alto]
+    metrics: {business_units: 12}
+    start_date: 2023-02-01
+    verified: true
+    strength: 0.95
+  - kind: responsibility
+    text: "Ran quarterly user access reviews for privileged network and firewall accounts and produced the audit evidence package for SOX testing"
+    employer: Meridian Financial
+    role_title: Senior Network Security Engineer
+    verified: true
+    strength: 0.7
+  - kind: achievement
+    text: "Migrated 18 branch circuits from MPLS to SD-WAN, cutting recurring WAN spend by 22% with no unplanned outage"
+    employer: Meridian Financial
+    role_title: Senior Network Security Engineer
+    technologies: [Cisco Viptela]
+    metrics: {sites: 18, savings_pct: 22}
+    verified: true
+    strength: 0.9
+  - kind: responsibility
+    text: "Built Azure hub-and-spoke virtual networks with ExpressRoute and network security groups for three production workloads, defined in Terraform"
+    employer: Meridian Financial
+    role_title: Senior Network Security Engineer
+    technologies: [Azure, Terraform, ExpressRoute]
+    verified: true
+    strength: 0.75
+  - kind: responsibility
+    text: "Authored firewall change-control standards and runbooks adopted by a 9-person operations team"
+    employer: Meridian Financial
+    role_title: Senior Network Security Engineer
+    metrics: {team_size: 9}
+    verified: true
+    strength: 0.6
+
+  # --- Northwind Systems --------------------------------------------------
+  - kind: responsibility
+    text: "Configured and troubleshot BGP and OSPF routing across a 40-site enterprise WAN, including route redistribution and QoS policies"
+    employer: Northwind Systems
+    role_title: Network Engineer
+    technologies: [Cisco, Juniper]
+    metrics: {sites: 40}
+    start_date: 2018-01-01
+    end_date: 2021-02-01
+    verified: true
+    strength: 0.9
+  - kind: project
+    text: "Designed a leaf-spine data centre fabric using Cisco Nexus and VXLAN EVPN supporting 600 server ports"
+    employer: Northwind Systems
+    role_title: Network Engineer
+    project: DC Fabric Refresh
+    technologies: [Cisco Nexus, VXLAN]
+    metrics: {ports: 600}
+    verified: true
+    strength: 0.8
+  - kind: achievement
+    text: "Automated recurring switch configuration audits with Python scripts, removing roughly 10 hours of manual effort per week"
+    employer: Northwind Systems
+    role_title: Network Engineer
+    technologies: [Python, Ansible]
+    metrics: {hours_saved_weekly: 10}
+    verified: true
+    strength: 0.8
+  - kind: responsibility
+    text: "Deployed and maintained wireless LAN controllers and access points across four campus buildings, including site surveys"
+    employer: Northwind Systems
+    role_title: Network Engineer
+    technologies: [Cisco WLC, Aruba]
+    verified: true
+    strength: 0.65
+  - kind: responsibility
+    text: "Mentored two junior engineers on routing fundamentals and on-call incident handling"
+    employer: Northwind Systems
+    role_title: Network Engineer
+    verified: true
+    strength: 0.55

@@ -1,0 +1,121 @@
+# ---------------------------------------------------------------------------
+# SEED career-domain taxonomy.
+#
+# This file is a *prior*, not a closed list. The classifier scores a job
+# against these signals; when nothing scores above the confidence floor the job
+# is classified as `other` with an AI-inferred domain label, and that label is
+# persisted as a new CareerDomain row. No code change is ever required to
+# support a new job category.
+# ---------------------------------------------------------------------------
+version: 1
+confidence_floor: 0.18          # below this the job falls through to `other`
+
+domains:
+  - id: networking
+    label: Networking
+    functions: [routing_switching, network_security, data_center, wireless, sd_wan, noc, network_architecture, cloud_networking]
+    title_patterns: ["network engineer", "network architect", "noc engineer", "wireless engineer", "sd-wan", "network security engineer", "network administrator", "network analyst"]
+    keywords: {bgp: 3, ospf: 3, eigrp: 3, mpls: 3, vxlan: 3, "sd-wan": 3, cisco: 2, juniper: 2, arista: 2, "cisco ise": 3, nexus: 2, "catalyst": 2, "packet capture": 2, "wireshark": 2, "f5": 2, "load balancer": 2, "routing": 2, "switching": 2, "vlan": 2, "firewall": 1, "ccna": 3, "ccnp": 3, "ccie": 3, "network topology": 2, "wan": 2, "lan": 2, "dmvpn": 3, "ipsec": 2, "qos": 2}
+
+  - id: cybersecurity
+    label: Cybersecurity
+    functions: [soc, incident_response, iam, pam, appsec, cloud_security, grc, threat_hunting, pentest, vulnerability_management, devsecops, zero_trust]
+    title_patterns: ["security engineer", "security analyst", "soc analyst", "cybersecurity", "penetration tester", "threat hunter", "incident response", "iam engineer", "pam engineer", "security architect", "grc analyst", "devsecops", "application security", "vulnerability"]
+    keywords: {siem: 3, splunk: 3, "sentinel": 2, qradar: 3, soar: 3, "incident response": 3, "threat hunting": 3, "mitre att&ck": 3, edr: 3, crowdstrike: 3, "nist": 2, "iso 27001": 3, "soc 2": 3, "pci dss": 3, iam: 3, "identity and access management": 3, pam: 3, cyberark: 3, okta: 3, sailpoint: 3, "zero trust": 3, "penetration testing": 3, "burp suite": 3, nessus: 3, "vulnerability management": 3, cissp: 3, "comptia security+": 3, oscp: 3, "risk assessment": 2, "security controls": 2, "hipaa": 1}
+
+  - id: sap
+    label: SAP / ERP
+    functions: [sap_security, sap_grc, sap_basis, s4hana, sap_iam, sap_authorization, sap_audit, sap_cloud_security]
+    title_patterns: ["sap security", "sap grc", "sap basis", "sap consultant", "s/4hana", "sap authorization", "sap auditor", "sap functional", "erp consultant"]
+    keywords: {sap: 3, "sap grc": 3, "access control": 2, "s/4hana": 3, "sap basis": 3, fiori: 3, "pfcg": 3, "su01": 3, "segregation of duties": 3, sod: 3, "firefighter": 3, "emergency access management": 3, "business role": 2, "sap iag": 3, "sap etd": 3, abap: 2, "hana": 2, "solution manager": 2, "sap netweaver": 3, "user provisioning": 2, "role redesign": 2, "risk analysis": 2}
+
+  - id: data_engineering
+    label: Data Engineering
+    functions: [etl, big_data, warehousing, streaming, analytics_engineering, data_architecture]
+    title_patterns: ["data engineer", "etl developer", "analytics engineer", "big data", "data architect", "databricks", "snowflake developer"]
+    keywords: {spark: 3, airflow: 3, dbt: 3, snowflake: 3, databricks: 3, kafka: 3, "data pipeline": 3, etl: 3, elt: 3, redshift: 3, bigquery: 3, "data warehouse": 3, "data lake": 3, hadoop: 2, "delta lake": 3, glue: 2, "azure data factory": 3, "data modeling": 2, sql: 2, python: 1, "parquet": 2}
+
+  - id: data_analytics
+    label: Data & Business Intelligence
+    functions: [bi, reporting, business_analytics, visualization]
+    title_patterns: ["data analyst", "bi developer", "bi analyst", "business intelligence", "power bi developer", "tableau developer", "reporting analyst"]
+    keywords: {"power bi": 3, tableau: 3, looker: 3, qlik: 3, "dax": 3, "excel": 2, sql: 3, "dashboard": 2, "kpi": 2, "reporting": 2, "data visualization": 3, "google analytics": 2}
+
+  - id: ai_ml
+    label: AI / Machine Learning
+    functions: [machine_learning, deep_learning, generative_ai, mlops, nlp, computer_vision, data_science]
+    title_patterns: ["machine learning engineer", "data scientist", "ai engineer", "ml engineer", "mlops", "generative ai", "nlp engineer", "computer vision", "research scientist"]
+    keywords: {pytorch: 3, tensorflow: 3, "scikit-learn": 3, "hugging face": 3, llm: 3, "large language model": 3, rag: 3, "fine-tuning": 3, mlflow: 3, "feature engineering": 3, "model training": 3, "a/b test": 2, "deep learning": 3, nlp: 3, "computer vision": 3, "sagemaker": 3, "vertex ai": 3, "vector database": 3, "statistics": 2, "pandas": 2, "numpy": 2, python: 1, "model deployment": 2, "prompt engineering": 2}
+
+  - id: cloud
+    label: Cloud & Platform
+    functions: [aws, azure, gcp, cloud_architecture, platform_engineering, devops, sre]
+    title_patterns: ["cloud engineer", "cloud architect", "devops engineer", "site reliability", "platform engineer", "aws engineer", "azure engineer", "gcp engineer", "infrastructure engineer"]
+    keywords: {aws: 3, azure: 3, gcp: 3, kubernetes: 3, docker: 3, terraform: 3, ansible: 2, helm: 3, "ci/cd": 3, jenkins: 2, "github actions": 2, "gitops": 3, argocd: 3, "cloudformation": 3, "ec2": 2, "s3": 2, "lambda": 2, "eks": 3, "aks": 3, prometheus: 2, grafana: 2, "sre": 3, "iac": 3, "infrastructure as code": 3, "observability": 2}
+
+  - id: software
+    label: Software Engineering
+    functions: [backend, frontend, fullstack, mobile, qa, embedded, api]
+    title_patterns: ["software engineer", "backend developer", "frontend developer", "full stack", "web developer", "qa engineer", "sdet", "mobile developer", "application developer", "automation engineer"]
+    keywords: {java: 3, python: 2, javascript: 3, typescript: 3, react: 3, angular: 3, "node.js": 3, ".net": 3, "c#": 3, spring: 3, django: 3, "rest api": 3, graphql: 3, microservices: 3, "unit test": 2, selenium: 3, cypress: 3, "design patterns": 2, git: 1, "code review": 2}
+
+  - id: product_program
+    label: Product & Program Management
+    functions: [product_management, technical_program, project_management, scrum]
+    title_patterns: ["product manager", "program manager", "project manager", "technical program manager", "scrum master", "product owner", "delivery manager"]
+    keywords: {roadmap: 3, "stakeholder": 2, agile: 3, scrum: 3, jira: 2, "backlog": 3, kanban: 2, "product strategy": 3, "user stories": 3, "go-to-market": 3, pmp: 3, "risk register": 2, "okr": 2}
+
+  - id: finance
+    label: Finance & Accounting
+    functions: [financial_analysis, accounting, audit, investment, risk, fpa]
+    title_patterns: ["financial analyst", "accountant", "auditor", "investment analyst", "finance manager", "controller", "fp&a", "risk analyst", "treasury"]
+    keywords: {"financial modeling": 3, gaap: 3, ifrs: 3, "variance analysis": 3, "forecasting": 2, "budgeting": 2, cfa: 3, cpa: 3, "excel": 2, "sox": 3, "reconciliation": 3, "p&l": 3, "valuation": 3, "accounts payable": 3, "accounts receivable": 3, quickbooks: 2, "sap fico": 3, "audit": 2}
+
+  - id: business
+    label: Business & Operations
+    functions: [business_analysis, operations, supply_chain, strategy, compliance]
+    title_patterns: ["business analyst", "operations manager", "supply chain", "strategy analyst", "process analyst", "compliance analyst", "operations analyst"]
+    keywords: {"requirements gathering": 3, "process improvement": 3, "six sigma": 3, "lean": 2, "sop": 2, "supply chain": 3, "vendor management": 2, "stakeholder management": 2, "gap analysis": 3, "business requirements": 3, visio: 2, "process mapping": 3}
+
+  - id: healthcare
+    label: Healthcare
+    functions: [healthcare_analytics, health_informatics, clinical_data, healthcare_it, healthcare_pm]
+    title_patterns: ["healthcare analyst", "clinical data", "health informatics", "healthcare it", "ehr analyst", "epic analyst", "healthcare project manager", "medical coder"]
+    keywords: {ehr: 3, emr: 3, epic: 3, cerner: 3, hipaa: 3, hl7: 3, fhir: 3, "icd-10": 3, "cpt": 3, "clinical": 2, "patient data": 3, "revenue cycle": 3, "meditech": 3, "claims": 2, "population health": 3}
+
+  - id: sales_marketing
+    label: Sales & Marketing
+    functions: [sales, business_development, marketing, customer_success, product_marketing]
+    title_patterns: ["sales engineer", "account manager", "business development", "marketing analyst", "digital marketing", "product marketing", "customer success", "account executive", "seo"]
+    keywords: {salesforce: 3, hubspot: 3, crm: 2, seo: 3, sem: 3, "google analytics": 3, "lead generation": 3, "pipeline": 2, "quota": 3, "campaign": 2, "content marketing": 3, "churn": 3, "upsell": 3, "b2b": 2}
+
+  - id: hr
+    label: Human Resources
+    functions: [recruiting, hr_business_partner, talent_acquisition, hr_analytics, compensation]
+    title_patterns: ["recruiter", "hr analyst", "hr business partner", "talent acquisition", "hrbp", "compensation analyst", "people operations"]
+    keywords: {ats: 3, workday: 3, "successfactors": 3, "onboarding": 2, "sourcing": 3, "employee relations": 3, "performance management": 3, "hris": 3, "benefits administration": 3, "full-cycle recruiting": 3}
+
+  - id: other
+    label: Other / Uncategorised
+    functions: [general]
+    title_patterns: []
+    keywords: {}
+
+# --- Seniority signals (country-agnostic) -----------------------------------
+seniority:
+  levels:
+    - {id: intern,    label: Intern,        rank: 0, patterns: ["intern", "internship", "trainee", "co-op"]}
+    - {id: entry,     label: Entry Level,   rank: 1, patterns: ["entry level", "junior", "jr.", "associate", "graduate", "fresher", "0-2 years"]}
+    - {id: mid,       label: Mid Level,     rank: 2, patterns: ["mid level", "mid-level", "ii", "2-5 years", "3-5 years"]}
+    - {id: senior,    label: Senior,        rank: 3, patterns: ["senior", "sr.", "sr ", "iii", "5+ years", "6+ years", "7+ years"]}
+    - {id: lead,      label: Lead / Staff,  rank: 4, patterns: ["lead", "staff", "principal engineer", "tech lead", "team lead"]}
+    - {id: principal, label: Principal,     rank: 5, patterns: ["principal", "distinguished", "architect", "10+ years", "12+ years"]}
+    - {id: manager,   label: Manager,       rank: 5, patterns: ["manager", "head of", "supervisor"]}
+    - {id: director,  label: Director+,     rank: 6, patterns: ["director", "vp ", "vice president", "chief", "cto", "ciso"]}
+  default: mid
+
+# --- Work arrangement -------------------------------------------------------
+work_arrangement:
+  - {id: remote, label: Remote, patterns: ["remote", "work from home", "wfh", "fully distributed", "100% remote"]}
+  - {id: hybrid, label: Hybrid, patterns: ["hybrid", "2 days in office", "3 days onsite", "flexible onsite"]}
+  - {id: onsite, label: On-site, patterns: ["on-site", "onsite", "in office", "in-person", "relocation required"]}

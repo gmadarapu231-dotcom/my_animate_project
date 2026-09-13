@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "careeros"
+version = "0.1.0"
+description = "Universal AI career operating system - domain-agnostic job search, resumes, applications and email"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# The AI layer is optional by design: every engine has a deterministic path.
+ai = ["anthropic>=1.0"]
+gmail = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[project.scripts]
+careeros = "careeros.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["careeros*"]
+
+[tool.setuptools.package-data]
+careeros = ["config/countries/*.yaml", "config/taxonomy/*.yaml", "dashboard/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning:anyio.*"]
