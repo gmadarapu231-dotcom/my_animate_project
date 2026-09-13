@@ -34,7 +34,8 @@
     "web": "expo start --web",
     "export:web": "expo export --platform web --output-dir dist",
     "typecheck": "tsc --noEmit",
-    "export:demo": "EXPO_PUBLIC_CAREEROS_DEMO=1 expo export --platform web --output-dir dist-demo && node scripts/relativise.mjs dist-demo"
+    "export:demo": "EXPO_PUBLIC_CAREEROS_DEMO=1 expo export --platform web --output-dir dist-demo && node scripts/relativise.mjs dist-demo",
+    "export:single": "npm run export:demo && node scripts/single-file.mjs dist-demo careeros-demo.html"
   },
   "private": true
 }
