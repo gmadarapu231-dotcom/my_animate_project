@@ -5,17 +5,19 @@
  * It also reports whether the server requires a token, which is the fastest
  * way to diagnose a 401.
  */
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { Field } from '../src/components/Field';
 import { Body, Button, Caveat, Chip, Divider, Panel, Row, Screen, Small } from '../src/components/ui';
-import { useSession } from '../src/hooks';
+import { useQuery, useSession } from '../src/hooks';
 import { defaultBaseUrl, tokenStorageNote } from '../src/settings';
 import { spacing, type } from '../src/theme';
 
 export default function SettingsScreen() {
-  const { settings, update, health, healthError, recheck, ready, demo } = useSession();
+  const session = useSession();
+  const { settings, update, health, healthError, recheck, ready, demo } = session;
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
   const [token, setToken] = useState(settings.token ?? '');
   const [saved, setSaved] = useState(false);
@@ -58,6 +60,8 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
+      <AccountPanel />
+
       <Panel title="Server">
         <Field
           label="API base URL"
@@ -126,5 +130,65 @@ export default function SettingsScreen() {
         )}
       </Panel>
     </Screen>
+  );
+}
+
+
+/**
+ * Who you are signed in as.
+ *
+ * Kept on the Settings screen rather than behind a tab because it is only
+ * looked at twice -- once to sign in, once to check which account the data
+ * belongs to.
+ */
+function AccountPanel() {
+  const session = useSession();
+  const info = useQuery(() => session.client.session(), [session.settings.token]);
+  const signedIn = info.data?.signed_in === true ? info.data : null;
+
+  return (
+    <Panel title="Account">
+      {signedIn ? (
+        <>
+          <Body style={{ fontWeight: '600' }}>{signedIn.user.full_name}</Body>
+          <Small>{signedIn.user.email}</Small>
+          <Row gap={spacing.sm} style={{ marginTop: spacing.sm }}>
+            <Chip label={`signed in via ${signedIn.method}`} tone="ok" />
+            <Chip label={`${Math.round(signedIn.expires_in_seconds / 86400)} days left`} />
+            {signedIn.user.has_profile ? null : <Chip label="no profile yet" tone="warn" />}
+          </Row>
+          {signedIn.user.has_profile ? null : (
+            <Caveat>
+              Jobs will be classified and ranked by deadline, but match scores and
+              work-authorization verdicts need your profile and evidence first.
+            </Caveat>
+          )}
+          <Row style={{ marginTop: spacing.md }} gap={spacing.sm}>
+            <Button
+              label="Sign out"
+              variant="danger"
+              small
+              onPress={async () => {
+                await session.update({ ...session.settings, token: null });
+                session.recheck();
+                info.refresh();
+              }}
+            />
+            <Button label="Switch account" small onPress={() => router.push('/signin')} />
+          </Row>
+        </>
+      ) : (
+        <>
+          <Body muted>
+            Not signed in. Sign in with Google or an emailed code to get your own account —
+            your evidence, résumés and applications stay yours.
+          </Body>
+          <Caveat>No passwords: the server has nowhere to store one.</Caveat>
+          <Row style={{ marginTop: spacing.md }}>
+            <Button label="Sign in" variant="primary" small onPress={() => router.push('/signin')} />
+          </Row>
+        </>
+      )}
+    </Panel>
   );
 }

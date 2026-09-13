@@ -33,6 +33,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="job" options={{ title: 'Job' }} />
             <Stack.Screen name="settings" options={{ title: 'Settings', presentation: 'modal' }} />
+            <Stack.Screen name="signin" options={{ title: 'Sign in', presentation: 'modal' }} />
           </Stack>
         </ThemeProvider>
       </SessionContext.Provider>

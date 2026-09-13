@@ -218,6 +218,42 @@ export class DemoClient extends CareerOsClient {
       1200,
     );
 
+  // Sourcing is real data: provider status needs no network, so this is the
+  // actual output of /api/sources, frozen. Discovery itself cannot run here --
+  // it would have to reach a dozen third parties -- so it says so.
+  authDescribe = () => settle(F.authDescribe as any);
+
+  session = () => settle({ signed_in: false, reason: 'the demo has no server to sign in to' } as any);
+
+  sources = (country?: string) => {
+    const all = F.sources as any;
+    if (!country) return settle(all);
+    const providers = all.providers.filter(
+      (row: any) => row.countries.includes('any') || row.countries.includes(country.toUpperCase()),
+    );
+    return settle({
+      ...all,
+      country,
+      count: providers.length,
+      ready: providers.filter((r: any) => r.state === 'ready').length,
+      needs_credentials: providers.filter((r: any) => r.state === 'needs_credentials').length,
+      not_permitted: providers.filter((r: any) => r.state === 'not_permitted').length,
+      providers,
+    });
+  };
+
+  searchPlan = () => settle(F.searchPlan as any);
+
+  discover = () =>
+    Promise.reject(
+      new ApiError(
+        'Live discovery is not available in the demo: it would have to call Google, ' +
+          'Adzuna and the rest with real keys. Run the server and press this on your own ' +
+          'machine — the four keyless providers work immediately.',
+        501,
+      ),
+    );
+
   emails = () => settle({ count: 0, messages: [] as any[] });
 
   drafts = () => settle({ count: 0, drafts: [] as any[] });

@@ -307,6 +307,103 @@ export class ApiError extends Error {
   }
 }
 
+// --- sign-in ---------------------------------------------------------------
+export type AuthDescription = {
+  mode: 'open' | 'required';
+  methods: ('google' | 'email_code')[];
+  google: {
+    available: boolean;
+    missing_env: string[];
+    redirect_uri: string;
+    scopes_identity: string[];
+    scopes_gmail: string[];
+  };
+  email_code: {
+    available: boolean;
+    missing_env: string[];
+    code_length: number;
+    expires_in_seconds: number;
+  };
+  passwords: string;
+  session_ttl_seconds: number;
+};
+
+export type SignInResult = {
+  token: string;
+  created: boolean;
+  granted_gmail: boolean;
+  user: {
+    id: number;
+    email: string;
+    full_name: string;
+    picture_url: string | null;
+    home_country: string;
+    has_profile: boolean;
+  };
+};
+
+export type SessionInfo =
+  | { signed_in: false; reason: string }
+  | {
+      signed_in: true;
+      method: string;
+      expires_in_seconds: number;
+      user: SignInResult['user'] & { evidence_ready: boolean };
+    };
+
+// --- where jobs come from --------------------------------------------------
+export type ProviderState = 'ready' | 'needs_credentials' | 'not_permitted';
+
+export type ProviderRow = {
+  id: string;
+  label: string;
+  kind: string;
+  access: string;
+  access_label: string;
+  state: ProviderState;
+  countries: string[];
+  requires_key: boolean;
+  missing_env: string[];
+  notes: string;
+  docs: string;
+  reason: string;
+  use_instead: string[];
+  partner_route: string;
+  endpoint_verified: boolean;
+};
+
+export type SourceStatus = {
+  country: string | null;
+  count: number;
+  ready: number;
+  needs_credentials: number;
+  not_permitted: number;
+  providers: ProviderRow[];
+};
+
+export type DiscoveryReport = {
+  found: number;
+  by_board: Record<string, number>;
+  providers: {
+    provider: string;
+    label: string;
+    searches: number;
+    found: number;
+    skipped_reason: string | null;
+    errors: string[];
+  }[];
+  plan: { countries: string[]; terms: string[]; searches: { provider: string; label: string }[] } | null;
+  ingest?: { fetched: number; inserted: number; duplicates: number; errors: string[] };
+};
+
+export type SearchPlanView = {
+  countries: string[];
+  terms: string[];
+  searches: { provider: string; label: string; query: string; location: string; country: string | null }[];
+  ready_providers: string[];
+  note: string;
+};
+
 export type ClientConfig = { baseUrl: string; token?: string | null };
 
 const TIMEOUT_MS = 120_000;   // the agent loop can legitimately take a while
@@ -445,6 +542,44 @@ export class CareerOsClient {
       '/api/agent/runs',
       { query: { limit } },
     );
+
+  // -- sign-in -----------------------------------------------------------
+  authDescribe = () => this.request<AuthDescription>('/api/auth/describe');
+
+  session = () => this.request<SessionInfo>('/api/auth/session');
+
+  googleStart = (includeGmail: boolean, redirectUri?: string) =>
+    this.request<{ authorization_url: string; state: string; expires_in_seconds: number }>(
+      '/api/auth/google/start',
+      { method: 'POST', body: { include_gmail: includeGmail, redirect_uri: redirectUri } },
+    );
+
+  googleExchange = (code: string, state: string) =>
+    this.request<SignInResult>('/api/auth/google/exchange', {
+      method: 'POST',
+      body: { code, state },
+    });
+
+  emailCodeStart = (email: string) =>
+    this.request<{ sent_to: string; code_length: number; expires_in_seconds: number }>(
+      '/api/auth/email/start',
+      { method: 'POST', body: { email } },
+    );
+
+  emailCodeVerify = (email: string, code: string) =>
+    this.request<SignInResult>('/api/auth/email/verify', {
+      method: 'POST',
+      body: { email, code },
+    });
+
+  // -- where jobs come from ----------------------------------------------
+  sources = (country?: string) =>
+    this.request<SourceStatus>('/api/sources', { query: { country } });
+
+  searchPlan = () => this.request<SearchPlanView>('/api/sources/plan');
+
+  discover = (body: { only?: string[]; terms?: string[]; countries?: string[]; per_provider?: number } = {}) =>
+    this.request<DiscoveryReport>('/api/sources/discover', { method: 'POST', body });
 
   // -- email -------------------------------------------------------------
   emails = () =>

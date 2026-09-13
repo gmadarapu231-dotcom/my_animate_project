@@ -65,6 +65,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="sources"
+        options={{
+          title: 'Sources',
+          tabBarIcon: ({ color }) => <TabIcon glyph="⇄" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="agent"
         options={{
           title: 'Agent',
