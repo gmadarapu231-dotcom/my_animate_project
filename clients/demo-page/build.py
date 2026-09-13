@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the router-free CareerOS demo page.
 
-Injects the captured API fixtures into template.html and writes two files:
+Assembles site.html + app.js + the captured API fixtures into two files:
 
-  careeros-demo.html  a complete standalone document, for file:// or any host
+  careeros.html       a complete standalone document, for file:// or any host
   artifact.html       the same page as a bare body, for the Artifact tool,
                       which supplies its own doctype/head/body wrapper
 
@@ -19,9 +19,12 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-TEMPLATE = HERE / "template.html"
+SITE = HERE / "site.html"
+APP = HERE / "app.js"
+TAXONOMY = HERE.parents[1] / "careeros" / "config" / "taxonomy" / "domains.yaml"
 FIXTURES = HERE.parent / "app" / "src" / "demoFixtures.json"
-PLACEHOLDER = "/*__FIXTURES__*/"
+FIXTURE_SLOT = "/*__FIXTURES__*/"
+APP_SLOT = "/*__APP__*/"
 
 # The recorded agent transcript. It lives in the Expo client as TypeScript
 # (clients/app/src/demo.ts), which this page cannot import, so it is mirrored
@@ -77,33 +80,44 @@ WRAPPER = """<!doctype html>
 """
 
 
+def seed_domains() -> list[dict]:
+    """The seeded taxonomy, read from the real config so the site cannot drift."""
+    import yaml
+
+    doc = yaml.safe_load(TAXONOMY.read_text(encoding="utf-8"))
+    return [{"id": d["id"], "label": d["label"]} for d in doc["domains"]]
+
+
+def script_safe(blob: str) -> str:
+    """A JSON blob lives inside <script>, where these two would end it early."""
+    return blob.replace("</", "<\\/").replace("<!--", "<\\!--")
+
+
 def main() -> int:
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    template = TEMPLATE.read_text(encoding="utf-8")
-    if PLACEHOLDER not in template:
-        print(f"error: {PLACEHOLDER} not found in {TEMPLATE}", file=sys.stderr)
-        return 1
+    site = SITE.read_text(encoding="utf-8")
+    for slot in (FIXTURE_SLOT, APP_SLOT):
+        if slot not in site:
+            print(f"error: {slot} not found in {SITE}", file=sys.stderr)
+            return 1
 
     fixtures = json.loads(FIXTURES.read_text(encoding="utf-8"))
     fixtures["agentAnswer"] = AGENT_ANSWER
+    fixtures["seedDomains"] = seed_domains()
 
-    # The JSON sits inside a <script> element, so any literal "</script>" or
-    # "<!--" in the captured text would end it early.
-    blob = json.dumps(fixtures, ensure_ascii=False, separators=(",", ":"))
-    blob = blob.replace("</", "<\\/").replace("<!--", "<\\!--")
+    blob = script_safe(json.dumps(fixtures, ensure_ascii=False, separators=(",", ":")))
+    page = site.replace(APP_SLOT, APP.read_text(encoding="utf-8")).replace(FIXTURE_SLOT, blob)
 
-    page = template.replace(PLACEHOLDER, blob)
-
+    # Bare body, for a host that supplies its own doctype/head/body.
     artifact = out_dir / "artifact.html"
     artifact.write_text(page, encoding="utf-8")
 
-    # The head has to be split out of the body for the standalone document:
-    # <title> and <link rel=stylesheet> belong in <head>, the rest in <body>.
+    # Complete document: <title> and the font <link> move up into <head>.
     split = page.index("<style>")
     head, body = page[:split], page[split:]
-    standalone = out_dir / "careeros-demo.html"
+    standalone = out_dir / "careeros.html"
     standalone.write_text(
         WRAPPER.replace("{body}", f"{head}</head>\n<body>\n{body}\n</body>"),
         encoding="utf-8",
@@ -111,7 +125,7 @@ def main() -> int:
 
     print(f"{artifact}    {artifact.stat().st_size / 1024:.0f} KB (artifact body)")
     print(f"{standalone}  {standalone.stat().st_size / 1024:.0f} KB (standalone document)")
-    print(f"{len(fixtures)} fixture groups")
+    print(f"{len(fixtures)} fixture groups, {len(fixtures['seedDomains'])} seed domains")
     return 0
 
 

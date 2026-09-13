@@ -1,0 +1,634 @@
+<title>CareerOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   CareerOS — product site with the working demo embedded.
+
+   Router-free by design: no History API anywhere, so the page runs from a
+   subpath, a sandboxed frame or file:// alike. Tabs inside the console toggle
+   [hidden]; the site itself is one scrolling document with anchor links.
+
+   Type   Archivo for the interface and display, Source Serif 4 for prose,
+          IBM Plex Mono for figures, reference numbers and derived keywords.
+   Look   A records office: full-bleed hairlines, mono stage markers, and
+          verdicts rendered as stamps — the subject's own document furniture.
+   --------------------------------------------------------------------------- */
+:root {
+  /* Neutrals biased toward the ultramarine accent rather than pure grey */
+  --bg: #eef1f6;
+  --panel: #ffffff;
+  --panel-2: #f5f7fa;
+  --ink: #10141f;
+  --ink-2: #555f74;
+  --line: #d8dee8;
+  --accent: #2a45c8;
+  --accent-bg: #e6eaf9;
+  --ok: #0f6b3f;
+  --ok-bg: #e3f1e9;
+  --warn: #8f5c08;
+  --warn-bg: #faeeda;
+  --bad: #ac2a1d;
+  --bad-bg: #fae7e4;
+  --chip: #e9edf3;
+  --shadow: 0 1px 2px rgba(16, 20, 31, .07);
+  --shadow-lg: 0 10px 40px -12px rgba(16, 20, 31, .28);
+  /* The hero band commits to dark in both themes */
+  --hero-bg: #10141f;
+  --hero-ink: #eef1f6;
+  --hero-ink-2: #93a0bb;
+  --hero-line: #262f45;
+  --hero-accent: #93a9ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1017;
+    --panel: #141a24;
+    --panel-2: #1a212c;
+    --ink: #e8ecf3;
+    --ink-2: #939ead;
+    --line: #262e3b;
+    --accent: #8ba4ff;
+    --accent-bg: #1a2340;
+    --ok: #56cc8e;
+    --ok-bg: #14301f;
+    --warn: #dfa84e;
+    --warn-bg: #31250f;
+    --bad: #f0857a;
+    --bad-bg: #36201c;
+    --chip: #202733;
+    --shadow: none;
+    --shadow-lg: 0 10px 40px -12px rgba(0, 0, 0, .7);
+    --hero-bg: #070a10;
+    --hero-line: #1d2534;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1017; --panel: #141a24; --panel-2: #1a212c;
+  --ink: #e8ecf3; --ink-2: #939ead; --line: #262e3b;
+  --accent: #8ba4ff; --accent-bg: #1a2340;
+  --ok: #56cc8e; --ok-bg: #14301f;
+  --warn: #dfa84e; --warn-bg: #31250f;
+  --bad: #f0857a; --bad-bg: #36201c;
+  --chip: #202733; --shadow: none;
+  --shadow-lg: 0 10px 40px -12px rgba(0, 0, 0, .7);
+  --hero-bg: #070a10; --hero-line: #1d2534;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.55 Archivo, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+html { scroll-behavior: smooth; }
+.mono, .kw, .num, .eyebrow, .stage i {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.prose { font-family: "Source Serif 4", Georgia, "Times New Roman", serif; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; }
+.narrow { max-width: 640px; }
+
+/* --- hero ----------------------------------------------------------------- */
+.hero {
+  background: var(--hero-bg);
+  color: var(--hero-ink);
+  border-bottom: 1px solid var(--hero-line);
+  position: relative;
+  overflow: hidden;
+}
+.hero::after {
+  /* faint ruled ground, like form paper */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 47px, var(--hero-line) 47px 48px);
+  opacity: .5;
+}
+.hero .wrap { position: relative; z-index: 1; padding-block: 56px 44px; }
+.eyebrow {
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--hero-accent); margin: 0 0 22px;
+}
+.hero h1 {
+  font-size: clamp(34px, 6.4vw, 62px);
+  line-height: 1.04; letter-spacing: -.028em; font-weight: 800;
+  margin: 0; max-width: 16ch; text-wrap: balance;
+}
+.hero h1 em { font-style: normal; color: var(--hero-accent); }
+.lede {
+  font-size: clamp(16px, 2.2vw, 19px); line-height: 1.58;
+  color: var(--hero-ink-2); max-width: 58ch; margin: 22px 0 0;
+}
+.lede b { color: var(--hero-ink); font-weight: 600; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+.cta a {
+  font: 600 14px/1 Archivo, sans-serif; text-decoration: none;
+  padding: 13px 20px; border-radius: 6px; border: 1px solid var(--hero-line);
+  color: var(--hero-ink); display: inline-block;
+}
+.cta a.go { background: var(--hero-accent); border-color: var(--hero-accent); color: #0b1020; }
+.cta a:hover { border-color: var(--hero-accent); }
+
+.facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 1px; margin-top: 40px;
+  background: var(--hero-line); border: 1px solid var(--hero-line);
+}
+.facts div { background: var(--hero-bg); padding: 14px 14px 12px; }
+.facts b { display: block; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+.facts span { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--hero-ink-2); }
+
+/* --- sections ------------------------------------------------------------- */
+section.band { border-top: 1px solid var(--line); }
+section.band > .wrap { padding-block: 60px; }
+.eyebrow.dark { color: var(--accent); }
+h2.sec {
+  font-size: clamp(24px, 3.6vw, 34px); line-height: 1.14;
+  letter-spacing: -.022em; font-weight: 700; margin: 0 0 16px;
+  max-width: 20ch; text-wrap: balance;
+}
+h3.sub { font-size: 18px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 8px; }
+p.body { font-size: 16.5px; line-height: 1.68; color: var(--ink-2); max-width: 66ch; margin: 0 0 14px; }
+p.body strong { color: var(--ink); font-weight: 600; }
+p.body code, .inline { font-family: "IBM Plex Mono", monospace; font-size: .88em; background: var(--chip); padding: 1px 5px; border-radius: 3px; }
+
+/* --- the chain ------------------------------------------------------------ */
+ol.chain { list-style: none; margin: 26px 0 0; padding: 0; border-top: 1px solid var(--line); }
+ol.chain li {
+  display: grid; grid-template-columns: 42px minmax(0, 190px) minmax(0, 1fr);
+  gap: 4px 18px; align-items: baseline;
+  padding: 13px 0; border-bottom: 1px solid var(--line);
+}
+ol.chain i { font-style: normal; font-size: 11px; color: var(--ink-2); }
+ol.chain b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+ol.chain span { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
+@media (max-width: 620px) {
+  ol.chain li { grid-template-columns: 34px minmax(0, 1fr); }
+  ol.chain span { grid-column: 2; }
+}
+
+/* --- two-up --------------------------------------------------------------- */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 34px; align-items: start; }
+@media (max-width: 800px) { .split { grid-template-columns: minmax(0, 1fr); gap: 26px; } }
+
+.note {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 18px; box-shadow: var(--shadow);
+}
+.note h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.note p { margin: 0 0 8px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.note p:last-child { margin-bottom: 0; }
+
+/* the one flourish: an authorization verdict as a rubber stamp */
+.stampwrap { display: flex; justify-content: center; padding: 22px 0 12px; }
+.stamp {
+  transform: rotate(-3.5deg);
+  border: 3px double var(--bad); color: var(--bad);
+  border-radius: 6px; padding: 10px 18px; text-align: center;
+  font-family: "IBM Plex Mono", monospace; opacity: .92;
+}
+.stamp b { display: block; font-size: 17px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.stamp span { display: block; font-size: 10px; letter-spacing: .08em; margin-top: 4px; }
+
+.quoteline {
+  border-left: 3px solid var(--warn); background: var(--warn-bg);
+  padding: 12px 14px; border-radius: 0 7px 7px 0; margin: 14px 0 0;
+  font-size: 14px; line-height: 1.6;
+}
+.quoteline q { display: block; color: var(--ink); font-style: italic; }
+.quoteline em { display: block; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+
+.codeblock {
+  background: var(--hero-bg); color: var(--hero-ink); border-radius: 10px;
+  padding: 16px 18px; overflow-x: auto; margin: 18px 0 0;
+  font-family: "IBM Plex Mono", monospace; font-size: 13px; line-height: 1.85;
+}
+.codeblock .c { color: var(--hero-ink-2); }
+.codeblock .p { color: var(--hero-accent); }
+
+/* --- console (the embedded app) ------------------------------------------- */
+/* the prose intro and the console are two .wrap blocks in one band, so the
+   band's vertical padding has to collapse between them */
+#console-band > .wrap:first-of-type { padding-bottom: 0; }
+#console-band > .wrap:last-of-type { padding-top: 0; }
+.console {
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  background: var(--bg); box-shadow: var(--shadow-lg);
+  margin-top: 26px; scroll-margin-top: 12px;
+}
+.notice {
+  background: var(--accent-bg); border-bottom: 1px solid var(--line);
+  padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 8px;
+  align-items: baseline; font-size: 12px; color: var(--ink-2);
+}
+.notice b { color: var(--accent); letter-spacing: .08em; font-size: 10px; font-family: "IBM Plex Mono", monospace; }
+.notice a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.chrome {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 11px 16px; display: flex; flex-wrap: wrap; gap: 10px;
+  align-items: center; justify-content: space-between;
+}
+.brand { font-weight: 700; font-size: 15px; letter-spacing: -.02em; }
+.brand span { font-weight: 400; color: var(--ink-2); font-size: 11.5px; margin-left: 8px; font-family: "IBM Plex Mono", monospace; }
+nav { display: flex; gap: 2px; flex-wrap: wrap; }
+nav button {
+  font: 500 13px Archivo, sans-serif;
+  background: none; border: 0; border-radius: 6px;
+  color: var(--ink-2); padding: 7px 12px; cursor: pointer;
+}
+nav button:hover { background: var(--chip); color: var(--ink); }
+nav button[aria-selected="true"] { background: var(--accent); color: var(--panel); }
+nav button:focus-visible, .card:focus-visible, .filter:focus-visible,
+.btn:focus-visible, .qbtn:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { padding: 16px; font-size: 14px; }
+
+/* --- panels --------------------------------------------------------------- */
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 16px; margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.panel > h2 {
+  margin: 0 0 12px; font-size: 10.5px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2);
+  font-family: "IBM Plex Mono", monospace;
+}
+.panel p { margin: 0 0 8px; }
+.muted { color: var(--ink-2); }
+.small { font-size: 12.5px; }
+.caveat { font-size: 12px; color: var(--ink-2); font-style: italic; margin-top: 6px; }
+
+/* --- job card ------------------------------------------------------------- */
+.card {
+  display: block; width: 100%; text-align: left;
+  background: var(--panel); border: 1px solid var(--line);
+  border-left-width: 4px; border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 12px;
+  font: inherit; color: inherit; cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.card:hover { border-color: var(--accent); }
+.card.today { border-left-color: var(--bad); }
+.card.within_48h { border-left-color: #d97316; }
+.card.within_7d { border-left-color: var(--warn); }
+.card.future { border-left-color: var(--ok); }
+.card.none, .card.expired { border-left-color: var(--line); }
+.card-top { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.title { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
+.sub { color: var(--ink-2); font-size: 12.5px; margin-top: 1px; }
+.flag { font-size: 10px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; text-align: right; font-family: "IBM Plex Mono", monospace; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 0; }
+.chip { background: var(--chip); color: var(--ink-2); border-radius: 20px; padding: 2px 9px; font-size: 11.5px; }
+.chip.dom { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+
+.scores { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 11px; }
+.score b { display: block; font-size: 17px; font-weight: 700; line-height: 1.15; font-family: "IBM Plex Mono", monospace; }
+.score span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+
+.verdict {
+  margin-top: 11px; padding: 9px 11px; border-radius: 7px;
+  background: var(--panel-2); border-left: 3px solid var(--line); font-size: 12.5px;
+}
+.verdict.compatible { border-left-color: var(--ok); }
+.verdict.potentially_compatible { border-left-color: var(--warn); }
+.verdict.not_compatible { border-left-color: var(--bad); }
+.verdict.unknown { border-left-color: var(--ink-2); }
+.verdict .vh { font-weight: 600; }
+.verdict.compatible .vh { color: var(--ok); }
+.verdict.potentially_compatible .vh { color: var(--warn); }
+.verdict.not_compatible .vh { color: var(--bad); }
+.verdict q { display: block; margin-top: 4px; color: var(--ink-2); font-size: 12px; }
+
+/* --- controls ------------------------------------------------------------- */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.filter {
+  font: 500 12.5px Archivo, sans-serif;
+  background: var(--panel); color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: 20px;
+  padding: 5px 12px; cursor: pointer;
+}
+.filter[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.btn {
+  font: 600 13px Archivo, sans-serif;
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 8px 14px; cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.qbtn {
+  font: 400 12px Archivo, sans-serif; text-align: left;
+  background: var(--panel-2); color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 10px; cursor: pointer;
+}
+.qbtn:hover { border-color: var(--accent); color: var(--ink); }
+
+/* --- tables / stats ------------------------------------------------------- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(116px, 1fr)); gap: 10px; }
+.stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; }
+.stat b { display: block; font-size: 20px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+.stat span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.tw { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-2); font-weight: 600; font-family: "IBM Plex Mono", monospace;
+}
+td.n, th.n { text-align: right; }
+tbody tr:last-child td { border-bottom: 0; }
+
+ul.tight { margin: 6px 0; padding-left: 18px; }
+ul.tight li { margin-bottom: 3px; }
+pre.answer {
+  white-space: pre-wrap; margin: 0;
+  font: 400 14px/1.7 "Source Serif 4", Georgia, serif;
+}
+.trace { font-size: 12px; line-height: 1.8; }
+.trace .m { color: var(--warn); }
+.trace .e { color: var(--bad); }
+h3.grp { margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
+.back {
+  font: 600 13px Archivo, sans-serif; color: var(--accent);
+  background: none; border: 0; padding: 0 0 12px; cursor: pointer;
+}
+
+/* --- footer --------------------------------------------------------------- */
+footer { border-top: 1px solid var(--line); background: var(--hero-bg); color: var(--hero-ink-2); }
+footer .wrap { padding-block: 34px 40px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: baseline; }
+footer b { color: var(--hero-ink); font-size: 15px; }
+footer a { color: var(--hero-accent); text-decoration: none; font-size: 13.5px; }
+footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6; }
+
+@media (max-width: 560px) {
+  .hero .wrap { padding-block: 40px 34px; }
+  section.band > .wrap { padding-block: 44px; }
+  main { padding: 12px; }
+  .console { border-radius: 10px; }
+  .scores { gap: 12px; }
+}
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Career operating system &nbsp;·&nbsp; United States + India</p>
+    <h1>The job search runs on <em>evidence</em>, not adjectives.</h1>
+    <p class="lede">CareerOS reads a posting in <b>any</b> field, checks it against your actual work
+      authorization, ranks it by <b>deadline before score</b>, and assembles a résumé only from facts
+      you have personally verified. Where it is unsure, it says <b>unknown</b> — it does not guess on
+      your behalf.</p>
+    <div class="cta">
+      <a class="go" href="#console">Open the live demo ↓</a>
+      <a href="https://github.com/gmadarapu231-dotcom/my_animate_project" target="_blank" rel="noopener">Read the source →</a>
+    </div>
+    <div class="facts" id="facts"></div>
+  </div>
+</header>
+
+<section class="band" id="chain">
+  <div class="wrap">
+    <p class="eyebrow dark">01 — The chain</p>
+    <h2 class="sec">Nothing is evaluated out of order.</h2>
+    <p class="body prose">A job is not a match until the steps before it have cleared. Country decides
+      which rulebook applies; the rulebook decides whether you can legally hold the role at all; only
+      then does skill overlap mean anything. Each stage below is a real module, and each one can
+      stop the chain.</p>
+    <ol class="chain" id="chainList"></ol>
+  </div>
+</section>
+
+<section class="band" id="console-band">
+  <div class="wrap">
+    <p class="eyebrow dark">02 — The product</p>
+    <h2 class="sec">Here it is, running.</h2>
+    <p class="body prose">Nine real postings across networking, cybersecurity, SAP, data, healthcare
+      and one deliberately unclassifiable role — scored by the same engines that run on the server.
+      Open a job to see the skill-by-skill breakdown, the authorization reading and the keywords
+      derived from that specific posting.</p>
+  </div>
+  <div class="wrap">
+    <div class="console" id="console">
+      <div class="notice">
+        <b>DEMO</b>
+        <span>Real output from the real engines, captured and frozen. Search answers only the
+          recorded queries, the agent replays a transcript, and nothing is saved.</span>
+      </div>
+      <div class="chrome">
+        <div class="brand">CareerOS <span id="brandSub"></span></div>
+        <nav id="tabs" role="tablist"></nav>
+      </div>
+      <main>
+        <section id="view-jobs" role="tabpanel"></section>
+        <section id="view-detail" role="tabpanel" hidden></section>
+        <section id="view-today" role="tabpanel" hidden></section>
+        <section id="view-pipeline" role="tabpanel" hidden></section>
+        <section id="view-insights" role="tabpanel" hidden></section>
+        <section id="view-agent" role="tabpanel" hidden></section>
+      </main>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="evidence">
+  <div class="wrap">
+    <p class="eyebrow dark">03 — Evidence</p>
+    <h2 class="sec">A résumé is a query over verified facts.</h2>
+    <div class="split">
+      <div>
+        <p class="body prose">Your history is stored as atomic facts — a project, a technology, a
+          responsibility, an achievement, an employer, a date range — each one marked verified by you
+          or not. A tailored résumé is assembled by selecting from that set, never by writing prose
+          about you.</p>
+        <p class="body prose">Before any résumé can be marked final, a checker re-derives every entity
+          in the finished text and matches it back to the evidence that supports it. The checker never
+          calls a model; it is arithmetic over sets, so it cannot be talked around. A claim with no
+          supporting evidence fails the document.</p>
+        <p class="body prose">The consequence shows up as omissions. If a posting wants SAP Firefighter
+          and nothing in your evidence supports it, the requirement is simply left <strong>unclaimed</strong>
+          — visible to you, absent from the résumé.</p>
+      </div>
+      <div>
+        <div class="note">
+          <h4>Factuality report — résumé #4</h4>
+          <div class="tw"><table id="factTable"></table></div>
+          <p style="margin-top:12px" id="factSummary"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="auth">
+  <div class="wrap">
+    <p class="eyebrow dark">04 — Authorization</p>
+    <h2 class="sec">Silence is never read as a yes.</h2>
+    <div class="split">
+      <div>
+        <p class="body prose">Work authorization is decided by a country pack — a plain data file of
+          statuses and the phrases that signal them — applied to the posting's own words. It is not a
+          model output, and the agent has no tool that can set it.</p>
+        <p class="body prose">If a posting says nothing about sponsorship, the verdict is
+          <strong>unknown</strong>, not "probably fine". Every verdict quotes the phrase it was drawn
+          from, and every verdict carries the same disclaimer, because none of this is legal advice.</p>
+        <p class="body prose">Adding a country means adding a YAML file. The United States pack carries
+          13 authorization statuses; India's carries its own employment and salary conventions, down to
+          reading <span class="inline">₹ LPA</span> as an annual figure.</p>
+      </div>
+      <div>
+        <div class="stampwrap">
+          <div class="stamp">
+            <b>Unknown</b>
+            <span>Sponsorship not mentioned</span>
+          </div>
+        </div>
+        <div class="quoteline">
+          <q>We are unable to provide visa sponsorship for this position.</q>
+          <em>Drawn from the posting · verdict: not compatible · AI assessment — verify with employer/recruiter.</em>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="domains">
+  <div class="wrap">
+    <p class="eyebrow dark">05 — Coverage</p>
+    <h2 class="sec">No job category is written into the code.</h2>
+    <div class="split">
+      <div>
+        <p class="body prose">The 15 seeded domains are a <strong>prior</strong>, not a schema. A posting
+          that matches none of them well enough — below a confidence floor of 0.18 — is classified into a
+          domain the model names itself, and stored under that new identifier. Nothing in the pipeline
+          needs to know the list in advance.</p>
+        <p class="body prose">ATS keywords are derived per posting from that posting's own text. There is
+          no industry word list anywhere in the repository, which is exactly why a veterinary role and a
+          quantitative trading role both work without anyone adding them.</p>
+      </div>
+      <div>
+        <div class="note">
+          <h4>Seeded domains — extended at runtime</h4>
+          <div class="chips" id="domainChips" style="margin:0"></div>
+          <p style="margin-top:12px"><span class="chip dom" style="font-size:11px">Highlighted</span>
+            domains appear in the demo set. Plus anything else a posting turns out to be — one role here
+            lands in <span class="inline">other</span> on purpose.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="limits">
+  <div class="wrap">
+    <p class="eyebrow dark">06 — Limits</p>
+    <h2 class="sec">The safest tool is the one that does not exist.</h2>
+    <p class="body prose">The agent is not restricted from these actions by a prompt or a policy check.
+      The tools were never built, so there is nothing to jailbreak. Every registry build asserts the list
+      below is still absent.</p>
+    <div class="note" style="margin-top:24px">
+      <h4 id="withheldHead">Withheld capabilities</h4>
+      <div class="tw"><table id="withheldTable"></table></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="run">
+  <div class="wrap">
+    <p class="eyebrow dark">07 — Running it</p>
+    <h2 class="sec">The demo is frozen. The system is not.</h2>
+    <p class="body prose">Everything above is captured output. To run the real thing — live job sources,
+      a real agent loop, Gmail drafts that wait for your approval — clone the repository and start the
+      API. It works with no model key at all; the key only turns on the agent and the LLM classifier.</p>
+    <div class="codeblock"><span class="c"># backend, tests, and the API</span>
+pip install -e <span class="p">.</span>
+careeros init <span class="c">--sample</span>
+careeros serve
+
+<span class="c"># the web / iOS / Android client</span>
+cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <b>CareerOS</b>
+      <p>Domain-agnostic career automation for the United States and India. Assisted by default: it
+        assembles, you submit.</p>
+    </div>
+    <a href="https://github.com/gmadarapu231-dotcom/my_animate_project" target="_blank" rel="noopener">github.com/gmadarapu231-dotcom/my_animate_project →</a>
+  </div>
+</footer>
+
+<script id="fixtures" type="application/json">/*__FIXTURES__*/</script>
+<script>
+/*__APP__*/
+
+/* --- site sections, filled from the same fixtures ------------------------- */
+(function site() {
+  const t = F.agentTools;
+  const h = F.health;
+
+  document.getElementById("facts").innerHTML = [
+    [h.countries.length, "countries"],
+    [h.seed_domains, "seed domains"],
+    [h.skill_nodes, "skill nodes"],
+    [F.applications.lifecycle.length, "lifecycle states"],
+    [t.count, "agent tools"],
+    [t.withheld_capabilities.length, "withheld"],
+  ].map(([n, l]) => `<div><b>${n}</b><span>${l}</span></div>`).join("");
+
+  const CHAIN = [
+    ["Country", "Which rulebook applies. A YAML pack, not code."],
+    ["Work authorization", "Can you legally hold this role? Silence means unknown."],
+    ["Career track", "Which of your tracks this posting belongs to."],
+    ["Job", "Classified into a domain — seeded or newly named."],
+    ["Eligibility", "The verdict, with the phrase it was drawn from."],
+    ["Priority", "Deadline tier first, then score. Today outranks everything."],
+    ["Résumé", "Assembled from verified evidence, then gated."],
+    ["Application", "Assembled for you. You press submit."],
+    ["Email", "Drafted. High-impact topics never leave draft state."],
+    ["Interview", "Tracked through 16 lifecycle states."],
+    ["Outcome", "Rejections analysed; the analysis feeds back in."],
+  ];
+  document.getElementById("chainList").innerHTML = CHAIN
+    .map(([name, gloss], i) => `<li><i>${String(i + 1).padStart(2, "0")}</i><b>${name}</b><span>${gloss}</span></li>`)
+    .join("");
+
+  const fact = F.tailor["4"].factuality;
+  const shown = fact.claims.slice(0, 4);
+  document.getElementById("factTable").innerHTML =
+    `<thead><tr><th>Claim</th><th>Verdict</th><th class="n">Evidence</th></tr></thead><tbody>` +
+    shown.map((c) => `<tr>
+      <td>${esc(c.text.length > 92 ? c.text.slice(0, 92) + "…" : c.text)}</td>
+      <td><span class="chip ${c.verdict === "supported" ? "ok" : c.verdict === "unsupported" ? "bad" : "warn"}">${esc(c.verdict)}</span></td>
+      <td class="n mono">${c.evidence_ids.length}</td></tr>`).join("") + `</tbody>`;
+  document.getElementById("factSummary").innerHTML =
+    `<span class="small muted">${esc(fact.summary)} Showing ${shown.length} of ${fact.claims.length}.</span>`;
+
+  const present = new Set(F.facets.domains.map((d) => d.id));
+  document.getElementById("domainChips").innerHTML = F.seedDomains
+    .map((d) => `<span class="chip${present.has(d.id) ? " dom" : ""}">${esc(d.label)}</span>`).join("");
+
+  document.getElementById("withheldHead").textContent =
+    `Withheld capabilities — ${t.withheld_capabilities.length} of them`;
+  document.getElementById("withheldTable").innerHTML =
+    `<thead><tr><th>Tool that does not exist</th><th>Why not</th></tr></thead><tbody>` +
+    t.withheld_capabilities.map((w) => `<tr>
+      <td class="mono" style="color:var(--bad);white-space:nowrap">${esc(w.name)}</td>
+      <td class="muted">${esc(w.reason)}</td></tr>`).join("") + `</tbody>`;
+})();
+</script>

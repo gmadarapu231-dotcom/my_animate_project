@@ -1,24 +1,33 @@
-# Static demo page
+# The CareerOS website
 
-A router-free single page that walks through CareerOS using captured real
-engine output. It exists because the compiled Expo web bundle resolves routes
-from `location.pathname`, so it only boots at a host root — it renders
-"Not found" on a subpath, in a sandboxed frame, and from `file://`. This page
-touches neither a router nor the History API, so it runs anywhere.
+A single-page product site with the working demo embedded in it. Router-free by
+design: no History API anywhere, so it runs from `file://`, from any subpath,
+and inside a sandboxed frame. The compiled Expo web bundle cannot — it resolves
+routes from `location.pathname` and only boots at a host root.
 
     python3 build.py
 
-writes two files next to the template:
+assembles three sources into two outputs:
 
-| file | for |
+| source | |
 | --- | --- |
-| `careeros-demo.html` | a complete document — open it straight from disk |
+| `site.html` | the site: copy, layout, and the console the app renders into |
+| `app.js` | the app itself — six screens, extracted from `template.html` |
+| `../app/src/demoFixtures.json` | responses captured from the running API |
+
+| output | for |
+| --- | --- |
+| `careeros.html` | a complete document — open it straight from disk |
 | `artifact.html` | a bare body, for hosts that supply their own `<head>` |
 
-Data comes from `../app/src/demoFixtures.json` (responses captured from the
-running API) plus the recorded agent transcript, which `build.py` mirrors from
-`../app/src/demo.ts`. Nothing in the page calls a network API: search answers
-only the recorded queries and the agent replays one transcript.
+`build.py` also reads the seeded domain list out of
+`careeros/config/taxonomy/domains.yaml`, so the coverage section cannot drift
+from the real taxonomy, and mirrors the recorded agent transcript from
+`../app/src/demo.ts`.
 
-The live app — with a real server and a live agent — is the Expo client in
-`../app`. This page is for looking at the output without running anything.
+`template.html` is the app on its own, without the site around it — the source
+of `app.js` and useful for looking at the screens in isolation.
+
+Nothing on the page calls a network API: search answers only the recorded
+queries and the agent replays one transcript. The live system is the Python API
+plus the Expo client in `../app`.
