@@ -130,9 +130,43 @@ class User(Base, TimestampMixin):
 
     automation_mode: Mapped[str] = mapped_column(String(16), default=AutomationMode.ASSISTED.value)
 
+    # Identity. There is no password column here, and there is not meant to be:
+    # sign-in is Google OAuth or an emailed code, both of which prove control
+    # of the address without anyone storing a secret of the user's.
+    google_subject: Mapped[Optional[str]] = mapped_column(String(64), unique=True)
+    picture_url: Mapped[Optional[str]] = mapped_column(String(512))
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    last_auth_method: Mapped[Optional[str]] = mapped_column(String(24))
+
     work_auth: Mapped[list["WorkAuthorization"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     tracks: Mapped[list["CareerTrack"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     employers: Mapped[list["Employer"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class AuthChallenge(Base):
+    """A sign-in attempt in flight: an OAuth state, or an emailed code.
+
+    Both live here because both are the same thing -- a short-lived secret
+    handed out and expected back. Codes are stored only as a salted hash, and
+    `attempts` caps guessing; `consumed_at` makes every challenge single-use,
+    which is what stops a replay.
+    """
+
+    __tablename__ = "auth_challenge"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)  # google_state | email_code
+    email: Mapped[Optional[str]] = mapped_column(String(255), index=True)
+    code_hash: Mapped[Optional[str]] = mapped_column(String(64))
+    state: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    verifier: Mapped[Optional[str]] = mapped_column(String(128))
+    redirect_uri: Mapped[Optional[str]] = mapped_column(String(512))
+    include_gmail: Mapped[bool] = mapped_column(Boolean, default=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class WorkAuthorization(Base, TimestampMixin):

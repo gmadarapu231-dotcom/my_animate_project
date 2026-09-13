@@ -237,3 +237,120 @@ def test_agent_ask_validates_input(client):
 def test_agent_runs_endpoint(client):
     body = client.get("/api/agent/runs").json()
     assert "runs" in body and "count" in body
+
+
+# ===========================================================================
+# Sign-in and sourcing
+# ===========================================================================
+@pytest.fixture
+def signed_in_client(client, monkeypatch, tmp_path):
+    """A client that must present a session token, with Google configured."""
+    monkeypatch.setenv("CAREEROS_HOME", str(tmp_path))
+    monkeypatch.setenv("CAREEROS_GOOGLE_CLIENT_ID", "cid.apps.googleusercontent.com")
+    monkeypatch.setenv("CAREEROS_GOOGLE_CLIENT_SECRET", "csec")
+    monkeypatch.setenv("CAREEROS_AUTH", "required")
+    monkeypatch.delenv("CAREEROS_API_TOKEN", raising=False)
+    return client
+
+
+def test_describe_is_reachable_without_signing_in(signed_in_client):
+    """The login screen has to be able to ask what methods exist."""
+    response = signed_in_client.get("/api/auth/describe")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "required"
+    assert "google" in body["methods"]
+    assert body["passwords"] == "never stored or requested"
+
+
+def test_protected_endpoints_refuse_and_point_at_sign_in(signed_in_client):
+    response = signed_in_client.get("/api/jobs")
+    assert response.status_code == 401
+    assert response.json()["sign_in"] == "/api/auth/describe"
+
+
+def test_a_session_token_opens_the_api(signed_in_client, loaded):
+    from careeros.auth.tokens import issue_token
+
+    user = loaded["user"]
+    token = issue_token(user.id, user.email, method="google")
+    response = signed_in_client.get("/api/jobs", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["count"] >= 1
+
+
+def test_whoami_reports_the_signed_in_account(signed_in_client, loaded):
+    from careeros.auth.tokens import issue_token
+
+    user = loaded["user"]
+    token = issue_token(user.id, user.email, method="email_code")
+    response = signed_in_client.get("/api/auth/session", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["signed_in"] is True
+    assert body["method"] == "email_code"
+    assert body["user"]["email"] == user.email
+    assert body["user"]["has_profile"] is True
+
+
+def test_a_forged_token_is_refused(signed_in_client):
+    response = signed_in_client.get(
+        "/api/jobs", headers={"Authorization": "Bearer cos1.forged.signature"}
+    )
+    assert response.status_code == 401
+
+
+def test_the_google_start_endpoint_returns_a_consent_url(signed_in_client):
+    response = signed_in_client.post("/api/auth/google/start", json={"include_gmail": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["authorization_url"].startswith("https://accounts.google.com/")
+    assert "gmail.compose" in body["authorization_url"]
+    assert "gmail.send" not in body["authorization_url"]
+
+
+def test_google_start_says_what_is_missing_when_unconfigured(client, monkeypatch):
+    monkeypatch.delenv("CAREEROS_GOOGLE_CLIENT_ID", raising=False)
+    monkeypatch.delenv("CAREEROS_GOOGLE_CLIENT_SECRET", raising=False)
+    response = client.post("/api/auth/google/start", json={})
+    assert response.status_code == 503
+    assert "CAREEROS_GOOGLE_CLIENT_ID" in response.json()["detail"]
+
+
+def test_the_sources_list_explains_every_board(client):
+    response = client.get("/api/sources")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] >= 20
+
+    rows = {row["id"]: row for row in body["providers"]}
+    # Google Jobs is the route to the big boards.
+    assert rows["google_jobs"]["access"] == "licensed_aggregator"
+    # And the boards that are not scraped say so, and say what replaces them.
+    for provider_id in ("linkedin_direct", "indeed_direct", "naukri_direct"):
+        row = rows[provider_id]
+        assert row["state"] == "not_permitted"
+        assert row["reason"]
+        assert row["use_instead"]
+
+
+def test_the_sources_list_never_contains_a_credential(client, monkeypatch):
+    monkeypatch.setenv("CAREEROS_SERPAPI_KEY", "sk-do-not-leak-me")
+    response = client.get("/api/sources")
+    assert "sk-do-not-leak-me" not in response.text
+
+
+def test_sources_can_be_scoped_to_a_country(client):
+    india = client.get("/api/sources", params={"country": "IN"}).json()
+    ids = {row["id"] for row in india["providers"]}
+    assert "naukri_direct" in ids       # India's biggest board, explained
+    assert "usajobs" not in ids         # US federal only
+
+
+def test_the_plan_endpoint_derives_searches_from_the_profile(client):
+    response = client.get("/api/sources/plan")
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body["countries"]) <= {"US", "IN"}
+    assert body["terms"], "a loaded profile must yield search terms"
+    assert "hard-coded" in body["note"]

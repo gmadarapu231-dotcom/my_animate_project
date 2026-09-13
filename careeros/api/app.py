@@ -11,7 +11,17 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from careeros.ai.provider import get_provider
-from careeros.api.routers import agent, applications, email, insights, jobs, profile, resumes
+from careeros.api.routers import (
+    agent,
+    applications,
+    auth,
+    email,
+    insights,
+    jobs,
+    profile,
+    resumes,
+    sources,
+)
 from careeros.api.security import auth_required, install_security
 from careeros.config import countries, taxonomy
 from careeros.db.session import database_url, init_db
@@ -42,6 +52,8 @@ app = FastAPI(
 
 install_security(app)
 
+app.include_router(auth.router)
+app.include_router(sources.router)
 app.include_router(agent.router)
 app.include_router(jobs.router)
 app.include_router(profile.router)

@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import sys
+import textwrap
 from pathlib import Path
 from careeros.ai.provider import get_provider
 from careeros.db.session import database_url, init_db, session_scope
@@ -372,6 +373,123 @@ def cmd_export(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+def cmd_sources(args: argparse.Namespace) -> None:
+    """Where jobs can come from, and what each provider still needs."""
+    from careeros.sources import provider_status
+
+    status = provider_status(country=args.country)
+    if args.json:
+        print(json.dumps(status, indent=2))
+        return
+
+    scope = f" for {args.country}" if args.country else ""
+    print(f"{status['count']} providers{scope}: {status['ready']} ready, "
+          f"{status['needs_credentials']} need credentials, {status['not_permitted']} not fetched\n")
+
+    groups = {"ready": [], "needs_credentials": [], "not_permitted": []}
+    for row in status["providers"]:
+        groups[row["state"]].append(row)
+
+    if groups["ready"]:
+        print("READY")
+        for row in groups["ready"]:
+            note = "" if row["endpoint_verified"] else "  (endpoint unverified)"
+            print(f"  {row['id']:<24} {row['access_label']:<22} {', '.join(row['countries'])}{note}")
+    if groups["needs_credentials"]:
+        print("\nNEEDS CREDENTIALS")
+        for row in groups["needs_credentials"]:
+            print(f"  {row['id']:<24} set {', '.join(row['missing_env'])}")
+    if groups["not_permitted"]:
+        print("\nNOT FETCHED")
+        for row in groups["not_permitted"]:
+            reason = " ".join((row["reason"] or "").split()).split(". ")[0].rstrip(".")
+            print(f"  {row['id']:<24} {textwrap.shorten(reason, width=88, placeholder=' ...')}")
+            if row["use_instead"]:
+                print(f"  {'':<24} -> use {', '.join(row['use_instead'])}")
+    if args.verbose:
+        print()
+        for row in status["providers"]:
+            if row["notes"]:
+                print(f"{row['id']}:\n  " + row["notes"].replace("\n", "\n  ") + "\n")
+
+
+def cmd_discover(args: argparse.Namespace) -> None:
+    """Search every ready provider for this profile and ingest the results."""
+    from careeros.sources import build_registry
+    from careeros.sources.base import SourceRegistry
+    from careeros.sources.discover import discover
+
+    with session_scope() as session:
+        user = _require_user(session)
+        report = discover(
+            session,
+            user,
+            registry=build_registry(into=SourceRegistry()),
+            terms=args.term or None,
+            countries=[c.upper() for c in (args.country or [])] or None,
+            only=args.only or None,
+            per_provider=args.per_provider,
+            ingest=not args.dry_run,
+        )
+
+    if args.json:
+        print(json.dumps(report, indent=2, default=str))
+        return
+
+    plan = report.get("plan") or {}
+    print(f"Searched {len(plan.get('searches', []))} query/provider pairs "
+          f"across {', '.join(plan.get('countries', [])) or '-'}")
+    print(f"Terms: {', '.join(plan.get('terms', [])) or '(none - add career tracks to your profile)'}\n")
+
+    for row in report["providers"]:
+        if row["skipped_reason"]:
+            print(f"  -- {row['provider']:<24} skipped: {row['skipped_reason']}")
+        else:
+            errors = f"  ({len(row['errors'])} error(s))" if row["errors"] else ""
+            print(f"  ok {row['provider']:<24} {row['found']:>4} posting(s) from {row['searches']} search(es){errors}")
+        for error in row["errors"][:2]:
+            print(f"     ! {error}")
+
+    if report["by_board"]:
+        print("\nBy board:")
+        for board, count in report["by_board"].items():
+            print(f"  {count:>4}  {board}")
+
+    ingested = report.get("ingest")
+    if ingested:
+        print(f"\nIngested: {ingested['inserted']} new, {ingested['duplicates']} already known "
+              f"(of {ingested['fetched']} fetched)")
+        print("Run `careeros run-daily` to classify and rank them, then `careeros jobs`.")
+    elif args.dry_run:
+        print(f"\nDry run: {report['found']} posting(s) found, nothing saved.")
+
+
+def cmd_signin(args: argparse.Namespace) -> None:
+    """Issue a session token for an email address, for use by a client."""
+    from careeros.auth import describe_auth
+    from careeros.auth.service import Identity, upsert_account
+    from careeros.auth.tokens import issue_token
+
+    if args.describe:
+        print(json.dumps(describe_auth(), indent=2))
+        return
+
+    with session_scope() as session:
+        user, created = upsert_account(
+            session, Identity(email=args.email, name=args.name, method="cli")
+        )
+        token = issue_token(user.id, user.email, method="cli")
+        user_id, email = user.id, user.email
+
+    print(f"{'Created' if created else 'Found'} account {email} (id {user_id})")
+    print("\nSession token (treat it like a password):\n")
+    print(token)
+    print(
+        "\nPaste it into the app's sign-in screen, or send it as"
+        "\n  Authorization: Bearer <token>"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="careeros",
@@ -456,6 +574,27 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("agent-runs", help="audit trail of past agent runs")
     p.add_argument("--limit", type=int, default=10)
     p.set_defaults(func=cmd_agent_runs)
+
+    p = sub.add_parser("sources", help="where jobs can come from, and what each needs")
+    p.add_argument("--country", help="only providers covering this country, e.g. US or IN")
+    p.add_argument("--verbose", action="store_true", help="include each provider's notes")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_sources)
+
+    p = sub.add_parser("discover", help="search every ready provider and ingest the results")
+    p.add_argument("--term", action="append", help="search term (repeatable; default: your career tracks)")
+    p.add_argument("--country", action="append", help="country code (repeatable; default: where you can work)")
+    p.add_argument("--only", action="append", help="restrict to a provider id (repeatable)")
+    p.add_argument("--per-provider", type=int, default=60, help="cap postings per provider")
+    p.add_argument("--dry-run", action="store_true", help="fetch and report, save nothing")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_discover)
+
+    p = sub.add_parser("signin", help="issue a session token for an email address")
+    p.add_argument("email", nargs="?", default="", help="the account's email address")
+    p.add_argument("--name", help="full name, used only when creating the account")
+    p.add_argument("--describe", action="store_true", help="show which sign-in methods are configured")
+    p.set_defaults(func=cmd_signin)
 
     p = sub.add_parser("serve", help="run the dashboard + API")
     p.add_argument("--host", default="127.0.0.1")

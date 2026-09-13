@@ -4,14 +4,18 @@ Phase 1 ran on localhost, where "no auth" was defensible. A mobile app changes
 that: the server now listens on a network interface and a phone talks to it
 over the LAN, so the API needs a credential and a CORS policy.
 
-Both are opt-in by configuration, and the default is the safe one:
+There are now two kinds of credential, and either satisfies the gate:
 
-* `CAREEROS_API_TOKEN` unset  -> the API binds to localhost and is open, which
-  is the single-user desktop case the CLI and the built-in dashboard use.
-  `/api/health` reports `auth_required: false` so a client can tell.
-* `CAREEROS_API_TOKEN` set    -> every `/api/*` request needs
-  `Authorization: Bearer <token>`. This is required as soon as the server is
-  reachable from another device.
+* a **session token** from signing in with Google or an emailed code, which
+  identifies a person -- see `careeros.auth`;
+* the **service token** in `CAREEROS_API_TOKEN`, which identifies a machine
+  and is what the CLI and the built-in dashboard use.
+
+The gate is on when `careeros.auth.auth_mode()` says `required` (chosen
+automatically as soon as a sign-in method is configured) or when a service
+token is set. With neither, the API is open, which is the single-user localhost
+case; `/api/health` reports `auth_required` so a client can tell which world it
+is in.
 
 The check is middleware rather than a per-router dependency on purpose: a
 dependency has to be remembered on every new endpoint, and the one that gets
@@ -28,9 +32,24 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 
-#: Paths that never require a token: the health probe (so a client can discover
-#: whether auth is on) and the interactive docs.
-PUBLIC_PATHS = frozenset({"/api/health", "/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"})
+#: Paths that never require a token: the health probe and the sign-in
+#: endpoints themselves (you cannot present a session before you have one),
+#: plus the interactive docs.
+PUBLIC_PATHS = frozenset(
+    {
+        "/api/health",
+        "/api/auth/describe",
+        "/api/auth/google/start",
+        "/api/auth/google/callback",
+        "/api/auth/google/exchange",
+        "/api/auth/email/start",
+        "/api/auth/email/verify",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/docs/oauth2-redirect",
+    }
+)
 
 #: Local dev origins allowed when nothing is configured: the Expo web dev
 #: server, Expo Go's web host, and Vite's default.
@@ -50,7 +69,10 @@ def api_token() -> str | None:
 
 
 def auth_required() -> bool:
-    return api_token() is not None
+    """Whether `/api/*` demands a credential of any kind."""
+    from careeros.auth import AuthMode, auth_mode
+
+    return api_token() is not None or auth_mode() is AuthMode.REQUIRED
 
 
 def allowed_origins() -> list[str]:
@@ -70,12 +92,25 @@ def allowed_origins() -> list[str]:
     return origins
 
 
-def _token_matches(presented: str) -> bool:
+def _service_token_matches(presented: str) -> bool:
     expected = api_token()
     if not expected:
-        return True
+        return False
     # Constant-time compare: the token is a bearer secret.
     return hmac.compare_digest(presented, expected)
+
+
+def _credential_accepted(presented: str) -> bool:
+    """A session token or the service token. Nothing else."""
+    from careeros.auth.tokens import TokenError, looks_like_session_token, read_token
+
+    if looks_like_session_token(presented):
+        try:
+            read_token(presented)
+        except TokenError:
+            return False
+        return True
+    return _service_token_matches(presented)
 
 
 def install_security(app: FastAPI, public_paths: Iterable[str] = PUBLIC_PATHS) -> None:
@@ -103,14 +138,16 @@ def install_security(app: FastAPI, public_paths: Iterable[str] = PUBLIC_PATHS) -
 
         header = request.headers.get("authorization", "")
         scheme, _, presented = header.partition(" ")
-        if scheme.lower() != "bearer" or not presented or not _token_matches(presented):
+        if scheme.lower() != "bearer" or not presented or not _credential_accepted(presented):
             return JSONResponse(
                 status_code=401,
                 content={
                     "detail": (
-                        "Missing or invalid bearer token. Set the same value as "
-                        "CAREEROS_API_TOKEN in the app's Settings screen."
-                    )
+                        "Sign in to continue. POST /api/auth/google/start or "
+                        "/api/auth/email/start, or present CAREEROS_API_TOKEN "
+                        "as a bearer token for machine access."
+                    ),
+                    "sign_in": "/api/auth/describe",
                 },
                 headers={"WWW-Authenticate": "Bearer"},
             )

@@ -7,17 +7,20 @@ plain SQLAlchemy and portable -- JSON columns map to `jsonb`).
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from careeros.config import taxonomy
 from careeros.db.models import Base, CareerDomain
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = Path(os.getenv("CAREEROS_HOME", Path.home() / ".careeros")) / "careeros.db"
 
@@ -88,8 +91,43 @@ def reset_engine() -> None:
 
 def init_db(seed_domains: bool = True) -> None:
     Base.metadata.create_all(get_engine())
+    add_missing_columns()
     if seed_domains:
         sync_domain_taxonomy()
+
+
+def add_missing_columns() -> None:
+    """Additive-only migration for databases created by an earlier version.
+
+    `create_all` adds new *tables* but never new *columns*, so a database that
+    predates the identity columns on `user` would fail on first query. This
+    walks the models, compares them with the live schema and issues ALTER TABLE
+    for anything missing. Additive only: nothing here drops or retypes a
+    column, so it cannot lose data, and a full migration tool can take over
+    later without undoing it.
+    """
+    engine = get_engine()
+    inspector = inspect(engine)
+    live_tables = set(inspector.get_table_names())
+
+    for table in Base.metadata.sorted_tables:
+        if table.name not in live_tables:
+            continue
+        present = {col["name"] for col in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in present:
+                continue
+            if not column.nullable and column.default is None and column.server_default is None:
+                # Cannot be added to a populated table without a value; leave
+                # it to a real migration rather than guessing one.
+                logger.warning(
+                    "cannot add required column %s.%s automatically", table.name, column.name
+                )
+                continue
+            ddl = column.type.compile(dialect=engine.dialect)
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {ddl}'))
+            logger.info("added column %s.%s", table.name, column.name)
 
 
 def sync_domain_taxonomy() -> None:
