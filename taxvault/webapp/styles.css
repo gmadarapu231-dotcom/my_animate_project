@@ -34,29 +34,50 @@
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* The dark palette, defined once. The two blocks below only map it, so a
+   colour is never edited in two places: the media query is the automatic
+   case, and `[data-theme="dark"]` is the explicit one for a host that forces
+   a theme. */
+:root {
+  --d-navy: #5b8ae0;
+  --d-green: #35b97c;
+  --d-gold: #e0bb4a;
+  --d-bg: #0d1117;
+  --d-panel: #161b22;
+  --d-panel-2: #1b212a;
+  --d-ink: #e8edf3;
+  --d-muted: #98a4b3;
+  --d-line: #2a313b;
+  --d-accent-ink: #0d1117;
+  --d-good-bg: #12291f;
+  --d-warn: #fbbf24;
+  --d-warn-bg: #2c2312;
+  --d-bad: #f87171;
+  --d-bad-bg: #2d1615;
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --panel-2: #1b212a;
-    --ink: #e8edf3;
-    --muted: #98a4b3;
-    --line: #2a313b;
-    /* Navy is unreadable as an accent on a dark ground, so dark mode lifts it
-       to a tint of the same hue and keeps the gold for emphasis. */
-    --navy: #5b8ae0;
-    --green: #35b97c;
-    --gold: #e0bb4a;
-    --accent: var(--navy);
-    --accent-ink: #0d1117;
-    --good: var(--green);
-    --good-bg: #12291f;
-    --warn: #fbbf24;
-    --warn-bg: #2c2312;
-    --bad: #f87171;
-    --bad-bg: #2d1615;
+    --navy: var(--d-navy); --green: var(--d-green); --gold: var(--d-gold);
+    --bg: var(--d-bg); --panel: var(--d-panel); --panel-2: var(--d-panel-2);
+    --ink: var(--d-ink); --muted: var(--d-muted); --line: var(--d-line);
+    --accent: var(--d-navy); --accent-ink: var(--d-accent-ink);
+    --good: var(--d-green); --good-bg: var(--d-good-bg);
+    --warn: var(--d-warn); --warn-bg: var(--d-warn-bg);
+    --bad: var(--d-bad); --bad-bg: var(--d-bad-bg);
     --shadow: none;
   }
+}
+
+:root[data-theme="dark"] {
+  --navy: var(--d-navy); --green: var(--d-green); --gold: var(--d-gold);
+  --bg: var(--d-bg); --panel: var(--d-panel); --panel-2: var(--d-panel-2);
+  --ink: var(--d-ink); --muted: var(--d-muted); --line: var(--d-line);
+  --accent: var(--d-navy); --accent-ink: var(--d-accent-ink);
+  --good: var(--d-green); --good-bg: var(--d-good-bg);
+  --warn: var(--d-warn); --warn-bg: var(--d-warn-bg);
+  --bad: var(--d-bad); --bad-bg: var(--d-bad-bg);
+  --shadow: none;
 }
 
 * { box-sizing: border-box; }
@@ -92,6 +113,7 @@ header.bar .w-vault { color: var(--green); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) header.bar .w-tax { color: #dbe6f7; }
 }
+:root[data-theme="dark"] header.bar .w-tax { color: #dbe6f7; }
 header.bar .who { margin-left: auto; font-size: 12px; color: var(--muted); text-align: right; }
 
 main { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; padding: var(--gutter); padding-bottom: 96px; }
@@ -300,13 +322,17 @@ a { color: var(--accent); }
    appears: a promise is worth making at the door and not on every screen. */
 .lockup { display: block; margin: 4px auto 18px; width: min(340px, 82%); height: auto; }
 @media (min-width: 820px) { .lockup { width: 380px; margin-top: 8px; } }
+/* The mark is drawn for a light ground; on a dark one it needs a card behind
+   it rather than a filter, which would muddy the gold. */
 @media (prefers-color-scheme: dark) {
-  /* The mark is drawn for a light ground; on a dark one it needs a card behind
-     it rather than a filter, which would muddy the gold. */
   :root:not([data-theme="light"]) .lockup {
     background: #ffffff; border-radius: var(--radius); padding: 14px 10px;
     box-sizing: border-box;
   }
+}
+:root[data-theme="dark"] .lockup {
+  background: #ffffff; border-radius: var(--radius); padding: 14px 10px;
+  box-sizing: border-box;
 }
 
 /* Gold is the brand\'s accent of last resort: it marks the one thing on a
