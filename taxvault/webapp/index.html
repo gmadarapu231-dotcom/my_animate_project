@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TaxVault</title>
+<meta name="description" content="AI-powered tax filing. Estimate federal and state tax from your W-2, compare a regular filing against a planning one, check for unfiled years, and choose how to pay.">
+<meta name="theme-color" content="#18305F" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TaxVault">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" type="image/svg+xml" href="/static/mark.svg">
+<link rel="apple-touch-icon" href="/static/mark.svg">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <a class="brand" href="/" aria-label="TaxVault home">
+      <img class="mark" src="/static/mark.svg" alt="" width="34" height="34">
+      <span class="wordmark"><span class="w-tax">Tax</span><span class="w-vault">Vault</span></span>
+    </a>
+    <div class="who" id="who"></div>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button data-view="account" aria-current="page"><span class="glyph" aria-hidden="true">◍</span>Account</button>
+      <button data-view="documents" data-needs-identity><span class="glyph" aria-hidden="true">▤</span>Documents</button>
+      <button data-view="estimate" data-needs-identity><span class="glyph" aria-hidden="true">◎</span>Estimate</button>
+      <button data-view="filings" data-needs-identity><span class="glyph" aria-hidden="true">◷</span>Prior years</button>
+      <button data-view="payment" data-needs-identity><span class="glyph" aria-hidden="true">◈</span>Payment</button>
+    </nav>
+  </header>
+
+  <main id="main" aria-live="polite">
+    <div class="card"><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:85%"></div></div>
+  </main>
+</div>
+
+<template id="tpl-foot">
+  <p class="foot">
+    Estimates only. This is not an IRS e-file provider and does not transmit returns.<br>
+    Figures are computed on published rate schedules and should be confirmed before filing.
+  </p>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -103,7 +103,35 @@ def test_identity_requires_a_verified_mobile(client):
         "ssn": "123-45-6789", "email": "dana@example.com", "mobile": "4155550132",
     })
     assert response.status_code == 400
-    assert "Verify this mobile number first" in response.json()["detail"]
+    assert "Verify your mobile number first" in response.json()["detail"]
+
+
+def test_identity_refuses_a_mobile_that_is_not_the_verified_one(client):
+    """Verifying one number then claiming another must not pass."""
+    token = sign_in(client)
+    started = client.post("/api/auth/mobile/start", json={"mobile": "4155550132"},
+                          headers=auth(token))
+    client.post("/api/auth/mobile/verify",
+                json={"code": started.json()["development_code"]}, headers=auth(token))
+    response = client.post("/api/auth/identity", headers=auth(token), json={
+        "ssn": "123-45-6789", "email": "dana@example.com", "mobile": "4155559999",
+    })
+    assert response.status_code == 400
+    assert "not the mobile number verified" in response.json()["detail"]
+
+
+def test_identity_accepts_an_omitted_mobile_once_one_is_verified(client):
+    """The server already holds the proven number; re-typing it proves nothing."""
+    token = sign_in(client)
+    started = client.post("/api/auth/mobile/start", json={"mobile": "4155550132"},
+                          headers=auth(token))
+    client.post("/api/auth/mobile/verify",
+                json={"code": started.json()["development_code"]}, headers=auth(token))
+    response = client.post("/api/auth/identity", headers=auth(token), json={
+        "ssn": "123-45-6789", "email": "dana@example.com", "mobile": "",
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["identity_verified"] is True
 
 
 def test_ssn_is_never_returned_in_full(client):

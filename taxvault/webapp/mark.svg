@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="TaxVault">
+  <title>TaxVault</title>
+  <!-- The mark alone, square, for the favicon, the app icon and the header.
+       Vector rather than raster so it stays sharp from 16px to a splash
+       screen, at about 2KB instead of a download. -->
+  <defs>
+    <clipPath id="tvm-shield">
+      <path d="M186 44 L242 62 L242 140 C242 182 210 210 186 222 C162 210 130 182 130 140 L130 62 Z"/>
+    </clipPath>
+  </defs>
+
+  <g>
+    <circle cx="96" cy="128" r="68" fill="none" stroke="#18305F" stroke-width="18"/>
+    <circle cx="96" cy="128" r="47" fill="none" stroke="#18305F" stroke-width="4.5"
+            stroke-linecap="round" stroke-dasharray="210 86" transform="rotate(-140 96 128)"/>
+    <g fill="#C9A227">
+      <circle cx="96" cy="75" r="5.6"/>
+      <circle cx="96" cy="181" r="5.6"/>
+      <circle cx="43" cy="128" r="5.6"/>
+      <circle cx="141" cy="90" r="5.6"/>
+      <circle cx="141" cy="166" r="5.6"/>
+    </g>
+    <g stroke="#18305F" stroke-width="10" stroke-linecap="round">
+      <line x1="96" y1="128" x2="106" y2="90"/>
+      <line x1="96" y1="128" x2="134" y2="138"/>
+      <line x1="96" y1="128" x2="86" y2="166"/>
+      <line x1="96" y1="128" x2="58" y2="118"/>
+    </g>
+    <circle cx="96" cy="128" r="17" fill="#C9A227"/>
+    <circle cx="96" cy="128" r="7.5" fill="#FFFFFF"/>
+  </g>
+
+  <g>
+    <path d="M186 44 L242 62 L242 140 C242 182 210 210 186 222 C162 210 130 182 130 140 L130 62 Z"
+          fill="#18305F"/>
+    <path d="M186 44 L242 62 L242 140 C242 182 210 210 186 222 Z" fill="#107A4B"/>
+    <path d="M186 58 L230 72 L230 138 C230 170 206 190 186 199 C166 190 142 170 142 138 L142 72 Z"
+          fill="none" stroke="#FFFFFF" stroke-width="3.4"/>
+    <g clip-path="url(#tvm-shield)" stroke="#FFFFFF" stroke-width="2.4" fill="none"
+       stroke-linecap="round" stroke-linejoin="round">
+      <path d="M186 64 V204"/>
+      <path d="M186 86 H164 V112"/>
+      <path d="M186 112 H208 V136"/>
+      <path d="M186 138 H162 V162"/>
+      <path d="M186 162 H210 V180"/>
+      <path d="M164 128 H150 V148"/>
+      <path d="M208 90 H222 V108"/>
+    </g>
+    <g fill="#FFFFFF" clip-path="url(#tvm-shield)">
+      <circle cx="164" cy="112" r="4"/><circle cx="208" cy="136" r="4"/>
+      <circle cx="162" cy="162" r="4"/><circle cx="210" cy="180" r="4"/>
+      <circle cx="150" cy="148" r="4"/><circle cx="222" cy="108" r="4"/>
+      <circle cx="164" cy="128" r="3.2"/><circle cx="208" cy="90" r="3.2"/>
+    </g>
+  </g>
+</svg>

@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from taxos.crypto import (
+from taxvault.crypto import (
     CryptoError,
     decrypt_field,
     encrypt_field,
@@ -17,10 +17,10 @@ from taxos.crypto import (
     seal_ssn,
     ssn_index,
 )
-from taxos.engines.compliance import estimate_penalties
-from taxos.engines.federal import TaxProfile, compute_federal
-from taxos.engines.payments import build_payment_options, estimated_payments_for_next_year
-from taxos.engines.planning import apply_strategies, build_strategies
+from taxvault.engines.compliance import estimate_penalties
+from taxvault.engines.federal import TaxProfile, compute_federal
+from taxvault.engines.payments import build_payment_options, estimated_payments_for_next_year
+from taxvault.engines.planning import apply_strategies, build_strategies
 
 
 def D(value):

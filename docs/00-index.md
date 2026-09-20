@@ -1,4 +1,10 @@
-# CareerOS — Design Documentation
+# Design Documentation
+
+Two products live in this repository. **CareerOS** is below; **TaxVault** is at
+the end. They share conventions — FastAPI, SQLAlchemy, YAML-driven
+configuration, deterministic engines — and no code.
+
+## CareerOS
 
 The system is a **Career OS**, not a resume agent. Everything is organised
 around one hierarchy:
@@ -26,6 +32,17 @@ a finance role or a veterinary practice manager next week — with no code chang
 | 10 | [Development Roadmap](10-roadmap.md) | What Phase 1 shipped, Phases 2–5, risks |
 | 11 | [Agent Architecture](11-agent-architecture.md) | The tool-use loop, the 18-tool surface, and the capabilities deliberately withheld |
 | 12 | [Client Architecture](12-client-architecture.md) | The universal app (iOS/Android/web from one component tree), transport security, and what is and isn't verified |
+
+## TaxVault
+
+US tax estimation and filing preparation: W-2 ingest, federal and state
+estimates in regular or planning mode, prior-year filing checks, and payment
+planning. An estimation system, not an IRS e-file provider.
+
+| # | Document | Covers |
+|---|---|---|
+| 20 | [Tax Architecture](20-tax-architecture.md) | Layers, Form 1040 order of operations, regular vs planning, the 51 jurisdictions, prior years, payment |
+| 21 | [Tax Security](21-tax-security.md) | SSN envelope encryption and blind index, the two gates, no-password sign-in, transport, audit trail, known limits |
 
 ## Two ways to run
 

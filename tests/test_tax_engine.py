@@ -13,9 +13,9 @@ from decimal import Decimal
 
 import pytest
 
-from taxos.engines.federal import TaxProfile, compute_federal
-from taxos.engines.state import compute_state, compute_states
-from taxos.money import brackets_from, money, phase_out, tax_on
+from taxvault.engines.federal import TaxProfile, compute_federal
+from taxvault.engines.state import compute_state, compute_states
+from taxvault.money import brackets_from, money, phase_out, tax_on
 
 
 def D(value):
@@ -259,7 +259,7 @@ def test_massachusetts_adds_the_millionaires_surtax():
 
 
 def test_joint_brackets_double_in_california_but_not_in_virginia():
-    from taxos.config import states
+    from taxvault.config import states
 
     params = states(2025)
     assert params.brackets("CA", "married_jointly")[0].ceiling == D("21512")  # 10,756 x 2
@@ -267,7 +267,7 @@ def test_joint_brackets_double_in_california_but_not_in_virginia():
 
 
 def test_new_york_uses_its_own_joint_table():
-    from taxos.config import states
+    from taxvault.config import states
 
     assert states(2025).brackets("NY", "married_jointly")[0].ceiling == D("17150")
 
@@ -298,7 +298,7 @@ def test_the_home_state_credits_tax_paid_to_a_work_state():
 
 def test_every_jurisdiction_computes_without_error():
     """51 jurisdictions, one income. Catches a typo in any rate table."""
-    from taxos.config import states
+    from taxvault.config import states
 
     for code in states(2025).codes():
         result = compute_state(code, state_income=85000, filing_status="single",

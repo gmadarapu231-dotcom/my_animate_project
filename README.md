@@ -290,3 +290,147 @@ palette.
 it mutates anything, put its safety check *inside* the tool so the agent cannot
 perform the action without it. `assert_tool_surface_is_safe()` will reject a
 tool that reintroduces a withheld capability.
+
+---
+
+# TaxVault
+
+<img src="taxvault/webapp/logo.svg" alt="TaxVault — AI-powered tax filing. Secure. Accurate. Trusted." width="420">
+
+The second product in this repository: **US tax estimation and filing
+preparation**. Upload a W-2, get a federal and state estimate, compare filing
+as-is against a planning scenario, find unfiled years, and price how to pay.
+
+It is an estimation system. It is **not an IRS e-file provider** and does not
+transmit returns — transmitting requires an EFIN and a Modernized e-File
+connection.
+
+```bash
+$ taxvault estimate --wages 118000 --withheld 14200 --state CA \
+      --status mfj --children 2 --method planning
+
+Estimated refund of 13,147
+Tax year 2025 · married_jointly · planning method
+
+  Adjusted gross income                   118,000
+  Deductions                               31,500  (standard)
+  Taxable income                           86,500
+  Federal tax                               5,503
+  Federal refund                            8,697
+
+  California (graduated)
+    Tax                                     2,350
+    Refund                                  4,450
+
+  TOTAL                              refund 13,147
+  Effective 4.66% · marginal 12%
+
+Planning options:
+  [shut]     Increase pre-tax 401(k) contributions            2,790  closes 2025-12-31
+  [shut]     Top up the Health Savings Account                1,026  closes 2026-04-15
+  [open] fyi Reduce over-withholding                              0
+```
+
+## Run it
+
+```bash
+pip install -e ".[dev]"
+taxvault serve                 # API + the web/mobile client on :8000
+```
+
+Open <http://localhost:8000>. The same page is the desktop app and the mobile
+app — it is an installable PWA, so on a phone it adds to the home screen and
+runs full-screen.
+
+To try it without configuring email and SMS delivery:
+
+```bash
+TAXVAULT_DEV_CODES=1 taxvault serve
+```
+
+One-time codes then come back in the API response instead of being delivered.
+It refuses to engage against a real database, and both `/api/health` and the
+sign-in screen say when it is on.
+
+### Other commands
+
+```bash
+taxvault states                # all 51 jurisdictions, grouped by how they tax
+taxvault states CA             # one state in detail
+taxvault limits --year 2025    # brackets, deductions, contribution limits
+taxvault payment 9400 --cannot-pay   # price every way to settle a balance
+```
+
+## What it does
+
+| | |
+|---|---|
+| **Sign in** | A code to your email. No password exists to choose, forget, or steal. |
+| **Verify identity** | SSN + verified email + verified mobile, before any tax data opens. |
+| **Documents** | W-2 by typed boxes, pasted text, or file. Cross-checked as it goes in — Box 4 against Box 3, Box 6 against Box 5, Box 5 less Box 1 against the Box 12 codes. |
+| **Estimate** | Federal plus every state return that follows, line by line. |
+| **Regular or planning** | Planning re-runs the whole calculation per strategy and shows what each is worth — and whether its deadline has passed. |
+| **Prior years** | Which years are unfiled, what they owe, the penalties so far, and the three-year cut-off after which a refund is gone. |
+| **Payment** | Refund routes, or every way to settle a balance priced to total cost including fees, penalty and interest. |
+
+## States
+
+All 51 jurisdictions, split the way it actually matters:
+
+* **No income tax on wages (9)** — AK, FL, NH, NV, SD, TN, TX, WA, WY. Not
+  simply zero: Washington taxes large long-term gains, and withholding sent to
+  a no-tax state is recoverable by filing.
+* **Flat rate (15)** — one rate, rarely one rule. Colorado starts from federal
+  taxable income, Mississippi exempts the first $10,000, Utah swaps the
+  deduction for a phasing credit, Massachusetts adds a millionaire's surtax.
+* **Graduated (27)** — doubled brackets for joint filers in most, held the same
+  in a few, with their own tables in NY, NJ, VT, WI and ND.
+
+Multi-state work gets a non-resident return, a resident return taxing worldwide
+income, and a credit at home for tax paid elsewhere — unless the states have a
+reciprocity agreement, in which case the work state refunds in full.
+
+## How the numbers are kept honest
+
+* **`Decimal` everywhere.** Tax is not a domain where a float is acceptable.
+* **Rates are data.** One YAML per year with a cited source, so a new tax year
+  is a data review rather than a code change. 2025 carries the OBBBA changes;
+  2024 is kept so an unfiled 2024 return is estimated on 2024 law.
+* **Gains stack.** $40k wages plus $40k of long-term gain does not get the 0%
+  rate on the gain — the wages fill the bracket first.
+* **Planning is measured, not multiplied.** Each move is priced by running the
+  whole return again, because a marginal rate times a contribution is wrong
+  wherever a phase-out sits.
+* **Tests use hand-computed figures**, worked from the published schedules
+  rather than captured from a previous run.
+
+## Security
+
+Full detail in [docs/21-tax-security.md](docs/21-tax-security.md). The short
+version: SSNs are sealed with AES-GCM under a per-field derived key bound to
+their own row, with a separate keyed blind index so filing history is
+searchable without ever decrypting. There are no passwords. Signing in proves
+an email address; reading tax data additionally requires identity verification,
+checked against the database on every request. Responses carry the last four
+digits and never the number.
+
+**Set `TAXVAULT_MASTER_KEY` from a KMS in production.** Without it a key is
+generated to a 0600 file, which is right for a laptop and not for a server.
+
+## Brand assets
+
+`taxvault/webapp/logo.svg` is the full lockup — mark, wordmark and tagline.
+`taxvault/webapp/mark.svg` is the mark alone, square, used for the favicon, the
+installed app icon and the header. Both are vector, so they stay sharp from a
+16px favicon to a splash screen and cost about 2KB each rather than a download.
+
+| | |
+|---|---|
+| Vault navy | `#18305F` |
+| Shield green | `#107A4B` |
+| Bolt gold | `#C9A227` |
+
+## Documentation
+
+* [Tax Architecture](docs/20-tax-architecture.md)
+* [Tax Security](docs/21-tax-security.md)

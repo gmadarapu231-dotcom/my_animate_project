@@ -72,4 +72,4 @@ def loaded(db, user, pipeline):
 
 # The tax system's fixtures live in their own module so the two products'
 # fixtures cannot shadow each other; importing them here registers them.
-pytest_plugins = ["tests.conftest_taxos"]
+pytest_plugins = ["tests.conftest_taxvault"]

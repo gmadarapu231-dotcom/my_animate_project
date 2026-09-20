@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "careeros"
 version = "0.1.0"
-description = "Universal AI career operating system - domain-agnostic job search, resumes, applications and email"
+description = "Universal AI career operating system, and TaxVault - US tax estimation and filing preparation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -15,6 +15,10 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
     "pyyaml>=6.0",
+    # TaxVault seals SSNs and bank details with AES-GCM; this is not optional.
+    "cryptography>=41.0",
+    # FastAPI needs it for the W-2 file upload endpoint.
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -25,9 +29,10 @@ dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [project.scripts]
 careeros = "careeros.cli:main"
+taxvault = "taxvault.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["careeros*"]
+include = ["careeros*", "taxvault*"]
 
 [tool.setuptools.package-data]
 careeros = [
@@ -35,6 +40,12 @@ careeros = [
     "config/taxonomy/*.yaml",
     "config/sources/*.yaml",
     "dashboard/*.html",
+]
+taxvault = [
+    "config/*.yaml",
+    "config/federal/*.yaml",
+    "config/states/*.yaml",
+    "webapp/*",
 ]
 
 [tool.pytest.ini_options]

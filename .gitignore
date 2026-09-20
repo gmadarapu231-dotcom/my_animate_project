@@ -25,6 +25,6 @@ clients/app/.expo/
 clients/app/web-build/
 *.tsbuildinfo
 
-# --- taxos local state ---
-.taxos/
-taxos_master_key
+# --- taxvault local state ---
+.taxvault/
+taxvault_master_key

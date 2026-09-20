@@ -1,0 +1,15 @@
+{
+  "name": "TaxVault — AI-powered tax filing",
+  "short_name": "TaxVault",
+  "description": "Estimate federal and state tax from your W-2, compare regular and planning methods, check unfiled years, and choose how to pay.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f7f9",
+  "theme_color": "#18305F",
+  "icons": [
+    { "src": "/static/mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/static/mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
