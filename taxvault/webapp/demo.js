@@ -97,8 +97,13 @@
       return F.document;
     }],
     ['POST', /^\/api\/documents\/w2\/(text|file)$/, () => {
+      // The demo answers as a readable payroll PDF would: the boxes come out
+      // of the file. A real scan would come back at zero confidence, which the
+      // upload tab explains.
       state.documents = [F.document];
-      return F.document;
+      return Object.assign({}, F.document, {
+        extraction: { method: 'pdf_text', readable: true, pages: 1, notes: [] },
+      });
     }],
     ['DELETE', /^\/api\/documents\/\d+$/, () => { state.documents = []; return { deleted: 1 }; }],
 

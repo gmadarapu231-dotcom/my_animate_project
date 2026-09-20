@@ -381,23 +381,8 @@ def parse_w2_text(text: str) -> tuple[W2, float, list[str]]:
     if ein:
         form.employer_ein = ein.group(1)
 
-    for code, amount in re.findall(r"\b(?:box\s*12\w*\s*)?([A-Z]{1,2})\s*[:\-]?\s*\$?\s*([0-9][0-9,]*\.?[0-9]{0,2})",
-                                   body):
-        if code.upper() in ELECTIVE_DEFERRAL_CODES | CAFETERIA_CODES | {"C", "P", "T", "DD"}:
-            form.box12[code.upper()] = money(amount.replace(",", ""))
-
-    for state, wages, withheld in re.findall(
-        rf"\b([A-Z]{{2}})\s+[\w\-/]*\s*{_MONEY}\s+{_MONEY}", body
-    ):
-        if state in _US_STATES:
-            form.states.append(
-                W2StateLine(
-                    state=state,
-                    state_wages=money(wages.replace(",", "")),
-                    state_withheld=money(withheld.replace(",", "")),
-                )
-            )
-            break  # one state line per pass; extras go through manual entry
+    _read_box12(form, body)
+    _read_state_lines(form, body)
 
     critical = ["wages", "federal_withheld", "social_security_wages", "medicare_wages"]
     confidence = round(sum(1 for name in critical if name in found) / len(critical), 3)
@@ -407,6 +392,60 @@ def parse_w2_text(text: str) -> tuple[W2, float, list[str]]:
             "Could not read: " + ", ".join(missing) + ". Enter these boxes by hand."
         )
     return form, confidence, warnings
+
+
+#: Box 12 written with its box number, as on the form: "12a D 8,000.00".
+_BOX12_LABELLED = re.compile(
+    r"\b12\s*[a-dA-D]?\s*[:\-]?\s*([A-Z]{1,2})\b[\s:\-]*\$?\s*([0-9][0-9,]*\.?[0-9]{0,2})"
+)
+#: Box 12 written bare on its own line: "D  8,000.00". The amount must carry
+#: cents, which is what keeps "Form W-2" out of the results -- without it, that
+#: heading parses as code W for $2 and invents an HSA contribution.
+_BOX12_BARE = re.compile(r"(?:^|\n)\s*([A-Z]{1,2})[\s:\-]+\$?\s*([0-9][0-9,]*\.[0-9]{2})\b")
+#: An amount with cents or a thousands separator. Deliberately stricter than
+#: `_MONEY`: a bare integer in a form's furniture is not a figure.
+_AMOUNT = re.compile(r"(?<![\d.])(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})(?![\d])")
+
+_BOX12_CODES = ELECTIVE_DEFERRAL_CODES | CAFETERIA_CODES | {"C", "P", "T", "DD", "Z"}
+
+
+def _read_box12(form: "W2", body: str) -> None:
+    for pattern in (_BOX12_LABELLED, _BOX12_BARE):
+        for code, amount in pattern.findall(body):
+            code = code.upper()
+            if code in _BOX12_CODES and code not in form.box12:
+                form.box12[code] = money(amount.replace(",", ""))
+
+
+def _read_state_lines(form: "W2", body: str) -> None:
+    """Boxes 15-17, read a line at a time.
+
+    Extracted W-2 text puts the whole state row on one line -- "15 State CA
+    16 State wages 118,000.00 17 State income tax 6,800.00" -- with the labels
+    sitting between the code and its figures. So rather than trying to match
+    the row's shape, find the state code on a line and take the amounts that
+    follow it on that same line.
+    """
+    seen: set[str] = set()
+    for line in body.splitlines():
+        codes = [c for c in re.findall(r"\b([A-Z]{2})\b", line) if c in _US_STATES]
+        if not codes:
+            continue
+        code = codes[0]
+        if code in seen:
+            continue
+        tail = line[line.index(code) + 2:]
+        amounts = [money(a.replace(",", "")) for a in _AMOUNT.findall(tail)]
+        if not amounts:
+            continue
+        seen.add(code)
+        form.states.append(
+            W2StateLine(
+                state=code,
+                state_wages=amounts[0],
+                state_withheld=amounts[1] if len(amounts) > 1 else ZERO,
+            )
+        )
 
 
 _US_STATES = {

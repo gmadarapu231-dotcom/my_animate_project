@@ -166,11 +166,12 @@ def test_a_mistyped_box_is_caught_on_upload(client):
     assert any(w["severity"] == "error" and w["box"] == "4" for w in body["warnings"])
 
 
-def test_an_unreadable_scan_is_stored_but_not_guessed_at(client):
+def test_an_unreadable_upload_is_stored_but_not_guessed_at(client):
+    """A photo is pixels. It is kept, and the response says it was not read."""
     token = verify_identity(client, sign_in(client))
     response = client.post(
         "/api/documents/w2/file",
-        files={"file": ("w2.pdf", b"%PDF-1.4 fake scan", "application/pdf")},
+        files={"file": ("w2.jpg", b"\xff\xd8\xff\xe0 jpeg bytes", "image/jpeg")},
         data={"tax_year": "2025"},
         headers=auth(token),
     )
@@ -178,7 +179,20 @@ def test_an_unreadable_scan_is_stored_but_not_guessed_at(client):
     body = response.json()
     assert body["parse_confidence"] == 0.0
     assert body["status"] == "needs_review"
-    assert "does not run OCR" in body["warnings"][0]["message"]
+    assert any("OCR" in w["message"] for w in body["warnings"])
+
+
+def test_a_corrupt_pdf_is_told_apart_from_a_scan(client):
+    """Both are unreadable, but only one is worth re-downloading."""
+    token = verify_identity(client, sign_in(client))
+    body = client.post(
+        "/api/documents/w2/file",
+        files={"file": ("broken.pdf", b"%PDF-1.4 truncated", "application/pdf")},
+        data={"tax_year": "2025"},
+        headers=auth(token),
+    ).json()
+    assert body["parse_confidence"] == 0.0
+    assert any("corrupt or password-protected" in w["message"] for w in body["warnings"])
 
 
 # ---------------------------------------------------------------------------

@@ -169,9 +169,13 @@ wherever it could be misread.
 ## What is deliberately absent
 
 * **E-filing.** Needs an EFIN and an MeF connection.
-* **OCR.** An uploaded PDF is stored encrypted and reported at zero parse
-  confidence. Silently contributing nothing to an estimate that looks complete
-  would be the worst failure this system could have.
+* **OCR.** A PDF that carries text -- which is what every payroll portal
+  emits -- is read, and its boxes come straight out. A scan or a photograph
+  carries pixels instead, and reading those needs OCR this server does not
+  run: the file is stored encrypted, the confidence comes back at zero, and
+  the response says plainly that it was not read. Silently contributing
+  nothing to an estimate that looks complete would be the worst failure this
+  system could have.
 * **Real IRS identity proofing.** The three-factor check confirms the SSN
   matches the account and that codes reached the email and phone on file. It is
   not knowledge-based authentication against a bureau, and says so.

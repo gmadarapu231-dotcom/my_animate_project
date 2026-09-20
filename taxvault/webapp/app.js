@@ -1145,8 +1145,13 @@ function wireDocuments() {
     const form = new FormData();
     form.append('file', input.files[0]);
     form.append('tax_year', el('doc-year').value);
-    await api('/api/documents/w2/file', { method: 'POST', form });
-    toast('File stored. Now type the boxes so it can be used.');
+    const doc = await api('/api/documents/w2/file', { method: 'POST', form });
+    const read = Number(doc.parse_confidence || 0);
+    toast(read >= 1
+      ? 'Read it. Every box came out of the file — check them below.'
+      : read > 0
+        ? `Read ${Math.round(read * 100)}% of the boxes. Fill in the rest below.`
+        : 'Stored securely, but it could not be read. Type the boxes to get an estimate.');
     await refreshDocuments();
     render();
   }));

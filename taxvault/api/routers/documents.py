@@ -30,6 +30,7 @@ from taxvault.auth import audit
 from taxvault.crypto import encrypt_field
 from taxvault.db.models import TaxDocument, Taxpayer
 from taxvault.enums import DocumentKind, DocumentStatus
+from taxvault.forms.extract import extract_text, pair_orphan_amounts
 from taxvault.forms.w2 import W2, parse_w2_text
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -214,12 +215,15 @@ async def add_w2_file(
     taxpayer: Taxpayer = Depends(current_taxpayer),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Upload the original W-2 file.
+    """Upload the original W-2 file, and read it where it can be read.
 
-    A text file is read. A PDF or image is stored encrypted but **not** parsed:
-    that needs an OCR pass this server does not perform, so the confidence
-    comes back at zero and the document is marked for manual entry rather than
-    quietly contributing nothing to an estimate that looks complete.
+    A PDF from a payroll portal carries its text, so the boxes come straight
+    out of it -- which is the common case and the one worth getting right. A
+    scan or a photograph carries pixels instead, and reading those needs OCR
+    this server does not run: the file is stored encrypted, the confidence
+    comes back at zero, and the response says plainly that it was not read
+    rather than quietly contributing nothing to an estimate that looks
+    complete.
     """
     content_type = (file.content_type or "").split(";")[0].strip()
     if content_type and content_type not in ALLOWED_CONTENT:
@@ -238,20 +242,33 @@ async def add_w2_file(
     if not blob:
         raise HTTPException(status_code=400, detail="That file is empty.")
 
-    warnings: list[dict[str, str]] = []
-    if content_type.startswith("text/"):
-        form, confidence, text_warnings = parse_w2_text(blob.decode("utf-8", errors="replace"))
-        warnings = [{"severity": "warning", "box": "", "message": w} for w in text_warnings]
+    extraction = extract_text(blob, content_type, file.filename or "")
+    warnings: list[dict[str, str]] = list(extraction.notes)
+
+    if extraction.readable:
+        form, confidence, text_warnings = parse_w2_text(extraction.text)
+        warnings += [{"severity": "warning", "box": "", "message": w} for w in text_warnings]
+
+        # A W-2 is a grid, and extraction flattens grids: the labels can end up
+        # separated from their amounts. When the ordinary parse comes back poor,
+        # try re-pairing the amounts with the boxes in form order.
+        if confidence < 0.75:
+            repaired = pair_orphan_amounts(extraction.text)
+            if repaired:
+                salvaged, salvaged_confidence, _ = parse_w2_text(repaired)
+                if salvaged_confidence > confidence:
+                    form, confidence = salvaged, round(salvaged_confidence * 0.8, 3)
+                    warnings.append({
+                        "severity": "warning", "box": "",
+                        "message": (
+                            "The boxes were read from the layout rather than from "
+                            "labels, so check every figure against the form before "
+                            "relying on this estimate."
+                        ),
+                    })
     else:
         form, confidence = W2(), 0.0
-        warnings = [{
-            "severity": "warning", "box": "",
-            "message": (
-                f"The {content_type or 'uploaded'} file is stored securely but was not read: "
-                "this server does not run OCR. Enter the boxes to produce an estimate — "
-                "it takes about a minute and is more accurate than any scan."
-            ),
-        }]
+
     form.tax_year = tax_year
 
     document = _store(
@@ -261,8 +278,11 @@ async def add_w2_file(
     )
     audit(session, "document_uploaded", account_id=account.id, actor=account.email,
           subject=f"document:{document.id}", ip_address=client_ip(request),
-          filename=file.filename, bytes=len(blob), content_type=content_type)
-    return _serialise(document)
+          filename=file.filename, bytes=len(blob), content_type=content_type,
+          extraction=extraction.method, readable=extraction.readable)
+    payload = _serialise(document)
+    payload["extraction"] = extraction.to_dict()
+    return payload
 
 
 @router.patch("/{document_id}")
