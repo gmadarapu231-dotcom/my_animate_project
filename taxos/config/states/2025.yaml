@@ -1,0 +1,320 @@
+# State personal income tax parameters, tax year 2025.
+#
+# Three kinds of jurisdiction, which is exactly the distinction the client
+# screen shows:
+#   type: none       -- no tax on wage income at all (9 states)
+#   type: flat       -- one rate on all taxable income
+#   type: graduated  -- a rate schedule
+#
+# `joint` says how the brackets behave for a joint return:
+#   doubled   -- the single bands are doubled (most states)
+#   same      -- the same bands apply (a marriage penalty; MD, VA, NY-ish)
+#   table     -- an explicit `brackets.married_jointly` is given below
+#
+# Local taxes (city/county/school district) are NOT modelled per-locality;
+# where they are significant the state carries `local_note` and an average
+# `local_rate_typical` used only to widen the estimate range.
+tax_year: 2025
+as_of: "2025-01-01"
+source: "State revenue department rate schedules and Tax Foundation 2025 summary"
+review_required: true
+disclaimer: >-
+  State figures change mid-year by legislation and are modelled at statewide
+  level. Treat a state number as an estimate to be confirmed against the
+  state's own return before filing.
+
+# ---------------------------------------------------------------------------
+# No individual income tax on wages
+# ---------------------------------------------------------------------------
+states:
+  AK: {name: Alaska, type: none, note: "No individual income tax and no state sales tax. Permanent Fund Dividend is federally taxable."}
+  FL: {name: Florida, type: none, note: "No individual income tax; constitutionally prohibited."}
+  NV: {name: Nevada, type: none, note: "No individual income tax."}
+  NH:
+    name: New Hampshire
+    type: none
+    note: "No wage income tax. The 3% interest & dividends tax was repealed effective 2025, so 2025 is the first year with no state income tax at all."
+  SD: {name: South Dakota, type: none, note: "No individual income tax."}
+  TN: {name: Tennessee, type: none, note: "No individual income tax; the Hall tax on interest and dividends ended in 2021."}
+  TX: {name: Texas, type: none, note: "No individual income tax; constitutionally prohibited."}
+  WA:
+    name: Washington
+    type: none
+    capital_gains_excise: {rate: 0.07, standard_deduction: 276000, rate_over_1m: 0.0985}
+    note: "No tax on wages. A 7% excise tax applies to long-term capital gains above the annual standard deduction (9.9% on the portion over $1M)."
+  WY: {name: Wyoming, type: none, note: "No individual income tax."}
+
+  # -------------------------------------------------------------------------
+  # Flat rate
+  # -------------------------------------------------------------------------
+  AZ: {name: Arizona, type: flat, rate: 0.025, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Matches the federal standard deduction."}
+  CO: {name: Colorado, type: flat, rate: 0.044, starts_from: federal_taxable_income, joint: doubled, note: "Starts from federal taxable income, so the federal standard deduction flows through."}
+  GA: {name: Georgia, type: flat, rate: 0.0519, standard_deduction: {single: 12000, married_jointly: 24000, head_of_household: 12000}, dependent_exemption: 4000, joint: doubled, note: "Rate steps down annually toward 4.99%."}
+  ID: {name: Idaho, type: flat, rate: 0.053, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Conforms to the federal standard deduction."}
+  IL: {name: Illinois, type: flat, rate: 0.0495, personal_exemption: 2850, joint: doubled, note: "Retirement income (pensions, 401k, IRA, Social Security) is fully exempt."}
+  IN: {name: Indiana, type: flat, rate: 0.030, personal_exemption: 1000, dependent_exemption: 1000, joint: doubled, local_rate_typical: 0.017, local_note: "All 92 counties levy a local income tax, roughly 1.0%-3.0%."}
+  IA: {name: Iowa, type: flat, rate: 0.038, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Moved to a single flat rate in 2025. Retirement income exempt at 55+."}
+  KY: {name: Kentucky, type: flat, rate: 0.040, standard_deduction: {single: 3270, married_jointly: 6540, head_of_household: 3270}, joint: doubled, local_rate_typical: 0.0175, local_note: "Most cities and counties levy an occupational licence tax on wages."}
+  LA: {name: Louisiana, type: flat, rate: 0.030, standard_deduction: {single: 12500, married_jointly: 25000, head_of_household: 12500}, joint: doubled, note: "Replaced graduated brackets with a flat 3% in 2025."}
+  MI: {name: Michigan, type: flat, rate: 0.0425, personal_exemption: 5800, joint: doubled, local_rate_typical: 0.012, local_note: "24 cities levy an income tax; Detroit is 2.4% resident."}
+  MS: {name: Mississippi, type: flat, rate: 0.044, exempt_first: {single: 10000, married_jointly: 10000}, joint: same, note: "Rate applies only above the first $10,000 of taxable income; scheduled to fall to 3% by 2030."}
+  NC: {name: North Carolina, type: flat, rate: 0.0425, standard_deduction: {single: 12750, married_jointly: 25500, head_of_household: 19125}, joint: doubled, note: "Rate steps down to 3.99% in 2026."}
+  PA: {name: Pennsylvania, type: flat, rate: 0.0307, joint: doubled, local_rate_typical: 0.015, local_note: "Local earned income tax averages ~1.5%; Philadelphia is 3.75% resident.", note: "No standard deduction. Retirement income is exempt."}
+  UT: {name: Utah, type: flat, rate: 0.045, taxpayer_credit: {rate: 0.06, phase_out_start: {single: 16702, married_jointly: 33404}}, joint: doubled, note: "A taxpayer credit replaces the standard deduction and phases out with income."}
+
+  # -------------------------------------------------------------------------
+  # Graduated
+  # -------------------------------------------------------------------------
+  AL:
+    name: Alabama
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 3000, married_jointly: 8500, head_of_household: 5200}
+    personal_exemption: 1500
+    brackets: {single: [{up_to: 500, rate: 0.02}, {up_to: 3000, rate: 0.04}, {rate: 0.05}]}
+    local_rate_typical: 0.01
+    note: "Federal income tax paid is deductible on the state return."
+  AR:
+    name: Arkansas
+    type: graduated
+    joint: same
+    standard_deduction: {single: 2410, married_jointly: 4820, head_of_household: 2410}
+    brackets: {single: [{up_to: 4500, rate: 0.02}, {up_to: 8900, rate: 0.03}, {rate: 0.039}]}
+  CA:
+    name: California
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 5540, married_jointly: 11080, head_of_household: 11080}
+    exemption_credit: {single: 149, married_jointly: 298, dependent: 461}
+    brackets:
+      single: [{up_to: 10756, rate: 0.01}, {up_to: 25499, rate: 0.02}, {up_to: 40245, rate: 0.04},
+               {up_to: 55866, rate: 0.06}, {up_to: 70606, rate: 0.08}, {up_to: 360659, rate: 0.093},
+               {up_to: 432787, rate: 0.103}, {up_to: 721314, rate: 0.113}, {rate: 0.123}]
+    surtax: {rate: 0.01, over: 1000000, label: "Mental Health Services Act surcharge"}
+    note: "Top combined rate reaches 13.3%. No preferential rate for capital gains."
+  CT:
+    name: Connecticut
+    type: graduated
+    joint: doubled
+    personal_exemption: {single: 15000, married_jointly: 24000}
+    brackets:
+      single: [{up_to: 10000, rate: 0.02}, {up_to: 50000, rate: 0.045}, {up_to: 100000, rate: 0.055},
+               {up_to: 200000, rate: 0.06}, {up_to: 250000, rate: 0.065}, {up_to: 500000, rate: 0.069}, {rate: 0.0699}]
+    note: "A recapture provision claws back lower-bracket benefit at high income."
+  DE:
+    name: Delaware
+    type: graduated
+    joint: same
+    standard_deduction: {single: 5700, married_jointly: 11400, head_of_household: 5700}
+    brackets:
+      single: [{up_to: 2000, rate: 0.0}, {up_to: 5000, rate: 0.022}, {up_to: 10000, rate: 0.039},
+               {up_to: 20000, rate: 0.048}, {up_to: 25000, rate: 0.052}, {up_to: 60000, rate: 0.0555}, {rate: 0.066}]
+    local_note: "Wilmington levies a 1.25% wage tax."
+  DC:
+    name: District of Columbia
+    type: graduated
+    joint: same
+    standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
+    brackets:
+      single: [{up_to: 10000, rate: 0.04}, {up_to: 40000, rate: 0.06}, {up_to: 60000, rate: 0.065},
+               {up_to: 250000, rate: 0.085}, {up_to: 500000, rate: 0.0925}, {up_to: 1000000, rate: 0.0975}, {rate: 0.1075}]
+  HI:
+    name: Hawaii
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 4400, married_jointly: 8800, head_of_household: 6424}
+    brackets:
+      single: [{up_to: 9600, rate: 0.014}, {up_to: 14400, rate: 0.032}, {up_to: 19200, rate: 0.055},
+               {up_to: 24000, rate: 0.064}, {up_to: 36000, rate: 0.068}, {up_to: 48000, rate: 0.072},
+               {up_to: 125000, rate: 0.076}, {up_to: 175000, rate: 0.079}, {rate: 0.11}]
+    note: "Act 46 (2024) is widening brackets and raising the standard deduction each year through 2031."
+  KS:
+    name: Kansas
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 3605, married_jointly: 8240, head_of_household: 6180}
+    personal_exemption: 2320
+    brackets: {single: [{up_to: 23000, rate: 0.052}, {rate: 0.0558}]}
+  ME:
+    name: Maine
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
+    brackets: {single: [{up_to: 26800, rate: 0.058}, {up_to: 63450, rate: 0.0675}, {rate: 0.0715}]}
+  MD:
+    name: Maryland
+    type: graduated
+    joint: same
+    standard_deduction: {single: 2700, married_jointly: 5450, head_of_household: 5450}
+    personal_exemption: 3200
+    brackets:
+      single: [{up_to: 1000, rate: 0.02}, {up_to: 2000, rate: 0.03}, {up_to: 3000, rate: 0.04},
+               {up_to: 100000, rate: 0.0475}, {up_to: 125000, rate: 0.05}, {up_to: 150000, rate: 0.0525},
+               {up_to: 250000, rate: 0.055}, {rate: 0.0575}]
+    local_rate_typical: 0.0305
+    local_note: "Every county levies a local income tax, 2.25%-3.20%, collected on the state return."
+  MA:
+    name: Massachusetts
+    type: flat
+    rate: 0.05
+    joint: doubled
+    personal_exemption: {single: 4400, married_jointly: 8800}
+    surtax: {rate: 0.04, over: 1083150, label: "Millionaire's surtax"}
+    note: "5% flat, plus a 4% surtax on income above the indexed $1,083,150 threshold. Short-term gains are taxed at 8.5%."
+  MN:
+    name: Minnesota
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 14950, married_jointly: 29900, head_of_household: 22500}
+    brackets: {single: [{up_to: 32570, rate: 0.0535}, {up_to: 106990, rate: 0.068}, {up_to: 198630, rate: 0.0785}, {rate: 0.0985}]}
+  MO:
+    name: Missouri
+    type: graduated
+    joint: same
+    standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
+    brackets:
+      single: [{up_to: 1313, rate: 0.0}, {up_to: 2626, rate: 0.02}, {up_to: 3939, rate: 0.025},
+               {up_to: 5252, rate: 0.03}, {up_to: 6565, rate: 0.035}, {up_to: 7878, rate: 0.04},
+               {up_to: 9191, rate: 0.045}, {rate: 0.047}]
+    local_note: "Kansas City and St. Louis levy a 1% earnings tax."
+  MT:
+    name: Montana
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
+    brackets: {single: [{up_to: 21100, rate: 0.047}, {rate: 0.059}]}
+  NE:
+    name: Nebraska
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 8350, married_jointly: 16700, head_of_household: 12250}
+    brackets: {single: [{up_to: 4030, rate: 0.0246}, {up_to: 24120, rate: 0.0351}, {up_to: 38870, rate: 0.0501}, {rate: 0.052}]}
+    note: "Rate schedule is stepping down toward a 3.99% flat rate by 2027."
+  NJ:
+    name: New Jersey
+    type: graduated
+    joint: table
+    personal_exemption: 1000
+    brackets:
+      single: [{up_to: 20000, rate: 0.014}, {up_to: 35000, rate: 0.0175}, {up_to: 40000, rate: 0.035},
+               {up_to: 75000, rate: 0.05525}, {up_to: 500000, rate: 0.0637}, {up_to: 1000000, rate: 0.0897}, {rate: 0.1075}]
+      married_jointly: [{up_to: 20000, rate: 0.014}, {up_to: 50000, rate: 0.0175}, {up_to: 70000, rate: 0.0245},
+                        {up_to: 80000, rate: 0.035}, {up_to: 150000, rate: 0.05525}, {up_to: 500000, rate: 0.0637},
+                        {up_to: 1000000, rate: 0.0897}, {rate: 0.1075}]
+    note: "401(k) contributions are NOT deductible for New Jersey, so state wages exceed federal Box 1."
+  NM:
+    name: New Mexico
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
+    brackets: {single: [{up_to: 5500, rate: 0.015}, {up_to: 16500, rate: 0.032}, {up_to: 33500, rate: 0.043},
+                        {up_to: 66500, rate: 0.047}, {up_to: 210000, rate: 0.049}, {rate: 0.059}]}
+  NY:
+    name: New York
+    type: graduated
+    joint: table
+    standard_deduction: {single: 8000, married_jointly: 16050, head_of_household: 11200}
+    brackets:
+      single: [{up_to: 8500, rate: 0.04}, {up_to: 11700, rate: 0.045}, {up_to: 13900, rate: 0.0525},
+               {up_to: 80650, rate: 0.055}, {up_to: 215400, rate: 0.06}, {up_to: 1077550, rate: 0.0685},
+               {up_to: 5000000, rate: 0.0965}, {up_to: 25000000, rate: 0.103}, {rate: 0.109}]
+      married_jointly: [{up_to: 17150, rate: 0.04}, {up_to: 23600, rate: 0.045}, {up_to: 27900, rate: 0.0525},
+                        {up_to: 161550, rate: 0.055}, {up_to: 323200, rate: 0.06}, {up_to: 2155350, rate: 0.0685},
+                        {up_to: 5000000, rate: 0.0965}, {up_to: 25000000, rate: 0.103}, {rate: 0.109}]
+    local_rate_typical: 0.0378
+    local_note: "New York City residents pay 3.08%-3.88% city tax; Yonkers adds a surcharge. MCTMT applies to self-employment in the metro area."
+  ND:
+    name: North Dakota
+    type: graduated
+    joint: table
+    brackets:
+      single: [{up_to: 48475, rate: 0.0}, {up_to: 244825, rate: 0.0195}, {rate: 0.025}]
+      married_jointly: [{up_to: 80975, rate: 0.0}, {up_to: 298075, rate: 0.0195}, {rate: 0.025}]
+    note: "Lowest top rate of any graduated state; most filers pay 0% or 1.95%."
+  OH:
+    name: Ohio
+    type: graduated
+    joint: same
+    personal_exemption: 2400
+    brackets: {single: [{up_to: 26050, rate: 0.0}, {up_to: 100000, rate: 0.0275}, {rate: 0.0275}]}
+    local_rate_typical: 0.02
+    local_note: "Nearly 600 municipalities levy an income tax, typically 1%-2.5%, plus school district taxes."
+    note: "Consolidating to a 2.75% flat rate by 2026."
+  OK:
+    name: Oklahoma
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 6350, married_jointly: 12700, head_of_household: 9350}
+    brackets: {single: [{up_to: 1000, rate: 0.0025}, {up_to: 2500, rate: 0.0075}, {up_to: 3750, rate: 0.0175},
+                        {up_to: 4900, rate: 0.0275}, {up_to: 7200, rate: 0.0375}, {rate: 0.0475}]}
+  OR:
+    name: Oregon
+    type: graduated
+    joint: doubled
+    standard_deduction: {single: 2800, married_jointly: 5600, head_of_household: 4500}
+    brackets: {single: [{up_to: 4400, rate: 0.0475}, {up_to: 11050, rate: 0.0675}, {up_to: 125000, rate: 0.0875}, {rate: 0.099}]}
+    local_note: "Multnomah County and Metro levy additional high-income taxes (Preschool for All, Supportive Housing)."
+    note: "A subtraction for federal income tax paid, capped, is available."
+  RI:
+    name: Rhode Island
+    type: graduated
+    joint: same
+    standard_deduction: {single: 10900, married_jointly: 21850, head_of_household: 16350}
+    brackets: {single: [{up_to: 79900, rate: 0.0375}, {up_to: 181650, rate: 0.0475}, {rate: 0.0599}]}
+  SC:
+    name: South Carolina
+    type: graduated
+    joint: same
+    standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
+    brackets: {single: [{up_to: 3560, rate: 0.0}, {up_to: 17830, rate: 0.03}, {rate: 0.062}]}
+  VT:
+    name: Vermont
+    type: graduated
+    joint: table
+    standard_deduction: {single: 7400, married_jointly: 14850, head_of_household: 7400}
+    brackets:
+      single: [{up_to: 47900, rate: 0.0335}, {up_to: 116000, rate: 0.066}, {up_to: 242000, rate: 0.076}, {rate: 0.0875}]
+      married_jointly: [{up_to: 79950, rate: 0.0335}, {up_to: 193300, rate: 0.066}, {up_to: 294600, rate: 0.076}, {rate: 0.0875}]
+  VA:
+    name: Virginia
+    type: graduated
+    joint: same
+    standard_deduction: {single: 8500, married_jointly: 17000, head_of_household: 8500}
+    personal_exemption: 930
+    brackets: {single: [{up_to: 3000, rate: 0.02}, {up_to: 5000, rate: 0.03}, {up_to: 17000, rate: 0.05}, {rate: 0.0575}]}
+    note: "The top bracket starts at only $17,000, so nearly every filer is at 5.75% on the margin."
+  WV:
+    name: West Virginia
+    type: graduated
+    joint: same
+    personal_exemption: 2000
+    brackets: {single: [{up_to: 10000, rate: 0.0222}, {up_to: 25000, rate: 0.0296}, {up_to: 40000, rate: 0.0333},
+                        {up_to: 60000, rate: 0.0444}, {rate: 0.0482}]}
+    note: "Social Security benefits are fully exempt from 2026."
+  WI:
+    name: Wisconsin
+    type: graduated
+    joint: table
+    standard_deduction: {single: 13930, married_jointly: 25790, head_of_household: 17980}
+    brackets:
+      single: [{up_to: 14680, rate: 0.035}, {up_to: 29370, rate: 0.044}, {up_to: 323290, rate: 0.053}, {rate: 0.0765}]
+      married_jointly: [{up_to: 19580, rate: 0.035}, {up_to: 39150, rate: 0.044}, {up_to: 431060, rate: 0.053}, {rate: 0.0765}]
+
+# Pairs where a resident of A working in B files only in A.
+reciprocity:
+  - {work: IL, live: [IA, KY, MI, WI]}
+  - {work: IN, live: [KY, MI, OH, PA, WI]}
+  - {work: IA, live: [IL]}
+  - {work: KY, live: [IL, IN, MI, OH, VA, WV, WI]}
+  - {work: MD, live: [DC, PA, VA, WV]}
+  - {work: MI, live: [IL, IN, KY, MN, OH, WI]}
+  - {work: MN, live: [MI, ND]}
+  - {work: MT, live: [ND]}
+  - {work: NJ, live: [PA]}
+  - {work: ND, live: [MN, MT]}
+  - {work: OH, live: [IN, KY, MI, PA, WV]}
+  - {work: PA, live: [IN, MD, NJ, OH, VA, WV]}
+  - {work: VA, live: [DC, KY, MD, PA, WV]}
+  - {work: WV, live: [KY, MD, OH, PA, VA]}
+  - {work: WI, live: [IL, IN, KY, MI]}
+  - {work: DC, live: [MD, VA]}

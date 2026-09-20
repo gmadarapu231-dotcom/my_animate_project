@@ -1,0 +1,233 @@
+# Federal tax parameters, tax year 2025 (returns filed in 2026).
+#
+# Reflects the One Big Beautiful Bill Act (P.L. 119-21, enacted 2025-07-04),
+# which raised the standard deduction and the SALT cap, set the Child Tax
+# Credit at $2,200, and created the temporary tips / overtime / car-loan
+# interest and senior deductions.
+#
+# VERIFY BEFORE RELYING ON A FILING: every figure here carries a `source`
+# so it can be re-checked against the IRS revenue procedure each January.
+tax_year: 2025
+as_of: "2025-07-04"
+source: "IRS Rev. Proc. 2024-40; P.L. 119-21 (OBBBA)"
+due_date: "2026-04-15"
+extended_due_date: "2026-10-15"
+
+filing_statuses: [single, married_jointly, married_separately, head_of_household, qualifying_surviving_spouse]
+
+# Ordinary income rate schedules. `up_to` is the top of the band; the last
+# band omits it and is unbounded.
+brackets:
+  single:
+    - {up_to: 11925, rate: 0.10}
+    - {up_to: 48475, rate: 0.12}
+    - {up_to: 103350, rate: 0.22}
+    - {up_to: 197300, rate: 0.24}
+    - {up_to: 250525, rate: 0.32}
+    - {up_to: 626350, rate: 0.35}
+    - {rate: 0.37}
+  married_jointly:
+    - {up_to: 23850, rate: 0.10}
+    - {up_to: 96950, rate: 0.12}
+    - {up_to: 206700, rate: 0.22}
+    - {up_to: 394600, rate: 0.24}
+    - {up_to: 501050, rate: 0.32}
+    - {up_to: 751600, rate: 0.35}
+    - {rate: 0.37}
+  married_separately:
+    - {up_to: 11925, rate: 0.10}
+    - {up_to: 48475, rate: 0.12}
+    - {up_to: 103350, rate: 0.22}
+    - {up_to: 197300, rate: 0.24}
+    - {up_to: 250525, rate: 0.32}
+    - {up_to: 375800, rate: 0.35}
+    - {rate: 0.37}
+  head_of_household:
+    - {up_to: 17000, rate: 0.10}
+    - {up_to: 64850, rate: 0.12}
+    - {up_to: 103350, rate: 0.22}
+    - {up_to: 197300, rate: 0.24}
+    - {up_to: 250500, rate: 0.32}
+    - {up_to: 626350, rate: 0.35}
+    - {rate: 0.37}
+  qualifying_surviving_spouse:
+    - {up_to: 23850, rate: 0.10}
+    - {up_to: 96950, rate: 0.12}
+    - {up_to: 206700, rate: 0.22}
+    - {up_to: 394600, rate: 0.24}
+    - {up_to: 501050, rate: 0.32}
+    - {up_to: 751600, rate: 0.35}
+    - {rate: 0.37}
+
+standard_deduction:
+  single: 15750
+  married_jointly: 31500
+  married_separately: 15750
+  head_of_household: 23625
+  qualifying_surviving_spouse: 31500
+  # Extra for age 65+ or blind, per condition per person.
+  additional_unmarried: 2000
+  additional_married: 1600
+
+# OBBBA senior deduction: $6,000 per person 65+, 2025-2028, phasing out at 6%.
+senior_deduction:
+  amount: 6000
+  phase_out_rate: 0.06
+  phase_out_step: 1
+  thresholds:
+    single: 75000
+    married_jointly: 150000
+    married_separately: 75000
+    head_of_household: 75000
+    qualifying_surviving_spouse: 150000
+  expires_after: 2028
+
+# Long-term capital gain / qualified dividend breakpoints, on TAXABLE income.
+capital_gains:
+  single:      {zero_up_to: 48350,  fifteen_up_to: 533400}
+  married_jointly: {zero_up_to: 96700, fifteen_up_to: 600050}
+  married_separately: {zero_up_to: 48350, fifteen_up_to: 300000}
+  head_of_household: {zero_up_to: 64750, fifteen_up_to: 566700}
+  qualifying_surviving_spouse: {zero_up_to: 96700, fifteen_up_to: 600050}
+  rates: [0.00, 0.15, 0.20]
+
+payroll:
+  social_security_rate: 0.062
+  social_security_wage_base: 176100
+  medicare_rate: 0.0145
+  additional_medicare_rate: 0.009
+  additional_medicare_threshold:
+    single: 200000
+    married_jointly: 250000
+    married_separately: 125000
+    head_of_household: 200000
+    qualifying_surviving_spouse: 200000
+  self_employment_rate: 0.153
+  self_employment_base_fraction: 0.9235
+
+net_investment_income_tax:
+  rate: 0.038
+  thresholds:
+    single: 200000
+    married_jointly: 250000
+    married_separately: 125000
+    head_of_household: 200000
+    qualifying_surviving_spouse: 200000
+
+credits:
+  child_tax_credit:
+    amount: 2200
+    refundable_cap: 1700          # Additional Child Tax Credit
+    earned_income_floor: 2500
+    refundable_rate: 0.15
+    qualifying_age_under: 17
+    phase_out_rate: 0.05
+    phase_out_step: 1000
+    thresholds: {single: 200000, married_jointly: 400000, married_separately: 200000,
+                 head_of_household: 200000, qualifying_surviving_spouse: 200000}
+  other_dependent_credit:
+    amount: 500
+    shares_child_credit_phaseout: true
+  earned_income_credit:
+    # [children, max credit, earned income amount, phase-out begins (single/HOH),
+    #  phase-out begins (MFJ), phase-out rate, credit rate]
+    tiers:
+      - {children: 0, max_credit: 649,  earned_amount: 8490,  phase_out_single: 10620, phase_out_joint: 17730, credit_rate: 0.0765, phase_out_rate: 0.0765}
+      - {children: 1, max_credit: 4328, earned_amount: 12730, phase_out_single: 23350, phase_out_joint: 30470, credit_rate: 0.34,   phase_out_rate: 0.1598}
+      - {children: 2, max_credit: 7152, earned_amount: 17880, phase_out_single: 23350, phase_out_joint: 30470, credit_rate: 0.40,   phase_out_rate: 0.2106}
+      - {children: 3, max_credit: 8046, earned_amount: 17880, phase_out_single: 23350, phase_out_joint: 30470, credit_rate: 0.45,   phase_out_rate: 0.2106}
+    investment_income_limit: 11950
+  american_opportunity:
+    max_credit: 2500
+    refundable_fraction: 0.40
+    phase_out_start: {single: 80000, married_jointly: 160000}
+    phase_out_end: {single: 90000, married_jointly: 180000}
+  lifetime_learning:
+    max_credit: 2000
+    rate: 0.20
+    expense_cap: 10000
+    phase_out_start: {single: 80000, married_jointly: 160000}
+    phase_out_end: {single: 90000, married_jointly: 180000}
+  savers_credit:
+    contribution_cap: 2000
+    rates: [0.50, 0.20, 0.10]
+    agi_bands:
+      single: [23750, 25500, 39500]
+      married_jointly: [47500, 51000, 79000]
+      head_of_household: [35625, 38250, 59250]
+  dependent_care:
+    expense_cap_one: 3000
+    expense_cap_many: 6000
+    max_rate: 0.35
+    min_rate: 0.20
+    phase_down_start: 15000
+
+deductions:
+  salt_cap: 40000                 # OBBBA, up from 10000
+  salt_cap_married_separately: 20000
+  salt_phase_down_threshold: 500000
+  salt_phase_down_rate: 0.30
+  salt_floor: 10000
+  medical_agi_floor: 0.075
+  mortgage_principal_cap: 750000
+  student_loan_interest_cap: 2500
+  student_loan_phase_out: {single: [85000, 100000], married_jointly: [170000, 200000]}
+  educator_expense_cap: 300
+  charitable_cash_agi_limit: 0.60
+  # OBBBA temporary below-the-line deductions, available WITHOUT itemising.
+  tips_deduction_cap: 25000
+  tips_phase_out: {single: 150000, married_jointly: 300000}
+  overtime_deduction_cap: {single: 12500, married_jointly: 25000}
+  overtime_phase_out: {single: 150000, married_jointly: 300000}
+  car_loan_interest_cap: 10000
+  car_loan_phase_out: {single: 100000, married_jointly: 200000}
+
+qbi:
+  rate: 0.20
+  threshold: {single: 197300, married_jointly: 394600}
+  phase_in_range: {single: 50000, married_jointly: 100000}
+
+amt:
+  exemption: {single: 88100, married_jointly: 137000, married_separately: 68500,
+              head_of_household: 88100, qualifying_surviving_spouse: 137000}
+  phase_out_start: {single: 626350, married_jointly: 1252700, married_separately: 626350,
+                    head_of_household: 626350, qualifying_surviving_spouse: 1252700}
+  phase_out_rate: 0.25
+  rates: [{up_to: 239100, rate: 0.26}, {rate: 0.28}]
+
+contribution_limits:
+  elective_deferral_401k: 23500
+  catch_up_401k: 7500
+  super_catch_up_401k: 11250       # ages 60-63, SECURE 2.0
+  super_catch_up_ages: [60, 61, 62, 63]
+  ira: 7000
+  ira_catch_up: 1000
+  ira_deduction_phase_out:
+    covered_single: [79000, 89000]
+    covered_joint: [126000, 146000]
+    spouse_covered_joint: [236000, 246000]
+  roth_ira_phase_out:
+    single: [150000, 165000]
+    married_jointly: [236000, 246000]
+  hsa_self_only: 4300
+  hsa_family: 8550
+  hsa_catch_up: 1000
+  health_fsa: 3300
+  dependent_care_fsa: 5000
+  dependent_care_fsa_separate: 2500
+
+penalties_and_interest:
+  failure_to_file_monthly: 0.05
+  failure_to_file_cap: 0.25
+  failure_to_file_minimum: 510      # after 60 days late
+  failure_to_pay_monthly: 0.005
+  failure_to_pay_cap: 0.25
+  failure_to_pay_with_installment: 0.0025
+  underpayment_interest_annual: 0.07
+  estimated_tax_safe_harbor_current: 0.90
+  estimated_tax_safe_harbor_prior: 1.00
+  estimated_tax_safe_harbor_prior_high_income: 1.10
+  high_income_agi_threshold: 150000
+  refund_statute_years: 3
+
+estimated_payment_due_dates: ["2025-04-15", "2025-06-16", "2025-09-15", "2026-01-15"]

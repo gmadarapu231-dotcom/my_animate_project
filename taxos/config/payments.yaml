@@ -1,0 +1,96 @@
+# Payment and collection options. These are IRS administrative figures, not tax
+# law, so they sit apart from the yearly rate files and change on their own
+# schedule.
+as_of: "2025-01-01"
+source: "IRS Topic 202, Form 9465 instructions, and the Online Payment Agreement fee schedule"
+
+refund:
+  direct_deposit:
+    label: "Direct deposit"
+    typical_days: 21
+    fee: 0
+    note: "Fastest route. E-filed returns with direct deposit are usually paid within 21 days."
+  paper_check_refund:
+    label: "Paper cheque"
+    typical_days: 42
+    fee: 0
+    note: "Roughly six weeks, and a cheque can be lost or stolen in a way a deposit cannot."
+  apply_to_next_year:
+    label: "Apply to next year's estimated tax"
+    typical_days: 0
+    fee: 0
+    note: "Useful where next year will owe. The credit counts as paid on the April due date."
+
+balance_due:
+  direct_debit:
+    label: "Direct debit from a bank account"
+    fee: 0
+    note: "Scheduled with the return, debited on a date you choose up to the due date."
+  irs_direct_pay:
+    label: "IRS Direct Pay"
+    fee: 0
+    note: "Free, from a checking or savings account, with confirmation. No registration."
+  eftps:
+    label: "EFTPS"
+    fee: 0
+    note: "Free, but enrolment takes days as the PIN arrives by post. Best set up in advance."
+  card:
+    label: "Debit or credit card"
+    fee_rate: 0.0185
+    fee_minimum: 2.50
+    note: "Processed by a third party that charges a percentage fee. Only sensible where card rewards or a 0% promotion exceed the fee."
+  check:
+    label: "Cheque or money order"
+    fee: 0
+    note: "Must be posted with Form 1040-V and postmarked by the due date."
+
+installment:
+  short_term:
+    label: "Short-term payment plan"
+    max_days: 180
+    max_balance: 100000
+    setup_fee: 0
+    note: "Up to 180 days, no setup fee. Failure-to-pay penalty and interest continue to run."
+  long_term_direct_debit_online:
+    label: "Long-term plan, direct debit, set up online"
+    setup_fee: 22
+    max_balance: 50000
+    max_months: 72
+    reduces_failure_to_pay: true
+    note: "Cheapest long-term option. Direct debit is required above $25,000."
+  long_term_online:
+    label: "Long-term plan, set up online, no direct debit"
+    setup_fee: 69
+    max_balance: 50000
+    max_months: 72
+    reduces_failure_to_pay: true
+  long_term_phone_direct_debit:
+    label: "Long-term plan, direct debit, by phone or post"
+    setup_fee: 107
+    max_balance: 50000
+    max_months: 72
+    reduces_failure_to_pay: true
+  long_term_phone:
+    label: "Long-term plan, by phone or post, no direct debit"
+    setup_fee: 178
+    max_balance: 50000
+    max_months: 72
+    reduces_failure_to_pay: true
+  low_income_waiver_note: >-
+    Setup fees are waived or reimbursed for taxpayers at or below 250% of the
+    federal poverty line (Form 13844).
+
+offer_in_compromise:
+  application_fee: 205
+  note: >-
+    An offer to settle for less than the full amount. Accepted only where the
+    IRS agrees the full amount cannot be collected. Most offers are rejected,
+    and the application fee and initial payment are not refunded.
+
+extension:
+  form: "4868"
+  note: >-
+    An extension gives six more months to FILE, not to PAY. The balance is still
+    due on the April deadline, and interest and the failure-to-pay penalty run
+    from that date. It is still worth filing: it removes the failure-to-file
+    penalty, which is ten times larger.

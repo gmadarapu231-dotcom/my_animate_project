@@ -24,3 +24,7 @@ clients/app/dist-demo/
 clients/app/.expo/
 clients/app/web-build/
 *.tsbuildinfo
+
+# --- taxos local state ---
+.taxos/
+taxos_master_key
