@@ -140,6 +140,10 @@ def build(destination: Path) -> Path:
     html = html.replace('<link rel="stylesheet" href="/static/styles.css">',
                         f"<style>\n{css}\n{BANNER_CSS}\n</style>")
     html = html.replace('<link rel="manifest" href="/manifest.webmanifest">', "")
+    # Opened from a disk there is no site root, so the brand link would navigate
+    # the browser to the filesystem. It stays as a home affordance and does
+    # nothing, which is correct for a single page with no routes.
+    html = html.replace('<a class="brand" href="/"', '<a class="brand" href="#"')
     html = html.replace('href="/static/mark.svg"', f'href="{mark}"')
     html = html.replace('src="/static/mark.svg"', f'src="{mark}"')
     html = html.replace(
