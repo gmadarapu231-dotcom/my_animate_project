@@ -68,3 +68,8 @@ def loaded(db, user, pipeline):
     pipeline.assess_for_user(user, stats=stats)
     db.commit()
     return {"user": user, "pipeline": pipeline, "stats": stats}
+
+
+# The tax system's fixtures live in their own module so the two products'
+# fixtures cannot shadow each other; importing them here registers them.
+pytest_plugins = ["tests.conftest_taxos"]
