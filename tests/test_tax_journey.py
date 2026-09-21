@@ -40,6 +40,10 @@ def verify_identity(client, token, *, ssn="123-45-6789", email="dana@example.com
 W2_2025 = {
     "tax_year": 2025,
     "employer_name": "Acme Corporation",
+    # The identity check compares this against the registered name, which
+    # `verify_identity` sets to Dana Reed.
+    "employee_first_name": "Dana",
+    "employee_last_name": "Reed",
     "employer_ein": "12-3456789",
     "box1_wages": 118000,
     "box2_federal_withheld": 14200,

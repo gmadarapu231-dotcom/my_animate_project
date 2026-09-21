@@ -119,6 +119,33 @@ record answers **404, not 403**: confirming that an id exists is itself a small
 leak. One SSN cannot be claimed by two accounts, because two accounts with one
 SSN cause rejected filings and is also what an account takeover looks like.
 
+## Does the W-2 belong to this person?
+
+The IRS matches the name and Social Security number on a return against Social
+Security Administration records, and a mismatch is the commonest cause of an
+e-file rejection. So every W-2 is checked against the account as it goes in,
+where a fix costs a minute.
+
+The name check is graded rather than binary, because people are registered as
+Robert and paid as Bob, W-2s print middle initials, and a married name appears
+on one document and not another. A surname is compared as a *set* of parts, so
+"Reed" and "Reed-Santos" match and "Reed" and "Santos-Rivera" do not; accents,
+case, punctuation, titles and generational suffixes are all normalised away.
+Only the surname carries real weight, which is how the SSA's own match works.
+
+The number check compares the SSN printed in box a against the account's,
+through the keyed blind index -- nothing is decrypted to do it. A masked number
+falls back to its last four, which is weaker but still catches the common case
+of a spouse's or a housemate's W-2 going onto the wrong return. The number read
+off a form is used for the check and then discarded: a document stores figures,
+not identifiers.
+
+Nothing here blocks a filing. A mismatch holds the document for review and says
+what will happen if it is left alone; whether two names are the same person is
+not a question this code can settle, and it is one the client can. When the
+form is the one that is right, the account name can be corrected to match it,
+and that change is written to the audit trail with both values.
+
 ## The audit trail
 
 IRS Publication 4557 requires one, and it is the only way to answer "who looked

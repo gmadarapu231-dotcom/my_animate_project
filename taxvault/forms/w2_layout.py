@@ -213,6 +213,11 @@ def read_w2_layout(blob: bytes) -> tuple[W2, float, list[dict[str, str]]]:
     ein = EIN_SHAPE.search(whole)
     if ein:
         form.employer_ein = ein.group(1)
+    # Box a. Kept only long enough to check it against the account; it is never
+    # stored, because a W-2's payload is figures, not identifiers.
+    ssn = SSN_SHAPE.search(whole)
+    if ssn:
+        form.employee_ssn = "-".join(ssn.groups())
 
     _read_names(page, form, notes)
     _read_box12(page, form, notes)

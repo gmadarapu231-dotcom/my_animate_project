@@ -367,9 +367,15 @@ function viewDocuments() {
     </div>
 
     <div id="doc-boxes">
-      <div class="field">
-        <label for="employer">Employer name</label>
-        <input id="employer" placeholder="Acme Corporation" autocomplete="organization">
+      <div class="row two">
+        <div class="field">
+          <label for="employer">Employer name</label>
+          <input id="employer" placeholder="Acme Corporation" autocomplete="organization">
+        </div>
+        <div class="field">
+          <label for="employee">Employee name <span class="hint">as printed on the W-2</span></label>
+          <input id="employee" placeholder="Dana Reed" autocomplete="name">
+        </div>
       </div>
       <div class="row two">
         ${boxField('box1', 'Box 1 — Wages, tips, other compensation')}
@@ -445,8 +451,10 @@ const READBACK = [
 ];
 
 function documentRow(doc) {
-  const problems = (doc.warnings || []).filter((w) => w.severity === 'error');
-  const notes = (doc.warnings || []).filter((w) => w.severity !== 'error');
+  // Identity findings get their own block above, with an action attached.
+  const general = (doc.warnings || []).filter((w) => !w.check);
+  const problems = general.filter((w) => w.severity === 'error');
+  const notes = general.filter((w) => w.severity !== 'error');
   const p = doc.payload || {};
   const wages = p.box1_wages || 0;
   const read = Number(doc.parse_confidence || 0);
@@ -465,6 +473,18 @@ function documentRow(doc) {
     </div>
     <button data-delete-doc="${doc.id}" aria-label="Remove this W-2">Remove</button>
   </div>
+
+  ${(doc.identity_checks || []).map((check) => `
+    <div class="note ${check.severity === 'error' ? 'bad' : check.severity === 'warning' ? 'warn' : 'info'}">
+      <strong>${check.check === 'ssn' ? 'Social Security number' : 'Name'} check:</strong>
+      ${esc(check.message)}
+      ${check.check === 'name' && doc.employee_name ? `
+        <div class="actions" style="margin-top:10px">
+          <button class="btn slim ghost" data-adopt-name="${esc(doc.employee_name)}">
+            Use &ldquo;${esc(doc.employee_name)}&rdquo; on my account
+          </button>
+        </div>` : ''}
+    </div>`).join('')}
 
   ${problems.length ? `<div class="note bad"><strong>Check this form:</strong><ul>${
     problems.map((w) => `<li>${esc(w.message)}</li>`).join('')}</ul></div>` : ''}
@@ -1178,9 +1198,12 @@ function wireDocuments() {
     if (num('box12d')) box12.D = num('box12d');
     if (num('box12w')) box12.W = num('box12w');
     const stateCode = el('w2-state').value;
+    const typedName = (el('employee').value || '').trim().split(/\s+/).filter(Boolean);
     await api('/api/documents/w2/boxes', { method: 'POST', body: {
       tax_year: parseInt(el('doc-year').value, 10),
       employer_name: el('employer').value.trim(),
+      employee_first_name: typedName.slice(0, -1).join(' ') || typedName[0] || '',
+      employee_last_name: typedName.length > 1 ? typedName[typedName.length - 1] : '',
       box1_wages: num('box1'), box2_federal_withheld: num('box2'),
       box3_social_security_wages: num('box3'), box4_social_security_withheld: num('box4'),
       box5_medicare_wages: num('box5'), box6_medicare_withheld: num('box6'),
@@ -1225,6 +1248,22 @@ function wireDocuments() {
     await refreshDocuments();
     render();
   }));
+
+  document.querySelectorAll('[data-adopt-name]').forEach((button) =>
+    button.addEventListener('click', () => guard(button, async () => {
+      const parts = button.dataset.adoptName.trim().split(/\s+/);
+      await api('/api/auth/name', { method: 'PATCH', body: {
+        first_name: parts.slice(0, -1).join(' ') || parts[0] || '',
+        last_name: parts.length > 1 ? parts[parts.length - 1] : '',
+      }});
+      await refreshSession();
+      // The stored findings were computed against the old name, so re-save the
+      // document to have them recomputed rather than leaving a stale warning.
+      const fix = document.querySelector('[data-fix-doc]');
+      if (fix) fix.click();
+      else { await refreshDocuments(); render(); }
+      toast('Account name updated to match your W-2.');
+    })));
 
   document.querySelectorAll('[data-fix-doc]').forEach((button) =>
     button.addEventListener('click', () => guard(button, async () => {

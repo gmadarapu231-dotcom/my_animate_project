@@ -50,6 +50,13 @@ class MobileVerify(BaseModel):
     code: str
 
 
+class NameUpdate(BaseModel):
+    """Correct the name on the account, when the W-2 is the one that is right."""
+
+    first_name: str
+    last_name: str
+
+
 class IdentityCheck(BaseModel):
     """The three factors, submitted together.
 
@@ -134,6 +141,50 @@ def identity(body: IdentityCheck, request: Request, account=Depends(current_acco
         )
     except (AuthError, ValueError) as exc:
         raise _fail(exc) from exc
+
+
+@router.patch("/name")
+def update_name(body: NameUpdate, request: Request, account=Depends(current_account),
+                session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Change the registered name to the one printed on the W-2.
+
+    The IRS matches on the name Social Security holds, not the one typed at
+    sign-up, so when the two disagree the form is usually the better source.
+    Changing it is an identity change, so it is written to the audit trail with
+    both the old and the new value.
+    """
+    from sqlalchemy import select
+
+    from taxvault.auth import audit
+    from taxvault.db.models import Taxpayer
+
+    first, last = body.first_name.strip(), body.last_name.strip()
+    if not first and not last:
+        raise HTTPException(status_code=400, detail="Enter the name as printed on your W-2.")
+
+    taxpayer = session.scalars(
+        select(Taxpayer).where(
+            Taxpayer.account_id == account.id,
+            Taxpayer.relationship_to_filer == "self",
+        )
+    ).first()
+    if taxpayer is None:
+        raise HTTPException(status_code=404, detail="No taxpayer record on this account yet.")
+
+    was = taxpayer.display_name
+    taxpayer.first_name, taxpayer.last_name = first or taxpayer.first_name, last or taxpayer.last_name
+    account.full_name = taxpayer.display_name
+    session.flush()
+
+    audit(session, "name_changed", account_id=account.id, actor=account.email,
+          subject=f"taxpayer:{taxpayer.id}", ip_address=client_ip(request),
+          was=was, now=taxpayer.display_name)
+    return {
+        "name": taxpayer.display_name,
+        "note": ("Use the name exactly as it appears on your Social Security card. "
+                 "The IRS matches against those records, not against what a payroll "
+                 "system printed."),
+    }
 
 
 @router.get("/session")

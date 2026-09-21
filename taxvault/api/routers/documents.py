@@ -31,6 +31,7 @@ from taxvault.crypto import encrypt_field
 from taxvault.db.models import TaxDocument, Taxpayer
 from taxvault.enums import DocumentKind, DocumentStatus
 from taxvault.forms.extract import extract_text, pair_orphan_amounts
+from taxvault.forms.identity_match import compare_names, compare_ssn
 from taxvault.forms.w2 import W2, parse_w2_text
 from taxvault.forms.w2_layout import read_w2_layout
 
@@ -48,6 +49,8 @@ ALLOWED_CONTENT = {
 class W2Boxes(BaseModel):
     tax_year: int
     employer_name: str = ""
+    employee_first_name: str = ""
+    employee_last_name: str = ""
     employer_ein: str = ""
     box1_wages: float | str = 0.0
     box2_federal_withheld: float | str = 0.0
@@ -70,17 +73,58 @@ class W2Text(BaseModel):
     text: str
 
 
+def check_identity(form: W2, taxpayer: Taxpayer) -> list[dict[str, str]]:
+    """Does this W-2 belong to the person on the account?
+
+    The IRS matches the name and Social Security number on a return against
+    Social Security Administration records, and a mismatch is the commonest
+    cause of an e-file rejection. Catching it as the W-2 goes in costs a minute;
+    catching it after a filing bounces costs a season.
+
+    Findings only. Whether "Reed" and "Reed-Santos" are one person is not a
+    question this code can settle -- but it is one the client can.
+    """
+    findings: list[dict[str, str]] = []
+
+    name = compare_names(
+        registered_first=taxpayer.first_name or "",
+        registered_last=taxpayer.last_name or "",
+        form_first=form.employee_first_name,
+        form_last=form.employee_last_name,
+    )
+    if name.verdict not in ("exact", "unknown"):
+        findings.append({"severity": name.severity, "box": "e",
+                         "message": name.message, "check": "name"})
+    elif name.verdict == "unknown" and (taxpayer.first_name or taxpayer.last_name):
+        findings.append({"severity": "info", "box": "e",
+                         "message": name.message, "check": "name"})
+
+    if form.employee_ssn:
+        ssn = compare_ssn(
+            form.employee_ssn,
+            registered_index=taxpayer.ssn_index or "",
+            registered_last4=taxpayer.ssn_last4 or "",
+        )
+        if not ssn.matches and ssn.verdict != "unknown":
+            findings.append({"severity": ssn.severity, "box": "a",
+                             "message": ssn.message, "check": "ssn"})
+    return findings
+
+
 def _store(
     session: Session, taxpayer: Taxpayer, form: W2, *,
     source: str, confidence: float, warnings: list[str],
     filename: str = "", content_type: str = "", blob: bytes | None = None,
 ) -> TaxDocument:
-    findings = form.validate(year=form.tax_year)
+    findings = form.validate(year=form.tax_year) + check_identity(form, taxpayer)
     errors = [f for f in findings if f["severity"] == "error"]
     status = (
         DocumentStatus.NEEDS_REVIEW.value if errors or confidence < 0.75
         else DocumentStatus.PARSED.value
     )
+    # The number read off the form has served its purpose in `check_identity`;
+    # it is not part of what a document stores.
+    form.employee_ssn = ""
     document = TaxDocument(
         taxpayer_id=taxpayer.id,
         tax_year=form.tax_year,
@@ -147,6 +191,9 @@ def _serialise(document: TaxDocument) -> dict[str, Any]:
         "payload": document.payload,
         "parse_confidence": float(document.parse_confidence or 0),
         "warnings": document.parse_warnings,
+        "identity_checks": [
+            w for w in (document.parse_warnings or []) if w.get("check")
+        ],
         "original_filename": document.original_filename,
         "uploaded_at": document.created_at.isoformat() if document.created_at else None,
     }
@@ -320,7 +367,7 @@ def update_document(
     if document is None or document.taxpayer_id != taxpayer.id:
         raise HTTPException(status_code=404, detail="No such document.")
     form = W2.from_dict(body.model_dump())
-    findings = form.validate(year=form.tax_year)
+    findings = form.validate(year=form.tax_year) + check_identity(form, taxpayer)
     document.payload = form.to_dict()
     document.tax_year = form.tax_year
     document.employer_name = form.employer_name or document.employer_name

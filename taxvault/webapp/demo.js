@@ -87,6 +87,13 @@
       return out;
     }],
 
+    ['PATCH', /^\/api\/auth\/name$/, (body) => {
+      const name = [body.first_name, body.last_name].filter(Boolean).join(' ');
+      F.session.taxpayer.name = name;
+      return { name, note: 'Use the name exactly as it appears on your Social Security card.' };
+    }],
+    ['PATCH', /^\/api\/documents\/\d+$/, () => state.documents[0] || F.document],
+
     ['GET', /^\/api\/documents$/, () => ({
       documents: state.documents,
       years: [...new Set(state.documents.map((d) => d.tax_year))],
@@ -102,7 +109,7 @@
       // upload tab explains.
       state.documents = [F.document];
       return Object.assign({}, F.document, {
-        extraction: { method: 'pdf_text', readable: true, pages: 1, notes: [] },
+        extraction: { method: 'pdf_text', readable: true, pages: 1, notes: [], strategy: 'layout' },
       });
     }],
     ['DELETE', /^\/api\/documents\/\d+$/, () => { state.documents = []; return { deleted: 1 }; }],
