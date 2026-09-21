@@ -201,6 +201,44 @@ no tax benefit, and is shown with the fee attached.
 An extension extends the time to **file**, never the time to **pay** — stated
 wherever it could be misread.
 
+## Paying
+
+This system never takes a tax payment, and that is a design decision rather
+than a missing feature. A federal payment belongs on the IRS's own channel and
+a state payment on the state's, so the last step is a **handoff**: the right
+destination, and the exact values to type into it.
+
+The values matter more than the link. IRS Direct Pay is a session-based
+application that accepts nothing from a URL, and the two fields people get
+wrong are "Reason for Payment" and "Tax Period" -- a 2025 balance posted to
+2026 sits as an unapplied credit while the 2025 balance keeps accruing
+interest. So the client is handed all four entries verbatim, plus the
+confirmation number prompt, because that number is the only proof a payment
+was made.
+
+State balances go to that state's own revenue department; all 42 taxing
+jurisdictions carry a payment address, and a no-tax state says there is nothing
+to pay here rather than rendering a link to nowhere.
+
+### What the IRS does not accept
+
+Named rather than omitted, because "it is missing from the list" and "it does
+not work" are different answers, and only one of them helps someone who is
+about to be talked into it:
+
+| Method | Why not |
+|---|---|
+| Zelle | Not an IRS channel. Bank-to-bank, no government tax account, irreversible once sent. |
+| Venmo, Cash App, PayPal | Not IRS channels; usable only as a funding source inside an authorised card processor. |
+| Cryptocurrency | Not accepted. |
+| Gift cards | Never. A demand for one is always fraud. |
+
+Zelle *is* implemented -- for the **preparation fee**, which is a payment to
+the practice and not to a government. The separation is the point: blurring the
+two is how somebody ends up sending money to a stranger who asked for it by
+Zelle while claiming to be the IRS. The payment screen carries the scam warning
+and the irreversibility note alongside it.
+
 ## What is deliberately absent
 
 * **E-filing.** Needs an EFIN and an MeF connection.

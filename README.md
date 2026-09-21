@@ -372,7 +372,8 @@ taxvault payment 9400 --cannot-pay   # price every way to settle a balance
 | **Estimate** | Federal plus every state return that follows, line by line. |
 | **Regular or planning** | Planning re-runs the whole calculation per strategy and shows what each is worth — and whether its deadline has passed. |
 | **Prior years** | Which years are unfiled, what they owe, the penalties so far, and the three-year cut-off after which a refund is gone. |
-| **Payment** | Refund routes, or every way to settle a balance priced to total cost including fees, penalty and interest. |
+| **Payment** | Refund routes, or every way to settle a balance priced to total cost. Then a handoff to the IRS or your state's own site with the exact values to enter, and somewhere to record the confirmation number. |
+| **Fees** | Zelle, ACH, card or deduct-from-refund for the preparation fee — kept separate from the tax, because the IRS accepts none of them. |
 
 ## States
 
