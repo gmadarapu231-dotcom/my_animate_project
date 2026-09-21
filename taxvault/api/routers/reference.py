@@ -10,7 +10,14 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from taxvault.config import federal, latest_year, payments, states, supported_years
+from taxvault.config import (
+    federal,
+    latest_year,
+    payments,
+    resources,
+    states,
+    supported_years,
+)
 from taxvault.money import money
 
 router = APIRouter(prefix="/api/reference", tags=["reference"])
@@ -124,3 +131,53 @@ def limits(year: int | None = Query(default=None)) -> dict[str, Any]:
 @router.get("/payment-options")
 def payment_reference() -> dict[str, Any]:
     return payments()
+
+
+@router.get("/irs")
+def irs_resources(state_code: str = Query(default="")) -> dict[str, Any]:
+    """Official IRS links, grouped, plus the client's own state if they have one.
+
+    Public and unauthenticated: none of it is about a person, and someone who
+    cannot get past the sign-in screen may still need Where's My Refund.
+
+    Every link opens in a new tab on the government's own domain. This system
+    never proxies or frames a government site -- a client should always be able
+    to see irs.gov in their own address bar.
+    """
+    config = resources()
+    groups = [dict(group) for group in config.get("groups", [])]
+
+    code = (state_code or "").strip().upper()
+    if code:
+        try:
+            state = states().get(code)
+        except LookupError:
+            state = None
+        if state and state.get("payment_url"):
+            groups.append({
+                "key": "state",
+                "label": f"{state['name']}",
+                "blurb": "Your state has its own return, deadlines and penalties.",
+                "links": [{
+                    "label": state.get("revenue_department", f"{state['name']} revenue"),
+                    "url": state["payment_url"],
+                    "note": ("A state payment is separate from the federal one. Paying "
+                             "the IRS does not pay your state."),
+                }],
+            })
+        elif state and state["type"] == "none":
+            groups.append({
+                "key": "state",
+                "label": state["name"],
+                "blurb": state.get("note", "No state income tax on wages."),
+                "links": [],
+            })
+
+    return {
+        "as_of": config.get("as_of", ""),
+        "groups": groups,
+        "note": (
+            "These are the IRS's own pages, opened in a new tab. We never ask for "
+            "your IRS credentials and never act on your IRS account."
+        ),
+    }

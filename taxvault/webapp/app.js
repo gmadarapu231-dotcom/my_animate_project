@@ -30,6 +30,9 @@ const state = {
   fee: null,            // the quote for this engagement
   ledger: null,         // what we hold for the client
   authorizations: null,
+  irs: null,
+  irsGroup: 'money',
+  justSaved: '',
   taxYear: null,
   situation: loadSituation(),
   pendingMobile: '',     // the number verified this session; the input is gone after re-render
@@ -136,8 +139,9 @@ function render() {
     estimate: viewEstimate,
     filings: viewFilings,
     payment: viewPayment,
+    irs: viewIrs,
   };
-  main.innerHTML = (views[state.view] || viewAccount)();
+  main.innerHTML = (views[state.view] || viewAccount)() + stepNav(state.view);
   main.appendChild(el('tpl-foot').content.cloneNode(true));
   main.scrollTop = 0;
   window.scrollTo(0, 0);
@@ -165,6 +169,12 @@ function renderChrome() {
 }
 
 function go(view) {
+  // Save on the way out, not only when Save is pressed: somebody who types a
+  // figure and then taps another tab should not lose it.
+  if (state.view === 'estimate' && view !== 'estimate') {
+    try { collectSituation(); } catch { /* the form is not on screen */ }
+  }
+  state.justSaved = '';
   state.view = view;
   render();
   if (view === 'documents') refreshDocuments();
@@ -173,6 +183,7 @@ function go(view) {
     if (!state.serviceFee) refreshServiceFee();
     refreshBilling();
   }
+  if (view === 'irs' && !state.irs) refreshIrs();
 }
 
 function steps(current) {
@@ -1276,6 +1287,91 @@ function paymentRow(option) {
   </button>`;
 }
 
+/* =============================================================== 6. IRS */
+function viewIrs() {
+  const data = state.irs;
+  if (!data) {
+    return `<div class="card"><div class="skeleton" style="width:60%"></div>
+      <div class="skeleton" style="width:85%"></div></div>`;
+  }
+  const group = data.groups.find((g) => g.key === state.irsGroup) || data.groups[0];
+
+  return `
+  <div class="card">
+    <h2>IRS</h2>
+    <p class="sub">
+      The IRS's own pages, straight from irs.gov. We never ask for your IRS
+      credentials and never act on your IRS account.
+    </p>
+    <div class="tabstrip" role="tablist">
+      ${data.groups.map((g) => `
+        <button role="tab" data-irs-group="${esc(g.key)}"
+                aria-selected="${g.key === group.key}">${esc(g.label)}</button>`).join('')}
+    </div>
+    <p class="sub">${esc(group.blurb || '')}</p>
+    ${group.links.length ? group.links.map((link) => `
+      <a class="reslink" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">
+        <div class="name">${esc(link.label)}</div>
+        ${link.note ? `<div class="note">${esc(link.note)}</div>` : ''}
+      </a>`).join('') : `<div class="note info">Nothing to open for this one.</div>`}
+    <div class="note info">${esc(data.note)}</div>
+  </div>
+
+  <div class="card">
+    <h2>Before you follow any tax link</h2>
+    <div class="note warn">
+      The IRS makes first contact <strong>by post</strong> — never by phone call,
+      text or email. It never demands payment by Zelle, Venmo, gift card, wire or
+      cryptocurrency, and it never threatens arrest. If in any doubt, type
+      <strong>irs.gov</strong> into your address bar yourself rather than
+      following a link somebody sent you.
+    </div>
+  </div>`;
+}
+
+/* ------------------------------------------------------------ step nav */
+//: The flow, in order. The IRS tab is reference, not a step.
+const FLOW = ['account', 'documents', 'estimate', 'filings', 'payment'];
+
+/**
+ * Back and Save on every screen.
+ *
+ * Going back to check a figure is the commonest thing anyone wants to do when
+ * a number looks wrong, and it has to be possible without losing what was
+ * typed. `saveCurrentView` writes the screen's state before we leave it.
+ */
+function stepNav(view) {
+  const index = FLOW.indexOf(view);
+  if (index < 0) return '';
+  const previous = FLOW[index - 1];
+  const next = FLOW[index + 1];
+  const verified = !!(state.session && state.session.identity_verified);
+
+  return `
+  <div class="stepnav">
+    ${previous ? `
+      <button class="btn ghost back" data-step-back="${previous}">← Back</button>` : ''}
+    <button class="btn ghost" data-step-save="${view}">Save</button>
+    ${next && verified ? `
+      <button class="btn" data-step-next="${next}">Save and continue →</button>` : ''}
+  </div>
+  ${state.justSaved === view ? `<div class="saved">Saved. Your details are kept as you go.</div>` : ''}`;
+}
+
+/** Persist whatever the current screen holds, so Back never loses it. */
+async function saveCurrentView(view) {
+  if (view === 'estimate') {
+    collectSituation();                 // writes the whole situation form
+    if (state.estimate) return;         // already computed and stored
+    return;
+  }
+  if (view === 'documents') {
+    // Documents save themselves as they are added; refresh so what is shown is
+    // what is stored.
+    await refreshDocuments();
+  }
+}
+
 /* ------------------------------------------------------------------ wire */
 function wire() {
   document.querySelectorAll('[data-go]').forEach((node) =>
@@ -1300,6 +1396,35 @@ function wire() {
   wireFilings();
   wirePayment();
   wireBilling();
+  wireSteps();
+}
+
+function wireSteps() {
+  document.querySelectorAll('[data-irs-group]').forEach((button) =>
+    button.addEventListener('click', () => {
+      state.irsGroup = button.dataset.irsGroup;
+      render();
+    }));
+
+  document.querySelectorAll('[data-step-back]').forEach((button) =>
+    button.addEventListener('click', () => guard(null, async () => {
+      await saveCurrentView(state.view);
+      go(button.dataset.stepBack);
+    })));
+
+  document.querySelectorAll('[data-step-save]').forEach((button) =>
+    button.addEventListener('click', () => guard(button, async () => {
+      await saveCurrentView(button.dataset.stepSave);
+      state.justSaved = button.dataset.stepSave;
+      render();
+      setTimeout(() => { state.justSaved = ''; }, 4000);
+    })));
+
+  document.querySelectorAll('[data-step-next]').forEach((button) =>
+    button.addEventListener('click', () => guard(button, async () => {
+      await saveCurrentView(state.view);
+      go(button.dataset.stepNext);
+    })));
 }
 
 function wireSignIn() {
@@ -1792,6 +1917,17 @@ async function refreshDocuments() {
     if (state.view === 'documents') render();
   } catch (error) {
     if (error.status !== 403) toast(error.message, 'bad');
+  }
+}
+
+async function refreshIrs() {
+  try {
+    const home = (state.session && state.session.taxpayer
+      && state.session.taxpayer.resident_state) || state.situation.resident_state || '';
+    state.irs = await api('/api/reference/irs' + (home ? `?state_code=${encodeURIComponent(home)}` : ''));
+    if (state.view === 'irs') render();
+  } catch (error) {
+    toast(error.message, 'bad');
   }
 }
 

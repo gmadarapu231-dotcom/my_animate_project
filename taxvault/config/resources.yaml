@@ -1,0 +1,147 @@
+# Official tax resources, grouped the way a client would look for them.
+#
+# Every link here is on an irs.gov, eftps.gov or ssa.gov address. That is the
+# rule and it is checked by a test: a "helpful" link to a lookalike site is how
+# people lose their refund, and a tax product pointing anywhere else has no
+# business doing so.
+#
+# These open in a new tab. This system never proxies, frames or mirrors a
+# government site -- a client should always be able to see irs.gov in their own
+# address bar.
+as_of: "2026-01-01"
+source: "irs.gov"
+
+groups:
+  - key: money
+    label: "Your money"
+    blurb: "Where your refund is, what you owe, and how to pay it."
+    links:
+      - label: "Where's My Refund?"
+        url: "https://www.irs.gov/wheres-my-refund"
+        note: >-
+          Updated once a day. Available 24 hours after e-filing, or four weeks
+          after posting a paper return. You need your SSN, filing status and the
+          exact refund amount.
+      - label: "Your online account"
+        url: "https://www.irs.gov/payments/your-online-account"
+        note: >-
+          Balance owed, payment history, notices and your Economic Impact
+          payments. Identity verification is required to open it.
+      - label: "Make a payment"
+        url: "https://www.irs.gov/payments"
+        note: "Every route the IRS accepts, with the fees each one carries."
+      - label: "IRS Direct Pay"
+        url: "https://www.irs.gov/payments/direct-pay"
+        note: "Free, straight from a bank account, with a confirmation number."
+      - label: "Apply for a payment plan"
+        url: "https://www.irs.gov/payments/online-payment-agreement-application"
+        note: "Short-term and long-term instalment agreements, decided online."
+      - label: "EFTPS"
+        url: "https://www.eftps.gov/"
+        note: "The Treasury's own system. Enrolment takes about a week by post."
+
+  - key: records
+    label: "Your records"
+    blurb: "What the IRS already holds about you."
+    links:
+      - label: "Get a tax transcript"
+        url: "https://www.irs.gov/individuals/get-transcript"
+        note: >-
+          The record of what was filed and what was assessed. A wage and income
+          transcript lists every W-2 and 1099 reported under your number, which
+          is the fastest way to reconstruct an unfiled year.
+      - label: "Identity Protection PIN"
+        url: "https://www.irs.gov/identity-theft-fraud-scams/get-an-identity-protection-pin"
+        note: >-
+          A six-digit number that stops anyone else e-filing under your Social
+          Security number. Free, and worth having.
+      - label: "Change of address (Form 8822)"
+        url: "https://www.irs.gov/forms-pubs/about-form-8822"
+      - label: "Your Social Security earnings record"
+        url: "https://www.ssa.gov/myaccount/"
+        note: >-
+          Not the IRS, but the record your benefits are calculated from. Worth
+          checking annually against your W-2s.
+
+  - key: filing
+    label: "Filing"
+    blurb: "Forms, deadlines and the free ways to file."
+    links:
+      - label: "Form 1040 and instructions"
+        url: "https://www.irs.gov/forms-pubs/about-form-1040"
+      - label: "Form W-2 explained"
+        url: "https://www.irs.gov/forms-pubs/about-form-w-2"
+        note: "What each box means, box by box."
+      - label: "File an extension (Form 4868)"
+        url: "https://www.irs.gov/forms-pubs/about-form-4868"
+        note: "Six more months to file. Not six more months to pay."
+      - label: "Amend a return (Form 1040-X)"
+        url: "https://www.irs.gov/forms-pubs/about-form-1040x"
+      - label: "IRS Free File"
+        url: "https://www.irs.gov/filing/free-file-do-your-federal-taxes-for-free"
+        note: >-
+          Free guided preparation below an income threshold, and free fillable
+          forms at any income. Worth knowing exists.
+      - label: "Where to file a paper return"
+        url: "https://www.irs.gov/filing/where-to-file-paper-tax-returns-with-or-without-a-payment"
+
+  - key: work_it_out
+    label: "Work it out"
+    blurb: "The IRS's own calculators and answers."
+    links:
+      - label: "Tax Withholding Estimator"
+        url: "https://www.irs.gov/individuals/tax-withholding-estimator"
+        note: >-
+          The IRS's own tool for setting a W-4. Use it after any change of job,
+          marriage, birth or second income.
+      - label: "Interactive Tax Assistant"
+        url: "https://www.irs.gov/help/ita"
+        note: "Answers specific eligibility questions with the IRS's own logic."
+      - label: "Earned Income Credit assistant"
+        url: "https://www.irs.gov/credits-deductions/individuals/earned-income-tax-credit/use-the-eitc-assistant"
+      - label: "Standard deduction and filing status"
+        url: "https://www.irs.gov/help/ita/what-is-my-filing-status"
+      - label: "Retirement plan contribution limits"
+        url: "https://www.irs.gov/retirement-plans/plan-participant-employee/retirement-topics-401k-and-profit-sharing-plan-contribution-limits"
+
+  - key: safety
+    label: "Staying safe"
+    blurb: "How to tell a real IRS contact from a fake one."
+    links:
+      - label: "Tax scams and consumer alerts"
+        url: "https://www.irs.gov/newsroom/tax-scams-consumer-alerts"
+        note: >-
+          The IRS makes first contact by post, never by phone, text or email. It
+          never demands payment by Zelle, gift card, wire or cryptocurrency, and
+          it never threatens arrest over the phone.
+      - label: "Report phishing"
+        url: "https://www.irs.gov/privacy-disclosure/report-phishing"
+      - label: "Identity theft: what to do"
+        url: "https://www.irs.gov/identity-theft-central"
+      - label: "Taxpayer Advocate Service"
+        url: "https://www.taxpayeradvocate.irs.gov/"
+        note: >-
+          An independent office inside the IRS for problems the normal channels
+          have not solved. Free.
+      - label: "Taxpayer Bill of Rights"
+        url: "https://www.irs.gov/taxpayer-bill-of-rights"
+        note: "Ten rights you have in any dealing with the IRS."
+
+  - key: help
+    label: "Getting help"
+    blurb: "People, not pages."
+    links:
+      - label: "Contact the IRS"
+        url: "https://www.irs.gov/help/telephone-assistance"
+        note: "Wait times are worst on Mondays and around the April deadline."
+      - label: "Find a local Taxpayer Assistance Center"
+        url: "https://www.irs.gov/help/contact-your-local-irs-office"
+        note: "By appointment."
+      - label: "Free tax help (VITA and TCE)"
+        url: "https://www.irs.gov/individuals/free-tax-return-preparation-for-qualifying-taxpayers"
+        note: >-
+          Free preparation by trained volunteers for people on lower incomes,
+          with disabilities, or over 60.
+      - label: "Directory of credentialed preparers"
+        url: "https://irs.treasury.gov/rpo/rpo.jsf"
+        note: "Check anyone who offers to prepare your return."

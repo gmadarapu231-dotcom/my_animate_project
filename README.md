@@ -369,7 +369,8 @@ taxvault payment 9400 --cannot-pay   # price every way to settle a balance
 | **Verify identity** | SSN + verified email + verified mobile, before any tax data opens. |
 | **Documents** | W-2 by typed boxes, pasted text, or file. A PDF is read from its **layout**, so each figure comes out of the box it was printed in — including the state row, which a flat text read misses entirely. Names come off the form too. Everything read is shown back as editable fields before it drives an estimate. Cross-checked as it goes in — Box 4 against Box 3, Box 6 against Box 5, Box 5 less Box 1 against the Box 12 codes. |
 | **Identity check** | Every W-2 is checked against the account: the name graded against Social Security conventions, and the number in box a compared through the blind index. A mismatch is rejected by the IRS, so it is caught as the form goes in. |
-| **Estimate** | Federal plus every state return that follows, line by line. |
+| **Estimate** | Federal plus every state return that follows, line by line. Back and Save on every screen, so you can go and check a figure without losing what you typed. |
+| **IRS** | The IRS's own pages, grouped: refund tracker, transcripts, payment, scams, free help — plus your state's revenue department. Every link on a .gov domain, checked by test. |
 | **Regular or planning** | Planning re-runs the whole calculation per strategy and shows what each is worth — and whether its deadline has passed. |
 | **Prior years** | Which years are unfiled, what they owe, the penalties so far, and the three-year cut-off after which a refund is gone. |
 | **Payment** | Refund routes, or every way to settle a balance priced to total cost. Then a handoff to the IRS or your state's own site with the exact values to enter, and somewhere to record the confirmation number. |

@@ -48,6 +48,7 @@
     ['GET', /^\/api\/reference\/years$/, () => F.years],
     ['GET', /^\/api\/reference\/states$/, () => F.states],
     ['GET', /^\/api\/auth\/session$/, () => session()],
+    ['GET', /^\/api\/reference\/irs/, () => F.irs],
 
     ['POST', /^\/api\/auth\/sign-in$/, () => ({
       channel: 'email', sent_to: 'y•••@example.com', delivered: false,
@@ -107,14 +108,12 @@
       state.documents = [F.document];
       return F.document;
     }],
-    ['POST', /^\/api\/documents\/w2\/(text|file)$/, () => {
-      // The demo answers as a readable payroll PDF would: the boxes come out
-      // of the file. A real scan would come back at zero confidence, which the
-      // upload tab explains.
-      state.documents = [F.document];
-      return Object.assign({}, F.document, {
-        extraction: { method: 'pdf_text', readable: true, pages: 1, notes: [], strategy: 'layout' },
-      });
+    // Uploads are handled outside this table, in `demoUpload`, because they
+    // actually open the file rather than answering from a fixture.
+    ['POST', /^\/api\/documents\/w2\/text$/, (body) => {
+      const read = readPastedText(String((body && body.text) || ''));
+      state.documents = [read];
+      return read;
     }],
     ['DELETE', /^\/api\/documents\/\d+$/, () => { state.documents = []; return { deleted: 1 }; }],
 
@@ -202,6 +201,120 @@
     })],
   ];
 
+  /** A blank document shell, shaped the way the API returns one. */
+  function blankDocument(year) {
+    return {
+      id: 1, tax_year: year || 2025, kind: 'w2', status: 'needs_review', source: 'upload',
+      employer_name: null, employee_name: '', employer_ein_last4: null, state_code: null,
+      payload: {}, parse_confidence: 0, warnings: [], identity_checks: [],
+      original_filename: '', uploaded_at: new Date().toISOString(),
+      extraction: { method: 'none', readable: false, pages: 0, notes: [], strategy: 'none' },
+    };
+  }
+
+  /** Turn what `w2read` found into the payload shape the screens expect. */
+  function toDocument(found, meta) {
+    const f = found.form;
+    const document = blankDocument(meta.taxYear || f.taxYear || 2025);
+    document.tax_year = meta.taxYear || f.taxYear || 2025;
+    document.original_filename = meta.filename || '';
+    document.employer_name = f.employerName || null;
+    document.employee_name = [f.employeeFirstName, f.employeeLastName].filter(Boolean).join(' ');
+    document.employer_ein_last4 = f.employerEin ? f.employerEin.slice(-4) : null;
+    document.state_code = f.states.length ? f.states[0].state : null;
+    document.parse_confidence = found.confidence;
+    document.warnings = found.notes || [];
+    document.status = found.confidence >= 0.75 ? 'parsed' : 'needs_review';
+    document.extraction = {
+      method: meta.method || 'pdf_text', readable: true, pages: meta.pages || 1,
+      notes: [], strategy: 'layout',
+    };
+    const money = (value) => (Number(value) || 0).toFixed(2);
+    document.payload = {
+      employer_name: f.employerName || '',
+      employee_first_name: f.employeeFirstName || '',
+      employee_last_name: f.employeeLastName || '',
+      tax_year: document.tax_year,
+      box1_wages: money(f.wages),
+      box2_federal_withheld: money(f.federalWithheld),
+      box3_social_security_wages: money(f.socialSecurityWages),
+      box4_social_security_withheld: money(f.socialSecurityWithheld),
+      box5_medicare_wages: money(f.medicareWages),
+      box6_medicare_withheld: money(f.medicareWithheld),
+      box7_social_security_tips: money(f.socialSecurityTips),
+      box8_allocated_tips: '0.00',
+      box10_dependent_care: money(f.dependentCare),
+      box11_nonqualified: '0.00',
+      box12: Object.fromEntries(Object.entries(f.box12).map(([k, v]) => [k, money(v)])),
+      box13: { retirement_plan: !!f.retirementPlan },
+      box14: {},
+      states: f.states.map((line) => ({
+        state: line.state, state_id: '',
+        state_wages: money(line.stateWages), state_withheld: money(line.stateWithheld),
+        local_wages: '0.00', local_withheld: '0.00', locality: '',
+      })),
+    };
+    return document;
+  }
+
+  /** Read an uploaded file for real. */
+  async function demoUpload(formData) {
+    const file = formData.get('file');
+    const taxYear = parseInt(formData.get('tax_year'), 10) || 2025;
+    if (!file) {
+      const document = blankDocument(taxYear);
+      document.warnings = [{ severity: 'error', box: '', message: 'No file was given.' }];
+      return document;
+    }
+
+    const name = (file.name || '').toLowerCase();
+    const isPdf = name.endsWith('.pdf') || (file.type || '').includes('pdf');
+
+    if (!isPdf) {
+      const document = blankDocument(taxYear);
+      document.original_filename = file.name || '';
+      document.warnings = [{
+        severity: 'warning', box: '',
+        message: 'A photograph or scan cannot be read without OCR, which this demo does '
+          + 'not run. The boxes below are blank — fill them in and the estimate follows.',
+      }];
+      return document;
+    }
+
+    let buffer;
+    try {
+      buffer = await file.arrayBuffer();
+    } catch {
+      const document = blankDocument(taxYear);
+      document.warnings = [{ severity: 'error', box: '', message: 'That file could not be opened.' }];
+      return document;
+    }
+
+    const read = await window.TaxVaultPdf.readPdf(buffer);
+    if (!read.ok) {
+      const document = blankDocument(taxYear);
+      document.original_filename = file.name || '';
+      document.warnings = [{ severity: 'warning', box: '', message: read.reason }];
+      return document;
+    }
+
+    const found = window.TaxVaultW2.readW2(read.runs);
+    return toDocument(found, {
+      taxYear, filename: file.name || '', method: 'pdf_text', pages: 1,
+    });
+  }
+
+  /** Pasted text goes through the same finder, with runs faked from lines. */
+  function readPastedText(text) {
+    const runs = [];
+    text.split(/\r?\n/).forEach((line, index) => {
+      const trimmed = line.trim();
+      if (trimmed) runs.push({ text: trimmed, x: 0, y: 1000 - index * 12 });
+    });
+    const found = window.TaxVaultW2.readW2(runs);
+    return toDocument(found, { taxYear: found.form.taxYear || 2025, method: 'plain_text' });
+  }
+
   const realFetch = window.fetch ? window.fetch.bind(window) : null;
 
   window.fetch = function demoFetch(input, init) {
@@ -216,6 +329,18 @@
     let body = {};
     if (init && typeof init.body === 'string') {
       try { body = JSON.parse(init.body); } catch { body = {}; }
+    }
+
+    // A file upload is the one request that must open what it was given. The
+    // first version of this demo answered it from a fixture, so every upload
+    // showed the same sample whatever file went in -- which is worse than not
+    // offering the feature at all.
+    if (method === 'POST' && /^\/api\/documents\/w2\/file$/.test(path)
+        && init && init.body instanceof FormData) {
+      return demoUpload(init.body).then((document) => {
+        state.documents = [document];
+        return json(document, 200);
+      });
     }
 
     for (const [verb, pattern, handler] of ROUTES) {

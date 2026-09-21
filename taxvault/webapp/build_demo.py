@@ -186,6 +186,7 @@ def capture() -> dict:
         fixtures = {
             "years": client.get("/api/reference/years").json(),
             "states": client.get("/api/reference/states").json(),
+            "irs": client.get("/api/reference/irs?state_code=CA").json(),
             "session": client.get("/api/auth/session", headers=auth).json(),
             "identity": identity,
             "document": document,
@@ -224,6 +225,10 @@ def build(destination: Path) -> Path:
     css = (HERE / "styles.css").read_text(encoding="utf-8")
     app_js = (HERE / "app.js").read_text(encoding="utf-8")
     demo_js = (HERE / "demo.js").read_text(encoding="utf-8")
+    # The demo reads uploads itself, so it carries a PDF reader and the W-2
+    # finder. Both must load before `demo.js` installs the transport.
+    pdf_js = (HERE / "pdfread.js").read_text(encoding="utf-8")
+    w2_js = (HERE / "w2read.js").read_text(encoding="utf-8")
 
     mark, logo = inline_svg("mark.svg"), inline_svg("logo.svg")
 
@@ -240,7 +245,8 @@ def build(destination: Path) -> Path:
         '<script src="/static/app.js"></script>',
         "<script>window.TAXVAULT_FIXTURES = "
         + json.dumps(fixtures, separators=(",", ":"))
-        + ";</script>\n<script>\n" + demo_js + "\n</script>\n<script>\n"
+        + ";</script>\n<script>\n" + pdf_js + "\n</script>\n<script>\n"
+        + w2_js + "\n</script>\n<script>\n" + demo_js + "\n</script>\n<script>\n"
         + app_js.replace("'/static/logo.svg'", f"'{logo}'")
                 .replace('"/static/logo.svg"', f'"{logo}"')
         + "\n</script>",

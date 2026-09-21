@@ -239,6 +239,25 @@ two is how somebody ends up sending money to a stranger who asked for it by
 Zelle while claiming to be the IRS. The payment screen carries the scam warning
 and the irreversibility note alongside it.
 
+## The demo reads your file
+
+`taxvault/webapp/build_demo.py` produces a single HTML file that runs with no
+server. Its first version answered an upload from a fixture, so every file
+produced the same sample -- which is worse than not offering the feature,
+because it looks like the reader is broken rather than absent.
+
+It now opens the file. `pdfread.js` extracts the text with positions using the
+browser's own `DecompressionStream`, and `w2read.js` finds the boxes the same
+way the server does. It is not a full PDF implementation: it handles drawn text
+in simple fonts, which is what a payroll W-2 is, and returns nothing for a scan
+-- which is the correct answer, and is said rather than guessed at.
+
+Filters were the thing that made it look broken at first. `/Filter` may be one
+name or a chain, and writers routinely chain them: ReportLab emits `/Filter
+[ /ASCII85Decode /FlateDecode ]`. Handling only the single-name form meant
+skipping the stream silently, so a perfectly readable PDF came back as "no
+text found".
+
 ## What is deliberately absent
 
 * **E-filing.** Needs an EFIN and an MeF connection.

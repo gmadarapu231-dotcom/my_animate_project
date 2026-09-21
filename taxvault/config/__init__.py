@@ -196,3 +196,9 @@ def payments() -> dict[str, Any]:
 def fees() -> dict[str, Any]:
     """The practice's own price list. A business decision, not tax law."""
     return _load(CONFIG_DIR / "fees.yaml")
+
+
+@functools.lru_cache(maxsize=None)
+def resources() -> dict[str, Any]:
+    """Official IRS and state links, grouped for the reference screen."""
+    return _load(CONFIG_DIR / "resources.yaml")
