@@ -14,6 +14,7 @@ to route the document to review.
 
 from __future__ import annotations
 
+import io
 import re
 from decimal import Decimal
 from typing import Any
@@ -50,7 +51,12 @@ MONEY_BOXES: list[tuple[str, list[str]]] = [
 #: The boxes whose absence means the read failed rather than the box being blank.
 CRITICAL = ("wages", "federal_withheld", "social_security_wages", "medicare_wages")
 
-BOX12_CODE = re.compile(r"\b([A-Z]{1,2})\b[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)")
+#: A Box 12 entry: a one- or two-letter code, then an amount. Payroll separates
+#: them with a pipe and pads with spaces -- "W |        500.00" -- so the
+#: separator is optional and may be punctuation.
+BOX12_CODE = re.compile(
+    r"\b([A-Z]{1,2})\b\s*[|:\-]?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)"
+)
 SSN_SHAPE = re.compile(r"\b(\d{3}|\*{3})[-\s]?(\d{2}|\*{2})[-\s]?(\d{4})\b")
 EIN_SHAPE = re.compile(r"\b(\d{2}-\d{7})\b")
 YEAR = re.compile(r"\b(20[12]\d)\b")
@@ -71,8 +77,15 @@ def _read_names(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
     so the first line that looks like a name is the name. Reading it from the
     box means an address line never gets mistaken for a company.
     """
+    # Payroll providers word these labels differently -- ADP prints "e/f
+    # Employee's name, address, and ZIP code" where the IRS form says
+    # "Employee's first name and initial". Match on the part they agree on.
     employer_label = find_label(page, [
-        r"employer'?s? name,? address", r"\bc\b.{0,4}employer'?s? name",
+        r"employer'?s? name,? +address",
+        r"employer'?s? name,? +and +address",
+        r"\bc\b[^a-z]{0,4}employer'?s? name",
+        r"employer'?s? name\b",
+        r"employer name and address",
     ])
     if employer_label is not None:
         block = find_text_block(page, employer_label, width=300, depth=90)
@@ -85,7 +98,12 @@ def _read_names(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
                       "message": "The employer's name could not be read from the form."})
 
     employee_label = find_label(page, [
-        r"employee'?s? first name", r"\be\b.{0,4}employee'?s? (first )?name",
+        r"employee'?s? first name",
+        r"employee'?s? name,? +address",
+        r"e ?/ ?f[^a-z]{0,4}employee'?s? name",
+        r"\be\b[^a-z]{0,4}employee'?s? (first )?name",
+        r"employee'?s? name\b",
+        r"employee name and address",
     ])
     if employee_label is not None:
         block = find_text_block(page, employee_label, width=300, depth=95)
@@ -153,17 +171,40 @@ def _read_state_rows(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
 
 
 def _read_box12(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
+    """Box 12, read from the boxes rather than from a line of text.
+
+    Each of 12a to 12d is its own box with the code and amount inside it, so
+    the reliable way to read them is to find each label and look underneath.
+    A line scan is kept as a fallback for forms that print the codes in a list.
+    """
     from taxvault.forms.layout import lines_of
     from taxvault.forms.w2 import _BOX12_CODES
 
-    for row in lines_of(page):
-        text = " ".join(w.text for w in row).strip()
-        lowered = text.lower()
-        if lowered.startswith(("12", "see instructions for box 12")):
-            continue
+    def take(text: str) -> None:
         for code, amount in BOX12_CODE.findall(text):
             if code in _BOX12_CODES and ("." in amount or "," in amount):
                 form.box12.setdefault(code, money(amount.replace(",", "")))
+
+    # --- positional: each 12a-12d box in turn --------------------------------
+    for slot in ("12a", "12b", "12c", "12d"):
+        label = find_label(page, [rf"\b{slot}\b"])
+        if label is None:
+            continue
+        inside = [
+            word for word in page.words
+            if -6 <= (word.x - label.x) <= 124 and 0 < (label.y - word.y) <= 30
+        ]
+        if inside:
+            take(" ".join(w.text for w in sorted(inside, key=lambda w: (-w.y, w.x))))
+
+    # --- fallback: codes printed as a list ----------------------------------
+    if not form.box12:
+        for row in lines_of(page):
+            text = " ".join(w.text for w in row).strip()
+            if text.lower().startswith(("12", "see instructions for box 12")):
+                continue
+            take(text)
+
 
     # Box 13's retirement tick decides whether an IRA deduction is limited, so
     # it is worth reading rather than assuming.
@@ -172,6 +213,69 @@ def _read_box12(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
         form.retirement_plan = True
     elif form.elective_deferrals > ZERO:
         form.retirement_plan = True
+
+
+#: Field names fillable W-2 PDFs use, mapped to what they hold. Different
+#: producers name them differently, so each target lists its candidates.
+ACROFORM_FIELDS = {
+    "employer_name": ("employer", "employersname", "cemployersname", "employername"),
+    "employee_first_name": ("employeefirstname", "efirstname", "firstname"),
+    "employee_last_name": ("employeelastname", "elastname", "lastname"),
+    "employee_name": ("employeename", "employeesname", "efemployeesname"),
+}
+
+
+def _read_acroform(blob: bytes, form: W2, notes: list[dict[str, str]]) -> None:
+    """Names from a fillable PDF's form fields.
+
+    A W-2 delivered as a fillable form holds its values in the AcroForm rather
+    than drawn on the page, so nothing is found by looking at the page at all.
+    Only fills what is still missing.
+    """
+    try:
+        from pypdf import PdfReader
+
+        fields = PdfReader(io.BytesIO(blob)).get_fields() or {}
+    except Exception:
+        return
+    if not fields:
+        return
+
+    flat = {
+        "".join(ch for ch in str(key).lower() if ch.isalnum()): str(
+            (value.get("/V") if isinstance(value, dict) else value) or ""
+        ).strip()
+        for key, value in fields.items()
+    }
+
+    def pick(candidates: tuple[str, ...]) -> str:
+        for candidate in candidates:
+            for key, value in flat.items():
+                if candidate in key and value:
+                    return value
+        return ""
+
+    if not form.employer_name:
+        found = pick(ACROFORM_FIELDS["employer_name"])
+        if found:
+            form.employer_name = tidy_name(found.splitlines()[0])
+    if not form.employee_last_name and not form.employee_first_name:
+        first = pick(ACROFORM_FIELDS["employee_first_name"])
+        last = pick(ACROFORM_FIELDS["employee_last_name"])
+        if not first and not last:
+            whole = pick(ACROFORM_FIELDS["employee_name"])
+            parts = whole.splitlines()[0].split() if whole else []
+            if len(parts) >= 2:
+                first, last = " ".join(parts[:-1]), parts[-1]
+            elif parts:
+                first = parts[0]
+        if first:
+            form.employee_first_name = tidy_name(first)
+        if last:
+            form.employee_last_name = tidy_name(last)
+    if form.employer_name or form.employee_last_name:
+        notes.append({"severity": "info", "box": "",
+                      "message": "Some details were read from the PDF's form fields."})
 
 
 def read_w2_layout(blob: bytes) -> tuple[W2, float, list[dict[str, str]]]:
@@ -220,6 +324,8 @@ def read_w2_layout(blob: bytes) -> tuple[W2, float, list[dict[str, str]]]:
         form.employee_ssn = "-".join(ssn.groups())
 
     _read_names(page, form, notes)
+    if not form.employer_name or not (form.employee_first_name or form.employee_last_name):
+        _read_acroform(blob, form, notes)
     _read_box12(page, form, notes)
     _read_state_rows(page, form, notes)
 

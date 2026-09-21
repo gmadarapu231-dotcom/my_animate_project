@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Iterable
 
-from taxvault.config import federal
+from taxvault.config import UnsupportedTaxYear, federal, supported_years
 from taxvault.money import ZERO, cents, money, positive
 
 #: Box 12 codes that reduce Box 1 but not Box 3/5 (elective deferrals).
@@ -151,7 +151,16 @@ class W2:
         Severity is the point: `error` means the figures cannot all be right and
         a human must look; `warning` means it is unusual but legal.
         """
-        params = federal(year or self.tax_year or None)
+        # A client will hand you a 2019 W-2 for an unfiled year, and the
+        # cross-checks below are near-constant across years -- 6.2% and 1.45%
+        # have not moved in decades. Falling back to the nearest year we hold
+        # keeps the checks working; refusing would lose them entirely.
+        wanted = year or self.tax_year or None
+        try:
+            params = federal(wanted)
+        except UnsupportedTaxYear:
+            nearest = min(supported_years(), key=lambda y: abs(y - (wanted or 0)))
+            params = federal(nearest)
         findings: list[dict[str, str]] = []
 
         def add(severity: str, box: str, message: str) -> None:
@@ -406,12 +415,17 @@ def parse_w2_text(text: str) -> tuple[W2, float, list[str]]:
 
 #: Box 12 written with its box number, as on the form: "12a D 8,000.00".
 _BOX12_LABELLED = re.compile(
-    r"\b12\s*[a-dA-D]?\s*[:\-]?\s*([A-Z]{1,2})\b[\s:\-]*\$?\s*([0-9][0-9,]*\.?[0-9]{0,2})"
+    r"\b12\s*[a-dA-D]?\s*[:\-|]?\s*([A-Z]{1,2})\b[\s:\-|]*\$?\s*([0-9][0-9,]*\.?[0-9]{0,2})"
 )
 #: Box 12 written bare on its own line: "D  8,000.00". The amount must carry
 #: cents, which is what keeps "Form W-2" out of the results -- without it, that
 #: heading parses as code W for $2 and invents an HSA contribution.
-_BOX12_BARE = re.compile(r"(?:^|\n)\s*([A-Z]{1,2})[\s:\-]+\$?\s*([0-9][0-9,]*\.[0-9]{2})\b")
+#: A bare code and amount on their own line. Payroll prints these as
+#: "W |        500.00", so the separator may be a pipe and the amount is pushed
+#: away from the code by alignment spaces rather than sitting next to it.
+_BOX12_BARE = re.compile(
+    r"(?:^|\n)\s*([A-Z]{1,2})\s*[|:\-]?\s*\$?\s*([0-9][0-9,]*\.[0-9]{2})\b"
+)
 #: An amount with cents or a thousands separator. Deliberately stricter than
 #: `_MONEY`: a bare integer in a form's furniture is not a figure.
 _AMOUNT = re.compile(r"(?<![\d.])(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})(?![\d])")

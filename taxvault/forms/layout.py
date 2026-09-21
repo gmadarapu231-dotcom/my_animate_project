@@ -140,14 +140,19 @@ def find_label(page: Page, patterns: Iterable[str]) -> Word | None:
     which is exactly how Boxes 3 through 6 all came back with the same figure.
     """
     for row in lines_of(page):
-        # Character offset of each word within the joined line, so a regex
-        # match can be mapped back to the word it began in.
+        # Whitespace inside a label is not meaningful and is not consistent.
+        # Payroll forms print "16  State  wages, tips, etc." and "c  Employer's
+        # name,  address" with runs of spaces used for alignment, so a pattern
+        # written with single spaces never matches. Collapse it before matching,
+        # and build the offsets from the collapsed text so a match can still be
+        # mapped back to the word it began in.
+        pieces = [re.sub(r"\s+", " ", w.text).strip() for w in row]
         offsets: list[int] = []
         cursor = 0
-        for word in row:
+        for piece in pieces:
             offsets.append(cursor)
-            cursor += len(word.text) + 1
-        joined = " ".join(w.text for w in row).lower()
+            cursor += len(piece) + 1
+        joined = " ".join(pieces).lower()
 
         for pattern in patterns:
             match = re.search(pattern, joined)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -155,6 +156,96 @@ def cmd_estimate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_read_w2(args: argparse.Namespace) -> int:
+    """Show exactly what is read out of a W-2 PDF, and what is not.
+
+    For the case where an upload comes back wrong: run the file through here
+    and the output says which strategy ran, which boxes were located, and --
+    with `--dump` -- the raw text and label positions, so the failure can be
+    seen rather than guessed at.
+    """
+    from taxvault.forms.extract import extract_text
+    from taxvault.forms.w2 import parse_w2_text
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    path = Path(args.file)
+    if not path.exists():
+        print(f"No such file: {path}")
+        return 1
+    blob = path.read_bytes()
+    kind = "application/pdf" if blob[:5] == b"%PDF-" else ""
+
+    extraction = extract_text(blob, kind, path.name)
+    print(f"\nFile        {path.name}  ({len(blob) / 1024:.0f} KB)")
+    print(f"Extraction  {extraction.method}  readable={extraction.readable}  "
+          f"pages={extraction.pages}")
+    for note in extraction.notes:
+        print(f"  {note['severity']}: {note['message']}")
+    if not extraction.readable:
+        print("\nNothing to read. Enter the boxes by hand.\n")
+        return 0
+
+    layout, layout_confidence, layout_notes = read_w2_layout(blob)
+    flat, flat_confidence, _ = parse_w2_text(extraction.text)
+    form, confidence, strategy = (
+        (layout, layout_confidence, "layout") if layout_confidence >= flat_confidence
+        else (flat, flat_confidence, "text")
+    )
+
+    print(f"\nStrategy    {strategy}   (layout {layout_confidence}, text {flat_confidence})")
+    print(f"\nNames")
+    print(f"  employer            {form.employer_name or '-- NOT FOUND --'}")
+    print(f"  employee            {(form.employee_first_name + ' ' + form.employee_last_name).strip() or '-- NOT FOUND --'}")
+    print(f"  employer EIN        {form.employer_ein or '-- not found --'}")
+    print(f"  tax year            {form.tax_year or '-- not found --'}")
+
+    print("\nBoxes")
+    for label, value in [
+        ("1  wages", form.wages), ("2  federal withheld", form.federal_withheld),
+        ("3  social security wages", form.social_security_wages),
+        ("4  social security tax", form.social_security_withheld),
+        ("5  medicare wages", form.medicare_wages),
+        ("6  medicare tax", form.medicare_withheld),
+        ("7  tips", form.social_security_tips),
+        ("10 dependent care", form.dependent_care_benefits),
+    ]:
+        mark = "  " if value else "??"
+        print(f"  {mark} {label:<26} {value:>12,.2f}")
+    print(f"     {'12 codes':<26} {dict(form.box12) or '-- none found --'}")
+    for line in form.states:
+        print(f"     {'15-17 ' + line.state:<26} wages {line.state_wages:>12,.2f}  "
+              f"tax {line.state_withheld:>10,.2f}")
+    if not form.states:
+        print(f"  ?? {'15-17 state line':<26} -- NOT FOUND --")
+
+    from taxvault.config import supported_years
+
+    if form.tax_year and form.tax_year not in supported_years():
+        nearest = min(supported_years(), key=lambda y: abs(y - form.tax_year))
+        print(f"\n  note: {form.tax_year} has no rate table installed, so the "
+              f"cross-checks below use {nearest} figures.")
+    findings = form.validate(year=form.tax_year or None)
+    if findings:
+        print("\nCross-checks")
+        for finding in findings:
+            print(f"  {finding['severity']:<8} box {finding['box']:<3} {finding['message']}")
+    for note in layout_notes:
+        print(f"  {note['severity']:<8} {note['message']}")
+
+    if args.dump:
+        from taxvault.forms.layout import lines_of, words_from_pdf
+
+        print("\n--- lines as the reader sees them (y, x, text) ---")
+        for page in words_from_pdf(blob):
+            for row in lines_of(page):
+                text = " ".join(w.text for w in row)
+                print(f"  y={round(row[0].y):>4} x={round(row[0].x):>4}  {text[:120]}")
+    else:
+        print("\nRun again with --dump to see every line and its position.")
+    print()
+    return 0
+
+
 def cmd_payment(args: argparse.Namespace) -> int:
     direction, options = build_payment_options(
         args.balance, year=args.year or latest_year(),
@@ -216,6 +307,12 @@ def main(argv: list[str] | None = None) -> int:
     est.add_argument("--method", choices=["regular", "planning"], default="regular")
     est.add_argument("--json", action="store_true")
     est.set_defaults(func=cmd_estimate)
+
+    read = sub.add_parser("read-w2", help="show what is read out of a W-2 PDF")
+    read.add_argument("file", help="the PDF to read")
+    read.add_argument("--dump", action="store_true",
+                      help="also print every line with its position on the page")
+    read.set_defaults(func=cmd_read_w2)
 
     pay = sub.add_parser("payment", help="price the ways to settle a balance")
     pay.add_argument("balance", type=float, help="positive to pay, negative for a refund")

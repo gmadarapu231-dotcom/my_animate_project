@@ -402,3 +402,179 @@ def test_a_correction_replaces_what_was_read(client):
         "situation": {"filing_status": "single", "resident_state": "CA"},
     }).json()
     assert float(estimate["federal"]["agi"]) == 99000.0
+
+
+# ---------------------------------------------------------------------------
+# payroll-provider layouts
+# ---------------------------------------------------------------------------
+def build_adp_style_pdf() -> bytes:
+    """An ADP 'W-2 and Earnings Summary': the W-2 left, narrative right.
+
+    Two properties break a naive reader and both are real: labels are padded
+    with runs of spaces for alignment ("16  State  wages"), and the employee
+    label is worded "e/f Employee's name, address, and ZIP code" rather than
+    the IRS's "Employee's first name and initial".
+    """
+    pytest.importorskip("reportlab")
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+
+    W, H = letter[1], letter[0]
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=(W, H))
+
+    def box(x, y, w, h, label, value, small=6):
+        c.setLineWidth(0.5)
+        c.rect(x, y, w, h)
+        c.setFont("Helvetica", small)
+        c.drawString(x + 2, y + h - 7, label)
+        if value:
+            c.setFont("Helvetica-Bold", 8)
+            c.drawString(x + 4, y + 3, value)
+
+    L, TOP = 24, 560
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(L + 140, TOP, "2020")
+    box(L, TOP - 100, 256, 62, "c  Employer's name, address, and ZIP code", "")
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(L + 6, TOP - 58, "SAMPLE   COMPANY   INC")
+    c.setFont("Helvetica", 8)
+    c.drawString(L + 6, TOP - 70, "123 MAIN ST")
+    c.drawString(L + 6, TOP - 82, "ANYWHERE, CA  123456   1234")
+
+    box(L, TOP - 170, 256, 62, "e/f  Employee's name, address, and ZIP code", "")
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(L + 6, TOP - 126, "JOHN   SMITH")
+    c.setFont("Helvetica", 8)
+    c.drawString(L + 6, TOP - 138, "1234 S  MAPLE  ST")
+
+    box(L, TOP - 194, 128, 22, "b  Employer's FED ID number", "12-3456789")
+    box(L + 128, TOP - 194, 128, 22, "a  Employee's SSA number", "XXX-XX-1234")
+
+    rows = [
+        ("1  Wages, tips, other comp.", "23500.00", "2  Federal income tax withheld", "1500.00"),
+        ("3  Social security wages", "23500.00", "4  Social security tax withheld", "1457.00"),
+        ("5  Medicare wages and tips", "23500.00", "6  Medicare tax withheld", "340.75"),
+        ("11  Non qualified  plans", "", "12a See instructions for box 12", "W |        500.00"),
+    ]
+    y = TOP - 218
+    for l1, v1, l2, v2 in rows:
+        box(L, y, 128, 24, l1, v1)
+        box(L + 128, y, 128, 24, l2, v2)
+        y -= 24
+
+    y -= 26
+    box(L, y, 44, 22, "15 State", "CA")
+    box(L + 44, y, 84, 22, "Employer's state ID no", "12345678901ABC")
+    box(L + 128, y, 128, 22, "16  State  wages, tips, etc.", "23500.00")
+    y -= 22
+    box(L, y, 128, 22, "17  State  income tax", "800.00")
+
+    # The right-hand earnings summary, which a wide search would wander into.
+    R = 330
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(R, TOP + 6, "2020 W-2 and EARNINGS SUMMARY")
+    c.setFont("Helvetica", 8)
+    c.drawString(R, TOP - 24, "This section displays the breakdown of your total gross pay")
+    c.drawString(R, TOP - 122, "CA, State Wages,")
+    c.drawString(R, TOP - 132, "Tips, Etc.")
+    c.drawString(R, TOP - 240, "2. Employee  Name  and  Address.")
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(R + 30, TOP - 262, "JOHN   SMITH")
+    c.save()
+    return buffer.getvalue()
+
+
+def test_a_padded_label_is_still_found():
+    """"16  State  wages" has runs of spaces for alignment. Patterns written
+    with single spaces missed it entirely, and the state tax read as zero."""
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_adp_style_pdf())
+    assert len(form.states) == 1
+    assert str(form.states[0].state_wages) == "23500.00"
+    assert str(form.states[0].state_withheld) == "800.00"
+
+
+def test_the_adp_employee_label_wording_is_recognised():
+    """ADP says "e/f Employee's name, address" where the IRS says
+    "Employee's first name and initial"."""
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_adp_style_pdf())
+    assert form.employer_name == "Sample Company Inc"
+    assert form.employee_first_name == "John"
+    assert form.employee_last_name == "Smith"
+
+
+def test_the_narrative_column_does_not_leak_into_the_names():
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_adp_style_pdf())
+    for junk in ("EARNINGS", "section", "breakdown", "MAIN ST", "MAPLE"):
+        assert junk.lower() not in form.employer_name.lower()
+        assert junk.lower() not in (form.employee_first_name + form.employee_last_name).lower()
+
+
+def test_a_box_12_code_separated_by_a_pipe_is_read():
+    """Payroll prints "W |        500.00". The pipe and the padding both broke it."""
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_adp_style_pdf())
+    assert form.box12 == {"W": pytest.approx(500.00)} or str(form.box12["W"]) == "500.00"
+
+
+def test_every_money_box_comes_off_the_adp_form():
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, confidence, _ = read_w2_layout(build_adp_style_pdf())
+    assert confidence == 1.0
+    assert str(form.wages) == "23500.00"
+    assert str(form.federal_withheld) == "1500.00"
+    assert str(form.social_security_withheld) == "1457.00"
+    assert str(form.medicare_withheld) == "340.75"
+
+
+def test_a_year_with_no_rate_table_does_not_crash_validation():
+    """A client hands you a 2020 W-2 for an unfiled year. The cross-checks are
+    near-constant across years, so they fall back rather than raising."""
+    from taxvault.forms.w2 import W2
+
+    form = W2.from_dict({
+        "tax_year": 2020, "box1_wages": 23500, "box3_social_security_wages": 23500,
+        "box4_social_security_withheld": 1457, "box5_medicare_wages": 23500,
+        "box6_medicare_withheld": 340.75,
+    })
+    findings = form.validate()
+    assert isinstance(findings, list)
+
+
+def test_names_are_read_from_a_fillable_pdfs_form_fields():
+    """Some W-2s hold their values in the AcroForm, not drawn on the page."""
+    pytest.importorskip("reportlab")
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    c.setFont("Helvetica", 9)
+    c.drawString(60, 700, "2025 Form W-2")
+    c.drawString(60, 680, "1 Wages, tips, other compensation  50,000.00")
+    c.drawString(60, 660, "2 Federal income tax withheld  6,000.00")
+    c.drawString(60, 640, "3 Social security wages  50,000.00")
+    c.drawString(60, 620, "5 Medicare wages and tips  50,000.00")
+    c.acroForm.textfield(name="EmployersName", value="RIVERBEND FOODS LLC",
+                         x=300, y=700, width=200, height=14)
+    c.acroForm.textfield(name="EmployeeFirstName", value="PRIYA",
+                         x=300, y=680, width=200, height=14)
+    c.acroForm.textfield(name="EmployeeLastName", value="NAIR",
+                         x=300, y=660, width=200, height=14)
+    c.save()
+
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, notes = read_w2_layout(buffer.getvalue())
+    assert form.employer_name == "Riverbend Foods LLC"
+    assert form.employee_first_name == "Priya"
+    assert form.employee_last_name == "Nair"
+    assert any("form fields" in n["message"] for n in notes)
