@@ -27,6 +27,9 @@ const state = {
   chosen: null,          // null = "apply everything that helps"
   handoff: null,         // where to go to pay, once a method is picked
   serviceFee: null,
+  fee: null,            // the quote for this engagement
+  ledger: null,         // what we hold for the client
+  authorizations: null,
   taxYear: null,
   situation: loadSituation(),
   pendingMobile: '',     // the number verified this session; the input is gone after re-render
@@ -166,7 +169,10 @@ function go(view) {
   render();
   if (view === 'documents') refreshDocuments();
   if (view === 'filings') refreshFilings();
-  if (view === 'payment' && !state.serviceFee) refreshServiceFee();
+  if (view === 'payment') {
+    if (!state.serviceFee) refreshServiceFee();
+    refreshBilling();
+  }
 }
 
 function steps(current) {
@@ -1034,23 +1040,8 @@ function viewPayment() {
       <div class="note info">Pick a payment method above to see the detail.</div>`}
   </div>` : ''}
 
-  <div class="card">
-    <h2>Paying for this service</h2>
-    <p class="sub">
-      Separate from your tax. This settles the preparation fee, and Zelle works here.
-    </p>
-    <div id="fee-options">
-      ${state.serviceFee ? state.serviceFee.options.map((o) => `
-        <div class="choice" style="cursor:default">
-          <strong>${esc(o.label)}${o.recommended ? ' · recommended' : ''}</strong>
-          <span>${esc(o.cost)}${o.settles_in ? ` · ${esc(o.settles_in)}` : ''}</span>
-          ${o.irreversible ? `<span style="color:var(--warn)">
-            Cannot be reversed once sent — check the address before you send.</span>` : ''}
-          ${o.note ? `<span style="margin-top:6px">${esc(o.note)}</span>` : ''}
-        </div>`).join('') : '<div class="skeleton" style="width:70%"></div>'}
-    </div>
-    ${state.serviceFee ? `<div class="note info">${esc(state.serviceFee.note)}</div>` : ''}
-  </div>
+  ${feeCard()}
+  ${!refund ? remittanceCard(result) : ''}
 
   ${Number(nextYear.shortfall) > 0 ? `
   <div class="card">
@@ -1069,6 +1060,138 @@ function viewPayment() {
     </table>` : ''}
     <div class="note info">${esc(nextYear.note || '')}</div>
   </div>` : ''}`;
+}
+
+function feeCard() {
+  const fee = state.fee;
+  return `
+  <div class="card">
+    <h2>Our fee for preparing this</h2>
+    <p class="sub">
+      Separate from your tax, and never taken out of your refund. You see the whole
+      price before any work starts.
+    </p>
+    ${fee ? `
+      <div class="headline" style="border-left-color:var(--gold)">
+        <div class="label">${esc(fee.tier_label)}</div>
+        <div class="amount">${money2(fee.total)}</div>
+        <div class="note">${esc(fee.tier_description)}</div>
+      </div>
+      <table class="lines">
+        <tbody>${(fee.lines || []).map((l) => `
+          <tr class="${l.kind === 'discount' ? '' : ''}">
+            <td>${esc(l.label)}${l.note ? `<span class="form">${esc(l.note)}</span>` : ''}</td>
+            <td class="num">${money2(l.amount)}</td>
+          </tr>`).join('')}
+          <tr class="total"><td>Total</td><td class="num">${money2(fee.total)}</td></tr>
+        </tbody>
+      </table>
+      ${Number(fee.total) > 0 ? `
+        <h3>Pay the fee</h3>
+        <div class="choices">
+          ${(state.serviceFee ? state.serviceFee.options : []).map((o) => `
+            <button class="choice" data-fee-method="${esc(o.method)}" aria-pressed="${o.method === 'zelle'}">
+              <strong>${esc(o.label)}${o.recommended ? ' · recommended' : ''}</strong>
+              <span>${esc(o.cost)}${o.settles_in ? ` · ${esc(o.settles_in)}` : ''}</span>
+              ${o.irreversible ? `<span style="color:var(--warn)">
+                Cannot be reversed once sent — check the address first.</span>` : ''}
+            </button>`).join('')}
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label for="fee-reference">Reference from your payment</label>
+          <input id="fee-reference" placeholder="e.g. the Zelle confirmation" autocomplete="off">
+        </div>
+        <button class="btn slim" id="record-fee">I have paid the fee</button>
+      ` : `<div class="note good">No charge for this return.</div>`}
+      ${(fee.notes || []).map((n) => `<div class="note info">${esc(n)}</div>`).join('')}
+    ` : `
+      <div class="skeleton" style="width:60%"></div>
+      <div class="skeleton" style="width:80%"></div>`}
+  </div>`;
+}
+
+function remittanceCard(result) {
+  const ledger = state.ledger;
+  const live = (state.authorizations || []).find((a) => a.status === 'authorized');
+  const done = (state.authorizations || []).filter((a) => a.status === 'remitted');
+  const held = ledger ? Number(ledger.held_for_tax) : 0;
+  // Federal and state are separate authorisations, because they are separate
+  // payments to separate authorities. This card handles the federal one.
+  const federalDue = Math.max(0, Number(result.totals.federal_balance));
+  const stateDue = Math.max(0, Number(result.totals.state_balance));
+  const shortfall = Math.max(0, federalDue - held);
+
+  return `
+  <div class="card">
+    <h2>Or let us pay the IRS for you</h2>
+    <p class="sub">
+      Send us the tax and we pay it on your behalf. Your money is held separately
+      from our fee and goes nowhere until you say so.
+    </p>
+
+    <dl class="kv">
+      <dt>Federal tax to pay</dt><dd>${money2(federalDue)}</dd>
+      <dt>Held for you</dt><dd>${money2(held)}</dd>
+      <dt><strong>${shortfall > 0 ? 'Still to send' : 'Fully funded'}</strong></dt>
+      <dd><strong>${shortfall > 0 ? money2(shortfall) : '✓'}</strong></dd>
+    </dl>
+
+    ${stateDue > 0 ? `
+      <div class="note info">
+        Your state return owes ${money2(stateDue)} as well. That is a separate payment
+        to a separate authority and needs its own instruction — settle it on the state
+        site above, or ask us to handle it too.
+      </div>` : ''}
+
+    ${shortfall > 0 ? `
+      <h3>Send the tax</h3>
+      <div class="row two">
+        <div class="field">
+          <label for="funds-amount">Amount sent</label>
+          <input id="funds-amount" inputmode="decimal" value="${shortfall.toFixed(2)}">
+        </div>
+        <div class="field">
+          <label for="funds-reference">Reference</label>
+          <input id="funds-reference" placeholder="Zelle confirmation" autocomplete="off">
+        </div>
+      </div>
+      <button class="btn slim" id="record-funds">I have sent this</button>
+    ` : ''}
+
+    ${live ? `
+      <div class="note good">
+        <strong>Authorised.</strong> ${esc(live.statement)}
+        ${live.can_withdraw ? `
+          <div class="actions" style="margin-top:10px">
+            <button class="btn slim ghost" data-withdraw="${live.id}">Withdraw this instruction</button>
+          </div>` : ''}
+      </div>
+    ` : `
+      <h3>Authorise the payment</h3>
+      <div class="note info" id="auth-statement">
+        I authorise TaxVault to pay ${money2(federalDue)} to the IRS on my behalf for
+        tax year ${state.estimate ? state.estimate.tax_year : ''}, from funds I have sent
+        for that purpose. I understand this money is held separately from the
+        preparation fee, that I can withdraw this instruction at any time before it is
+        sent, and that I remain responsible to the IRS for the tax itself.
+      </div>
+      <div class="check">
+        <input type="checkbox" id="agree-remit">
+        <label for="agree-remit">I have read this and I authorise it.</label>
+      </div>
+      <button class="btn slim" id="authorize-remit">Authorise</button>
+    `}
+
+    ${done.length ? `
+      <h3>Paid</h3>
+      ${done.map((a) => `
+        <div class="note good">
+          ${money2(a.amount)} paid to ${esc(a.jurisdiction === 'federal' ? 'the IRS' : a.state_code)}
+          for ${a.tax_year}${a.confirmation_number ? ` · confirmation ${esc(a.confirmation_number)}` : ''}
+        </div>`).join('')}` : ''}
+
+    ${ledger ? `<div class="note info">${esc(ledger.note)}</div>` : ''}
+  </div>`;
 }
 
 function handoffCard(h) {
@@ -1176,6 +1299,7 @@ function wire() {
   wireEstimate();
   wireFilings();
   wirePayment();
+  wireBilling();
 }
 
 function wireSignIn() {
@@ -1472,6 +1596,7 @@ function wireEstimate() {
   const run = el('run-estimate');
   if (run) run.addEventListener('click', () => guard(run, async () => {
     state.estimate = await api('/api/estimates', { method: 'POST', body: estimateBody(state.method) });
+    state.fee = null;   // the return changed, so the price may have
     render();
     toast(state.estimate.headline);
   }));
@@ -1514,6 +1639,70 @@ function wireFilings() {
     await refreshFilings();
     render();
   }));
+}
+
+function wireBilling() {
+  let feeMethod = 'zelle';
+  document.querySelectorAll('[data-fee-method]').forEach((button) =>
+    button.addEventListener('click', () => {
+      feeMethod = button.dataset.feeMethod;
+      document.querySelectorAll('[data-fee-method]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b === button)));
+    }));
+
+  const payFee = el('record-fee');
+  if (payFee) payFee.addEventListener('click', () => guard(payFee, async () => {
+    if (!state.fee || !state.fee.quote_id) throw new Error('No fee quote yet.');
+    const result = await api('/api/billing/fee/paid', { method: 'POST', body: {
+      quote_id: state.fee.quote_id, method: feeMethod,
+      amount: Number(state.fee.total),
+      reference: (el('fee-reference').value || '').trim(),
+    }});
+    toast(result.note);
+    await refreshBilling();
+    render();
+  }));
+
+  const sendFunds = el('record-funds');
+  if (sendFunds) sendFunds.addEventListener('click', () => guard(sendFunds, async () => {
+    const amount = parseFloat(String(el('funds-amount').value).replace(/[^0-9.]/g, ''));
+    if (!amount) throw new Error('How much did you send?');
+    const result = await api('/api/billing/funds', { method: 'POST', body: {
+      amount, tax_year: state.estimate ? state.estimate.tax_year : null,
+      method: 'zelle', reference: (el('funds-reference').value || '').trim(),
+    }});
+    toast(result.note);
+    await refreshBilling();
+    render();
+  }));
+
+  const authorise = el('authorize-remit');
+  if (authorise) authorise.addEventListener('click', () => guard(authorise, async () => {
+    if (!el('agree-remit').checked) {
+      throw new Error('Tick the box to confirm you authorise this.');
+    }
+    const result = await api('/api/billing/authorize', { method: 'POST', body: {
+      amount: Math.abs(Number(state.estimate.totals.federal_balance)),
+      tax_year: state.estimate.tax_year,
+      jurisdiction: 'federal',
+      estimate_id: state.estimate.estimate_id,
+      agreed: true,
+    }});
+    toast(result.note);
+    await refreshBilling();
+    render();
+  }));
+
+  document.querySelectorAll('[data-withdraw]').forEach((button) =>
+    button.addEventListener('click', () => guard(button, async () => {
+      const result = await api(
+        `/api/billing/authorizations/${button.dataset.withdraw}/withdraw`,
+        { method: 'POST' },
+      );
+      toast(result.note);
+      await refreshBilling();
+      render();
+    })));
 }
 
 function wirePayment() {
@@ -1609,6 +1798,27 @@ async function refreshDocuments() {
 async function refreshServiceFee() {
   try {
     state.serviceFee = await api('/api/payments/service-fee');
+    if (state.view === 'payment') render();
+  } catch (error) {
+    if (error.status !== 403) toast(error.message, 'bad');
+  }
+}
+
+async function refreshBilling() {
+  try {
+    const [ledger, authorizations] = await Promise.all([
+      api('/api/billing/ledger'),
+      api('/api/billing/authorizations'),
+    ]);
+    state.ledger = ledger;
+    state.authorizations = authorizations.authorizations;
+    if (!state.fee && state.estimate) {
+      state.fee = await api('/api/billing/quote', { method: 'POST', body: {
+        estimate_id: state.estimate.estimate_id || null,
+        tax_year: state.estimate.tax_year,
+        w2_count: (state.documents || []).length || 1,
+      }});
+    }
     if (state.view === 'payment') render();
   } catch (error) {
     if (error.status !== 403) toast(error.message, 'bad');

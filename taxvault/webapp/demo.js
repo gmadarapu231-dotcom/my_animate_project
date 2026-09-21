@@ -23,6 +23,10 @@
     mobileVerified: false,
     identityVerified: false,
     documents: [],
+    heldForTax: 0,
+    feesPaid: 0,
+    ledger: [],
+    authorizations: [],
   };
 
   const json = (body, status = 200) =>
@@ -120,6 +124,67 @@
     ['GET', /^\/api\/filings\/history/, () => F.filings],
     ['POST', /^\/api\/payments\/choose$/, () => F.payment],
     ['GET', /^\/api\/payments\/handoff/, () => F.handoff],
+
+    // Billing. The demo keeps its own little ledger so the two buckets stay
+    // visibly separate, which is the whole point of the screen.
+    ['POST', /^\/api\/billing\/quote$/, () => F.fee],
+    ['GET', /^\/api\/billing\/ledger$/, () => ({
+      held_for_tax: state.heldForTax.toFixed(2),
+      fees_received: state.feesPaid.toFixed(2),
+      entries: state.ledger,
+      note: 'Money held for tax is yours and is kept separate from what you have paid '
+        + 'for preparation. It is only ever sent to the tax authority you authorised.',
+    })],
+    ['POST', /^\/api\/billing\/fee\/paid$/, (body) => {
+      state.feesPaid += Number(body.amount) || 0;
+      state.ledger.unshift({ id: state.ledger.length + 1, at: new Date().toISOString(),
+        bucket: 'fee', direction: 'received', amount: String(body.amount),
+        balance_after: state.feesPaid.toFixed(2), method: body.method,
+        reference: body.reference, note: 'Preparation fee' });
+      return { recorded: true, amount: String(body.amount),
+               note: 'Recorded against your preparation fee. This is separate from your tax.' };
+    }],
+    ['POST', /^\/api\/billing\/funds$/, (body) => {
+      state.heldForTax += Number(body.amount) || 0;
+      state.ledger.unshift({ id: state.ledger.length + 1, at: new Date().toISOString(),
+        bucket: 'tax', direction: 'received', amount: String(body.amount),
+        balance_after: state.heldForTax.toFixed(2), method: body.method,
+        reference: body.reference, note: 'Received for onward payment of tax' });
+      return { recorded: true, amount: String(body.amount),
+               held_for_tax: state.heldForTax.toFixed(2),
+               note: 'Held for you and kept separate from the preparation fee.' };
+    }],
+    ['GET', /^\/api\/billing\/authorizations$/, () => ({
+      held_for_tax: state.heldForTax.toFixed(2), authorizations: state.authorizations,
+    })],
+    ['POST', /^\/api\/billing\/authorize$/, (body) => {
+      const amount = Number(body.amount) || 0;
+      const row = {
+        id: state.authorizations.length + 1, tax_year: body.tax_year,
+        jurisdiction: body.jurisdiction || 'federal', state_code: '',
+        amount: amount.toFixed(2), status: 'authorized', can_withdraw: true,
+        authorized_at: new Date().toISOString(), remitted_at: null,
+        confirmation_number: null,
+        statement: 'I authorise TaxVault to pay $' + amount.toLocaleString('en-US',
+          { minimumFractionDigits: 2 }) + ' to the IRS on my behalf for tax year '
+          + body.tax_year + ', from funds I have sent for that purpose. I understand '
+          + 'this money is held separately from the preparation fee, that I can '
+          + 'withdraw this instruction at any time before it is sent, and that I '
+          + 'remain responsible to the IRS for the tax itself.',
+      };
+      state.authorizations.unshift(row);
+      const short = amount - state.heldForTax;
+      return { ...row, held_for_tax: state.heldForTax.toFixed(2), funded: short <= 0,
+               shortfall: Math.max(0, short).toFixed(2),
+               note: short <= 0 ? 'Authorised and fully funded. It goes in the next batch.'
+                 : 'Authorised, but more is needed before it can be sent.' };
+    }],
+    ['POST', /^\/api\/billing\/authorizations\/\d+\/withdraw$/, () => {
+      state.authorizations.forEach((a) => {
+        if (a.status === 'authorized') { a.status = 'revoked'; a.can_withdraw = false; }
+      });
+      return { status: 'revoked', note: 'Withdrawn. Nothing will be sent.' };
+    }],
     ['GET', /^\/api\/payments\/service-fee$/, () => F.service_fee],
     ['POST', /^\/api\/payments\/record$/, (body) => ({
       id: 1, recorded: true, amount: String(body.amount || 0),

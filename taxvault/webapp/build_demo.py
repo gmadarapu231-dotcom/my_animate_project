@@ -201,6 +201,9 @@ def capture() -> dict:
                 "jurisdiction": "federal", "method": "irs_direct_pay",
             }).json(),
             "service_fee": client.get("/api/payments/service-fee", headers=auth).json(),
+            "fee": client.post("/api/billing/quote", headers=auth, json={
+                "estimate_id": regular["estimate_id"], "tax_year": 2025, "w2_count": 1,
+            }).json(),
         }
 
     # The token is a real signed credential for a throwaway database, but there
