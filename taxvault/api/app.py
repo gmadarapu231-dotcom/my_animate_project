@@ -10,7 +10,15 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from taxvault.api.routers import auth, documents, estimates, filings, payments, reference
+from taxvault.api.routers import (
+    auth,
+    billing,
+    documents,
+    estimates,
+    filings,
+    payments,
+    reference,
+)
 from taxvault.api.security import install_security
 from taxvault.auth import development_mode
 from taxvault.config import latest_year, states, supported_years
@@ -45,6 +53,7 @@ app.include_router(documents.router)
 app.include_router(estimates.router)
 app.include_router(filings.router)
 app.include_router(payments.router)
+app.include_router(billing.router)
 
 
 @app.get("/api/health")

@@ -1,0 +1,135 @@
+# The practice's own price list.
+#
+# Everything here is a business decision, not tax law, so it lives in its own
+# file and a firm edits it without touching code. The structure is: a base
+# price set by how complex the return is, plus add-ons for the work that
+# actually takes time, plus a band by income -- because a $2m return carries
+# more review and more risk than a $40k one.
+#
+# The quote is always itemised. A client who cannot see what they are paying
+# for has no way to tell a fair price from an arbitrary one.
+as_of: "2026-01-01"
+currency: USD
+minimum: 30
+maximum: 2500
+
+# What the client is told before any figure appears.
+promise: >-
+  You see the full price before any work starts, and it does not change unless
+  your situation does. Nothing is deducted from your refund.
+
+# Base price by complexity. The first tier a return qualifies for wins,
+# checked from the most complex down.
+tiers:
+  complex:
+    label: "Complex return"
+    base: 550
+    when: "Business, rental or partnership income, or more than two states"
+    description: >-
+      Schedule C, E or K-1 income, multi-state allocation, or a return needing
+      substantive planning work.
+  self_employed:
+    label: "Self-employed"
+    base: 325
+    when: "Schedule C income, or 1099-NEC work"
+    description: "Self-employment tax, expenses, QBI and quarterly planning."
+  investment:
+    label: "Investments"
+    base: 240
+    when: "Capital gains, dividends or investment income above the threshold"
+    description: "Schedule B and D, cost basis review, gains stacking."
+  itemized:
+    label: "Itemised deductions"
+    base: 185
+    when: "Itemising beats the standard deduction"
+    description: "Schedule A: mortgage interest, SALT, charity, medical."
+  standard:
+    label: "Standard return"
+    base: 95
+    when: "W-2 income with dependants, credits or a state return"
+    description: "Federal and one state, with credits worked through."
+  simple:
+    label: "Simple return"
+    base: 30
+    when: "One W-2, standard deduction, no dependants"
+    description: "Federal and one state, standard deduction."
+
+# Charged on top of the base, only when the work is actually there.
+add_ons:
+  additional_w2:
+    label: "Each additional W-2"
+    amount: 15
+    note: "After the first. Multiple employers mean reconciling Social Security."
+  additional_state:
+    label: "Each additional state return"
+    amount: 75
+    note: "A non-resident or part-year return is a separate return."
+  local_return:
+    label: "Local or city return"
+    amount: 45
+  dependents:
+    label: "Each dependant"
+    amount: 20
+    note: "Credit eligibility, childcare, and the due diligence the IRS requires."
+  eitc_due_diligence:
+    label: "Earned income credit due diligence"
+    amount: 60
+    note: >-
+      Form 8867 is required by law when the EITC is claimed, and the penalty for
+      skipping it falls on the preparer.
+  education_credit:
+    label: "Education credit"
+    amount: 35
+  capital_gains_detail:
+    label: "Capital gains schedule"
+    amount: 55
+    note: "Charged when transactions need basis review rather than a summary."
+  prior_year_return:
+    label: "Each prior-year return"
+    amount: 150
+    note: "An unfiled year is a complete return on that year's law."
+  planning_session:
+    label: "Planning review"
+    amount: 120
+    note: "Optional. The planning estimate is free; acting on it is the work."
+  amended_return:
+    label: "Amended return (1040-X)"
+    amount: 195
+  extension:
+    label: "Extension filing"
+    amount: 0
+    note: "No charge. An extension takes minutes and delaying it costs clients money."
+
+# A band by income, applied to the base only -- never to the add-ons, so the
+# charge for a second W-2 is the same whoever it belongs to.
+income_bands:
+  - {up_to: 75000, multiplier: 1.0, label: "Up to $75k"}
+  - {up_to: 150000, multiplier: 1.15, label: "$75k - $150k"}
+  - {up_to: 300000, multiplier: 1.4, label: "$150k - $300k"}
+  - {up_to: 600000, multiplier: 1.8, label: "$300k - $600k"}
+  - {up_to: null, multiplier: 2.4, label: "Above $600k"}
+
+# Reductions the practice chooses to offer.
+discounts:
+  returning_client:
+    label: "Returning client"
+    percent: 10
+  simple_and_early:
+    label: "Filed before 1 March"
+    percent: 5
+    note: "Rewards the clients who make the season survivable."
+  refund_only_simple:
+    label: "Low income, simple return"
+    percent: 100
+    applies_when_agi_under: 20000
+    note: >-
+      Free. A return this simple takes minutes, and somebody on this income
+      should not be paying for it.
+
+# How the fee itself is collected. Separate from the tax, always.
+collection:
+  methods: [zelle, ach_debit, card]
+  due: "before_filing"
+  note: >-
+    The preparation fee is paid to the practice. It is never taken out of a
+    refund and it never travels with a tax payment.

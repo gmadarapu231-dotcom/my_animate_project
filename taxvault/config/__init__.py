@@ -190,3 +190,9 @@ def states(year: int | None = None) -> StateParams:
 def payments() -> dict[str, Any]:
     """IRS payment, instalment and collection options."""
     return _load(CONFIG_DIR / "payments.yaml")
+
+
+@functools.lru_cache(maxsize=None)
+def fees() -> dict[str, Any]:
+    """The practice's own price list. A business decision, not tax law."""
+    return _load(CONFIG_DIR / "fees.yaml")

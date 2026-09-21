@@ -311,6 +311,130 @@ class PaymentPlan(Base, TimestampMixin):
     estimate: Mapped["Estimate"] = relationship(back_populates="payment_plans")
 
 
+# ===========================================================================
+# 6. The practice's fee, and money held for clients
+# ===========================================================================
+class FeeQuoteRecord(Base, TimestampMixin):
+    """What the client was quoted, and what they agreed to.
+
+    Kept because a price a client cannot point back to is a price they cannot
+    hold you to. The itemised lines are stored, not just the total.
+    """
+
+    __tablename__ = "fee_quote"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    taxpayer_id: Mapped[int] = mapped_column(
+        ForeignKey("taxpayer.id", ondelete="CASCADE"), index=True
+    )
+    estimate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("estimate.id", ondelete="SET NULL")
+    )
+    tax_year: Mapped[int] = mapped_column(Integer)
+    tier: Mapped[str] = mapped_column(String(32))
+    base: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    add_ons: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    total: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    lines: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    payment_method: Mapped[Optional[str]] = mapped_column(String(32))
+    payment_reference: Mapped[Optional[str]] = mapped_column(String(128))
+
+
+class TrustEntry(Base):
+    """One movement of money the practice holds on a client's behalf.
+
+    This is a trust ledger, and the distinction it enforces is the one that
+    matters most in the whole system: **fee money is the practice's revenue,
+    tax money is the client's and is only passing through.** They are different
+    buckets and must never be commingled -- commingling client funds is what
+    ends practices.
+
+    Append-only. A correction is a new entry, never an edit, because a ledger
+    you can rewrite is not a ledger.
+    """
+
+    __tablename__ = "trust_entry"
+    __table_args__ = (Index("ix_trust_taxpayer_time", "taxpayer_id", "at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    taxpayer_id: Mapped[int] = mapped_column(
+        ForeignKey("taxpayer.id", ondelete="CASCADE"), index=True
+    )
+    #: `tax` is held in trust for the client. `fee` is the practice's own money.
+    bucket: Mapped[str] = mapped_column(String(8), default="tax")
+    direction: Mapped[str] = mapped_column(String(12))   # received | disbursed | refunded
+    amount: Mapped[float] = mapped_column(Numeric(14, 2))
+    balance_after: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    method: Mapped[Optional[str]] = mapped_column(String(32))
+    reference: Mapped[Optional[str]] = mapped_column(String(128))
+    tax_year: Mapped[Optional[int]] = mapped_column(Integer)
+    note: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class RemittanceAuthorization(Base, TimestampMixin):
+    """The client's instruction to pay their tax on their behalf.
+
+    Without this the practice is moving someone else's money on its own say-so.
+    It records what was authorised, for how much, for which year and which
+    jurisdiction, when, and from where -- and it is revocable until the money
+    actually leaves.
+    """
+
+    __tablename__ = "remittance_authorization"
+    __table_args__ = (
+        Index("ix_auth_taxpayer_year", "taxpayer_id", "tax_year", "jurisdiction"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    taxpayer_id: Mapped[int] = mapped_column(
+        ForeignKey("taxpayer.id", ondelete="CASCADE"), index=True
+    )
+    estimate_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("estimate.id", ondelete="SET NULL")
+    )
+    tax_year: Mapped[int] = mapped_column(Integer)
+    jurisdiction: Mapped[str] = mapped_column(String(8), default="federal")
+    state_code: Mapped[Optional[str]] = mapped_column(String(2), default="")
+    amount: Mapped[float] = mapped_column(Numeric(14, 2))
+    status: Mapped[str] = mapped_column(String(16), default="authorized")
+    authorized_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    authorized_ip: Mapped[Optional[str]] = mapped_column(String(64))
+    #: What the client was shown when they agreed, kept verbatim.
+    statement: Mapped[Optional[str]] = mapped_column(Text)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    remitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    confirmation_number: Mapped[Optional[str]] = mapped_column(String(64))
+    batch_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("remittance_batch.id", ondelete="SET NULL")
+    )
+
+
+class RemittanceBatch(Base, TimestampMixin):
+    """A set of client tax payments sent to the IRS in one go.
+
+    EFTPS Batch Provider is the IRS's own channel for a firm paying on behalf
+    of many clients; Direct Pay is not, and caps at two payments per 24 hours.
+    """
+
+    __tablename__ = "remittance_batch"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reference: Mapped[str] = mapped_column(String(64), unique=True)
+    channel: Mapped[str] = mapped_column(String(32), default="eftps_batch")
+    jurisdiction: Mapped[str] = mapped_column(String(8), default="federal")
+    state_code: Mapped[Optional[str]] = mapped_column(String(2), default="")
+    status: Mapped[str] = mapped_column(String(16), default="prepared")
+    item_count: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    settlement_date: Mapped[Optional[date]] = mapped_column(Date)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    note: Mapped[Optional[str]] = mapped_column(Text)
+
+
 class AuditEvent(Base):
     """An append-only trail. IRS Publication 4557 requires one, and it is also
     the only way to answer "who looked at this client's SSN, and when"."""
