@@ -354,7 +354,7 @@ function viewDocuments() {
       <div class="row three">
         <button class="choice" data-doc-mode="boxes" aria-pressed="true"><strong>Type the boxes</strong><span>Most accurate</span></button>
         <button class="choice" data-doc-mode="text" aria-pressed="false"><strong>Paste text</strong><span>From a payroll portal</span></button>
-        <button class="choice" data-doc-mode="file" aria-pressed="false"><strong>Upload the file</strong><span>Stored, not read</span></button>
+        <button class="choice" data-doc-mode="file" aria-pressed="false"><strong>Upload the file</strong><span>PDFs are read</span></button>
       </div>
     </div>
 
@@ -432,25 +432,95 @@ function boxField(id, label) {
   </div>`;
 }
 
+//: The boxes shown in the read-back panel, in form order.
+const READBACK = [
+  ['box1_wages', 'Box 1 — Wages'],
+  ['box2_federal_withheld', 'Box 2 — Federal withheld'],
+  ['box3_social_security_wages', 'Box 3 — Social security wages'],
+  ['box4_social_security_withheld', 'Box 4 — Social security tax'],
+  ['box5_medicare_wages', 'Box 5 — Medicare wages'],
+  ['box6_medicare_withheld', 'Box 6 — Medicare tax'],
+  ['box7_social_security_tips', 'Box 7 — Tips'],
+  ['box10_dependent_care', 'Box 10 — Dependent care'],
+];
+
 function documentRow(doc) {
   const problems = (doc.warnings || []).filter((w) => w.severity === 'error');
   const notes = (doc.warnings || []).filter((w) => w.severity !== 'error');
-  const wages = (doc.payload && doc.payload.box1_wages) || 0;
+  const p = doc.payload || {};
+  const wages = p.box1_wages || 0;
+  const read = Number(doc.parse_confidence || 0);
+  const states = p.states || [];
+
   return `
   <div class="docrow">
     <div class="grow">
       <div class="name">${esc(doc.employer_name || 'Unnamed employer')} · ${doc.tax_year}</div>
       <div class="meta">
-        Box 1 ${money(wages)}${doc.state_code ? ` · ${esc(doc.state_code)}` : ''} ·
-        <span class="pill ${doc.status === 'needs_review' ? 'attention' : 'ok'}">${esc(doc.status.replace('_', ' '))}</span>
+        ${doc.employee_name ? `${esc(doc.employee_name)} · ` : ''}Box 1 ${money(wages)}${
+          doc.state_code ? ` · ${esc(doc.state_code)}` : ''} ·
+        <span class="pill ${doc.status === 'needs_review' ? 'attention' : 'ok'}">${
+          esc(doc.status.replace('_', ' '))}</span>
       </div>
     </div>
     <button data-delete-doc="${doc.id}" aria-label="Remove this W-2">Remove</button>
   </div>
+
   ${problems.length ? `<div class="note bad"><strong>Check this form:</strong><ul>${
     problems.map((w) => `<li>${esc(w.message)}</li>`).join('')}</ul></div>` : ''}
   ${notes.length ? `<div class="note info"><ul>${
-    notes.map((w) => `<li>${esc(w.message)}</li>`).join('')}</ul></div>` : ''}`;
+    notes.map((w) => `<li>${esc(w.message)}</li>`).join('')}</ul></div>` : ''}
+
+  <details class="readback" ${read < 1 || problems.length ? 'open' : ''}>
+    <summary>Check what we read${read < 1 ? ' — some boxes are missing' : ''}</summary>
+    <p class="sub" style="margin-top:8px">
+      Every figure below feeds the estimate. Correct anything that does not match
+      the form in your hand, then save — an estimate is only as good as these.
+    </p>
+    <div class="row two">
+      <div class="field">
+        <label for="fix-employer-${doc.id}">Employer</label>
+        <input id="fix-employer-${doc.id}" value="${esc(doc.employer_name || '')}"
+               placeholder="Employer name">
+      </div>
+      <div class="field">
+        <label for="fix-employee-${doc.id}">Employee</label>
+        <input id="fix-employee-${doc.id}" value="${esc(doc.employee_name || '')}"
+               placeholder="Your name as printed">
+      </div>
+    </div>
+    <div class="row two">
+      ${READBACK.map(([key, label]) => {
+        const value = Number(p[key] || 0);
+        const missing = value === 0;
+        return `<div class="field">
+          <label for="fix-${key}-${doc.id}">${label}${
+            missing ? ' <span class="hint">not found</span>' : ''}</label>
+          <input id="fix-${key}-${doc.id}" inputmode="decimal"
+                 class="${missing ? 'missing' : ''}" value="${value ? esc(value) : ''}"
+                 placeholder="0.00">
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="row three">
+      <div class="field">
+        <label for="fix-state-${doc.id}">State</label>
+        <select id="fix-state-${doc.id}"><option value="">None</option>${
+          stateOptions((states[0] && states[0].state) || '')}</select>
+      </div>
+      <div class="field">
+        <label for="fix-box16-${doc.id}">Box 16 — State wages</label>
+        <input id="fix-box16-${doc.id}" inputmode="decimal"
+               value="${states[0] ? esc(Number(states[0].state_wages) || '') : ''}" placeholder="0.00">
+      </div>
+      <div class="field">
+        <label for="fix-box17-${doc.id}">Box 17 — State tax</label>
+        <input id="fix-box17-${doc.id}" inputmode="decimal"
+               value="${states[0] ? esc(Number(states[0].state_withheld) || '') : ''}" placeholder="0.00">
+      </div>
+    </div>
+    <button class="btn slim" data-fix-doc="${doc.id}">Save corrections</button>
+  </details>`;
 }
 
 /* ========================================================== 3. ESTIMATE */
@@ -1155,6 +1225,50 @@ function wireDocuments() {
     await refreshDocuments();
     render();
   }));
+
+  document.querySelectorAll('[data-fix-doc]').forEach((button) =>
+    button.addEventListener('click', () => guard(button, async () => {
+      const id = button.dataset.fixDoc;
+      const field = (key) => el(`fix-${key}-${id}`);
+      const amount = (key) => {
+        const node = field(key);
+        if (!node || node.value === '') return 0;
+        return parseFloat(String(node.value).replace(/[^0-9.\-]/g, '')) || 0;
+      };
+      const employee = (field('employee').value || '').trim().split(/\s+/);
+      const stateCode = field('state').value;
+      const box12 = {};
+      const existing = (state.documents.find((d) => String(d.id) === String(id)) || {}).payload || {};
+      Object.entries(existing.box12 || {}).forEach(([code, value]) => {
+        box12[code] = Number(value) || 0;
+      });
+
+      await api(`/api/documents/${id}`, { method: 'PATCH', body: {
+        tax_year: Number(existing.tax_year) || state.taxYear,
+        employer_name: field('employer').value.trim(),
+        employee_first_name: employee.slice(0, -1).join(' ') || employee[0] || '',
+        employee_last_name: employee.length > 1 ? employee[employee.length - 1] : '',
+        box1_wages: amount('box1_wages'),
+        box2_federal_withheld: amount('box2_federal_withheld'),
+        box3_social_security_wages: amount('box3_social_security_wages'),
+        box4_social_security_withheld: amount('box4_social_security_withheld'),
+        box5_medicare_wages: amount('box5_medicare_wages'),
+        box6_medicare_withheld: amount('box6_medicare_withheld'),
+        box7_social_security_tips: amount('box7_social_security_tips'),
+        box10_dependent_care: amount('box10_dependent_care'),
+        box12,
+        box13: { retirement_plan: !!(existing.box13 || {}).retirement_plan },
+        states: stateCode ? [{
+          state: stateCode,
+          state_wages: amount('box16') || amount('box1_wages'),
+          state_withheld: amount('box17'),
+        }] : [],
+      }});
+      state.estimate = null;   // the figures changed, so the old answer is stale
+      toast('Saved. Run the estimate again to use these figures.');
+      await refreshDocuments();
+      render();
+    })));
 
   document.querySelectorAll('[data-delete-doc]').forEach((button) =>
     button.addEventListener('click', () => guard(null, async () => {

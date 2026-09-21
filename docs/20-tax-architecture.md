@@ -26,7 +26,7 @@ Account ─ sign-in (email code, no password)
 | Money | `taxvault/money.py` | `Decimal` everywhere, bracket arithmetic, phase-outs |
 | Parameters | `taxvault/config/` | One YAML per tax year; 51 jurisdictions; IRS payment options |
 | Crypto | `taxvault/crypto.py` | AES-GCM envelope encryption, blind index, SSN validation |
-| Forms | `taxvault/forms/w2.py` | W-2 boxes, cross-checks, text extraction |
+| Forms | `taxvault/forms/` | W-2 boxes and cross-checks, PDF text extraction, layout reading |
 | Engines | `taxvault/engines/` | federal, state, planning, compliance, payments, estimate |
 | Auth | `taxvault/auth/` | One-time codes, session tokens, identity verification |
 | API | `taxvault/api/` | 26 paths / 28 operations, two gates, rate limiting, security headers |
@@ -76,6 +76,41 @@ explicitly in `_preferential_tax` and pinned by test.
 `Estimate.breakdown` persists it. The client can show the client their own
 return line by line. An estimate nobody can reconstruct is an estimate nobody
 can defend.
+
+## Reading a W-2
+
+A W-2 is a grid, and that is the whole difficulty. Flattening a PDF to text
+keeps the labels and the figures but throws away which box each figure was in,
+reducing the association to "roughly adjacent". On a real form that is wrong
+often enough to matter: boxes 3 and 4 share a visual line, so a reader anchored
+to the start of that line gives both the same figure, and boxes 16 and 17 end
+up far apart in the dump, so the state tax reads as zero and the client is
+shown a state refund that does not exist.
+
+So `taxvault/forms/layout.py` keeps the coordinates, and
+`taxvault/forms/w2_layout.py` asks a geometric question instead of a textual
+one: *what amount is drawn inside this label's box?* Labels are anchored where
+the match begins rather than where the line begins, which is what keeps box 1
+from resolving to the identity box printed beside it.
+
+Three strategies, best first, and the response says which one ran:
+
+| Strategy | When | Confidence |
+|---|---|---|
+| `layout` | a PDF whose geometry is readable | fraction of critical boxes located |
+| `text` | geometry unreadable, flat text usable | fraction of critical boxes matched |
+| `repaired` | labels and amounts wholly separated | cut by 20%, routed to review |
+
+Names come out of the same geometry. The employer and employee blocks hold a
+name on the first line and an address underneath, so reading the block means an
+address line is never mistaken for a company. `tidy_name` then cases it like a
+name rather than calling `str.title()`, which renders "NORTHWIND LOGISTICS LLC"
+as "Northwind Logistics Llc".
+
+Whatever comes out is shown back to the client as editable fields before it
+drives anything, with any box that could not be found marked rather than left
+looking like a zero the form actually stated. An estimate is only as good as
+the figures under it, and the client is the only one who can confirm them.
 
 ## Regular versus planning
 

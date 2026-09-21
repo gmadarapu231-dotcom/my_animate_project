@@ -202,3 +202,203 @@ def test_an_unreadable_scan_still_says_so_through_the_api(client):
     assert body["parse_confidence"] == 0.0
     assert body["status"] == "needs_review"
     assert any("OCR" in w["message"] for w in body["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# layout reading
+# ---------------------------------------------------------------------------
+def build_grid_w2_pdf() -> bytes:
+    """A W-2 laid out as the real form is: a grid of boxes, two columns.
+
+    The important property is that boxes sit side by side, so one visual line
+    carries several labels. A reader that anchors to the start of a line gets
+    every one of them wrong.
+    """
+    pytest.importorskip("reportlab")
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+
+    def box(x, y, w, h, label, value, small=7):
+        c.setLineWidth(0.6)
+        c.rect(x, y, w, h)
+        c.setFont("Helvetica", small)
+        c.drawString(x + 3, y + h - 9, label)
+        if value:
+            c.setFont("Helvetica", 9)
+            c.drawString(x + 5, y + 5, value)
+
+    box(40, 640, 300, 46, "a  Employee's social security number", "123-45-6789")
+    box(40, 586, 300, 48, "b  Employer identification number (EIN)", "12-3456789")
+    box(40, 496, 300, 84, "c  Employer's name, address, and ZIP code", "")
+    c.setFont("Helvetica", 9)
+    c.drawString(45, 556, "NORTHWIND LOGISTICS LLC")
+    c.drawString(45, 544, "1400 Harbor Parkway, Suite 210")
+    box(40, 400, 300, 90, "e  Employee's first name and initial   Last name", "")
+    c.setFont("Helvetica", 9)
+    c.drawString(45, 460, "MARIA J")
+    c.drawString(130, 460, "SANTOS-RIVERA")
+    c.drawString(45, 440, "88 Cedar Street Apt 4B")
+
+    rows = [
+        ("1  Wages, tips, other compensation", "96,480.00",
+         "2  Federal income tax withheld", "11,235.40"),
+        ("3  Social security wages", "104,980.00",
+         "4  Social security tax withheld", "6,508.76"),
+        ("5  Medicare wages and tips", "104,980.00",
+         "6  Medicare tax withheld", "1,522.21"),
+        ("7  Social security tips", "", "8  Allocated tips", ""),
+        ("9", "", "10  Dependent care benefits", "5,000.00"),
+        ("11  Nonqualified plans", "", "12a  See instructions for box 12", "D  8,500.00"),
+    ]
+    y = 640
+    for l1, v1, l2, v2 in rows:
+        box(350, y, 115, 46, l1, v1)
+        box(465, y, 115, 46, l2, v2)
+        y -= 46
+    box(350, y, 115, 46, "13  Statutory  Retirement  Third-party", "X  Retirement plan", small=6)
+    y -= 98
+
+    heads = ["15 State", "Employer's state ID number", "16 State wages, tips, etc.",
+             "17 State income tax", "18 Local wages, tips, etc.", "19 Local income tax"]
+    vals = ["CA", "123-4567-8", "96,480.00", "5,142.90", "", ""]
+    xs = [40, 95, 210, 310, 395, 480]
+    widths = [55, 115, 100, 85, 85, 60]
+    for x, w, head, value in zip(xs, widths, heads, vals):
+        box(x, y, w, 40, head, value, small=6)
+
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(40, y - 24, "Form W-2   Wage and Tax Statement                    2025")
+    c.save()
+    return buffer.getvalue()
+
+
+def test_layout_reading_gets_every_money_box_from_a_grid_form():
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, confidence, _ = read_w2_layout(build_grid_w2_pdf())
+    assert confidence == 1.0
+    assert str(form.wages) == "96480.00"
+    assert str(form.federal_withheld) == "11235.40"
+    assert str(form.social_security_wages) == "104980.00"
+    assert str(form.social_security_withheld) == "6508.76"
+    assert str(form.medicare_wages) == "104980.00"
+    assert str(form.medicare_withheld) == "1522.21"
+    assert str(form.dependent_care_benefits) == "5000.00"
+
+
+def test_side_by_side_boxes_are_not_confused_for_each_other():
+    """Boxes 3 and 4 share a line. Anchoring to the line start gave both the
+    same figure, and Box 1 the figure from the identity box beside it."""
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_grid_w2_pdf())
+    assert form.social_security_wages != form.social_security_withheld
+    assert form.medicare_wages != form.medicare_withheld
+    assert str(form.wages) == "96480.00"
+
+
+def test_the_state_row_is_read_from_the_page(): 
+    """Boxes 16 and 17 are adjacent on the page and far apart in a text dump.
+    Reading the dump reported no state tax, which is a wrong estimate."""
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_grid_w2_pdf())
+    assert len(form.states) == 1
+    assert form.states[0].state == "CA"
+    assert str(form.states[0].state_wages) == "96480.00"
+    assert str(form.states[0].state_withheld) == "5142.90"
+
+
+def test_names_come_off_the_form():
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_grid_w2_pdf())
+    assert form.employer_name == "Northwind Logistics LLC"
+    assert form.employee_first_name == "Maria J"
+    assert form.employee_last_name == "Santos-Rivera"
+    assert form.employer_ein == "12-3456789"
+
+
+def test_an_address_line_is_never_mistaken_for_a_name():
+    from taxvault.forms.w2_layout import read_w2_layout
+
+    form, _, _ = read_w2_layout(build_grid_w2_pdf())
+    assert "Harbor" not in form.employer_name
+    assert "Cedar" not in (form.employee_first_name + form.employee_last_name)
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("NORTHWIND LOGISTICS LLC", "Northwind Logistics LLC"),
+    ("ACME CORPORATION", "Acme Corporation"),
+    ("SANTOS-RIVERA", "Santos-Rivera"),
+    ("BANK OF THE WEST", "Bank of the West"),
+    ("O'BRIEN AND SONS", "O'Brien and Sons"),
+    ("Dana Reed", "Dana Reed"),
+])
+def test_names_are_cased_like_names_not_title_cased(raw, expected):
+    """`str.title()` renders LLC as "Llc", which is how the employer's name
+    came back looking wrong."""
+    from taxvault.forms.layout import tidy_name
+
+    assert tidy_name(raw) == expected
+
+
+def test_a_grid_pdf_upload_produces_a_correct_state_estimate(client):
+    """End to end: the state figures have to reach the estimate."""
+    from tests.test_tax_journey import auth
+
+    token = _ready(client)
+    uploaded = client.post(
+        "/api/documents/w2/file",
+        files={"file": ("w2.pdf", build_grid_w2_pdf(), "application/pdf")},
+        data={"tax_year": "2025"},
+        headers=auth(token),
+    ).json()
+    assert uploaded["extraction"]["strategy"] == "layout"
+    assert uploaded["employee_name"] == "Maria J Santos-Rivera"
+    assert uploaded["employer_name"] == "Northwind Logistics LLC"
+
+    estimate = client.post("/api/estimates", headers=auth(token), json={
+        "tax_year": 2025, "method": "regular",
+        "situation": {"filing_status": "single", "resident_state": "CA"},
+    }).json()
+    california = next(s for s in estimate["states"] if s["code"] == "CA")
+    # The withholding from Box 17 must be in the state result, not zero.
+    assert float(california["withheld"]) == 5142.90
+    assert float(estimate["federal"]["agi"]) == 96480.0
+
+
+def test_a_correction_replaces_what_was_read(client):
+    """The read-back panel has to actually change the figures."""
+    from tests.test_tax_journey import auth
+
+    token = _ready(client)
+    uploaded = client.post(
+        "/api/documents/w2/file",
+        files={"file": ("w2.pdf", build_grid_w2_pdf(), "application/pdf")},
+        data={"tax_year": "2025"},
+        headers=auth(token),
+    ).json()
+
+    fixed = client.patch(f"/api/documents/{uploaded['id']}", headers=auth(token), json={
+        "tax_year": 2025,
+        "employer_name": "Northwind Logistics LLC",
+        "box1_wages": 99000,
+        "box2_federal_withheld": 12000,
+        "box3_social_security_wages": 99000,
+        "box4_social_security_withheld": 6138,
+        "box5_medicare_wages": 99000,
+        "box6_medicare_withheld": 1435.50,
+        "states": [{"state": "CA", "state_wages": 99000, "state_withheld": 5500}],
+    })
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["payload"]["box1_wages"] == "99000.00"
+
+    estimate = client.post("/api/estimates", headers=auth(token), json={
+        "tax_year": 2025, "method": "regular",
+        "situation": {"filing_status": "single", "resident_state": "CA"},
+    }).json()
+    assert float(estimate["federal"]["agi"]) == 99000.0

@@ -53,10 +53,10 @@ class W2StateLine:
         return {
             "state": self.state,
             "state_id": self.state_id,
-            "state_wages": str(self.state_wages),
-            "state_withheld": str(self.state_withheld),
-            "local_wages": str(self.local_wages),
-            "local_withheld": str(self.local_withheld),
+            "state_wages": str(cents(self.state_wages)),
+            "state_withheld": str(cents(self.state_withheld)),
+            "local_wages": str(cents(self.local_wages)),
+            "local_withheld": str(cents(self.local_withheld)),
             "locality": self.locality,
         }
 
@@ -68,6 +68,8 @@ class W2:
     employer_name: str = ""
     employer_ein: str = ""
     employee_ssn: str = ""
+    employee_first_name: str = ""
+    employee_last_name: str = ""
     tax_year: int = 0
 
     wages: Decimal = ZERO                    # box 1  Wages, tips, other compensation
@@ -250,26 +252,32 @@ class W2:
     # serialisation
     # ------------------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
+        # Every amount is quantised to cents on the way out. Without it the
+        # stored figure carries whatever scale its entry route produced --
+        # `99000.0` from a typed correction, `99000.00` from a parsed form --
+        # and the same wage then reads differently depending on how it arrived.
         return {
             "employer_name": self.employer_name,
+            "employee_first_name": self.employee_first_name,
+            "employee_last_name": self.employee_last_name,
             "tax_year": self.tax_year,
-            "box1_wages": str(self.wages),
-            "box2_federal_withheld": str(self.federal_withheld),
-            "box3_social_security_wages": str(self.social_security_wages),
-            "box4_social_security_withheld": str(self.social_security_withheld),
-            "box5_medicare_wages": str(self.medicare_wages),
-            "box6_medicare_withheld": str(self.medicare_withheld),
-            "box7_social_security_tips": str(self.social_security_tips),
-            "box8_allocated_tips": str(self.allocated_tips),
-            "box10_dependent_care": str(self.dependent_care_benefits),
-            "box11_nonqualified": str(self.nonqualified_plans),
-            "box12": {code: str(amount) for code, amount in self.box12.items()},
+            "box1_wages": str(cents(self.wages)),
+            "box2_federal_withheld": str(cents(self.federal_withheld)),
+            "box3_social_security_wages": str(cents(self.social_security_wages)),
+            "box4_social_security_withheld": str(cents(self.social_security_withheld)),
+            "box5_medicare_wages": str(cents(self.medicare_wages)),
+            "box6_medicare_withheld": str(cents(self.medicare_withheld)),
+            "box7_social_security_tips": str(cents(self.social_security_tips)),
+            "box8_allocated_tips": str(cents(self.allocated_tips)),
+            "box10_dependent_care": str(cents(self.dependent_care_benefits)),
+            "box11_nonqualified": str(cents(self.nonqualified_plans)),
+            "box12": {code: str(cents(amount)) for code, amount in self.box12.items()},
             "box13": {
                 "statutory_employee": self.statutory_employee,
                 "retirement_plan": self.retirement_plan,
                 "third_party_sick_pay": self.third_party_sick_pay,
             },
-            "box14": {label: str(amount) for label, amount in self.box14.items()},
+            "box14": {label: str(cents(amount)) for label, amount in self.box14.items()},
             "states": [line.to_dict() for line in self.states],
             "derived": {
                 "elective_deferrals": str(self.elective_deferrals),
@@ -308,6 +316,8 @@ class W2:
             employer_name=data.get("employer_name", ""),
             employer_ein=data.get("employer_ein", ""),
             employee_ssn=data.get("employee_ssn", ""),
+            employee_first_name=data.get("employee_first_name", ""),
+            employee_last_name=data.get("employee_last_name", ""),
             tax_year=int(data.get("tax_year") or 0),
             wages=pick("box1_wages", "wages", "box1"),
             federal_withheld=pick("box2_federal_withheld", "federal_withheld", "box2"),

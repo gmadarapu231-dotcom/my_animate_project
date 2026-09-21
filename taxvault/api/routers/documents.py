@@ -32,6 +32,7 @@ from taxvault.db.models import TaxDocument, Taxpayer
 from taxvault.enums import DocumentKind, DocumentStatus
 from taxvault.forms.extract import extract_text, pair_orphan_amounts
 from taxvault.forms.w2 import W2, parse_w2_text
+from taxvault.forms.w2_layout import read_w2_layout
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -135,6 +136,12 @@ def _serialise(document: TaxDocument) -> dict[str, Any]:
         "status": document.status,
         "source": document.source,
         "employer_name": document.employer_name,
+        "employee_name": " ".join(
+            part for part in (
+                (document.payload or {}).get("employee_first_name", ""),
+                (document.payload or {}).get("employee_last_name", ""),
+            ) if part
+        ),
         "employer_ein_last4": document.employer_ein_last4,
         "state_code": document.state_code,
         "payload": document.payload,
@@ -244,30 +251,45 @@ async def add_w2_file(
 
     extraction = extract_text(blob, content_type, file.filename or "")
     warnings: list[dict[str, str]] = list(extraction.notes)
+    strategy = "none"
+    form, confidence = W2(), 0.0
 
     if extraction.readable:
-        form, confidence, text_warnings = parse_w2_text(extraction.text)
-        warnings += [{"severity": "warning", "box": "", "message": w} for w in text_warnings]
+        # Read the page's geometry first. A W-2 is a grid, and a flattened text
+        # dump loses it: Box 16 and Box 17 sit next to each other on the page
+        # but far apart in the dump, so a flat read quietly reports no state
+        # tax at all. Reading position gets the right figure out of the right
+        # box, and also finds the names, which a flat read cannot place.
+        if extraction.method == "pdf_text":
+            form, confidence, layout_notes = read_w2_layout(blob)
+            strategy = "layout"
+            warnings += layout_notes
 
-        # A W-2 is a grid, and extraction flattens grids: the labels can end up
-        # separated from their amounts. When the ordinary parse comes back poor,
-        # try re-pairing the amounts with the boxes in form order.
+        # Fall back to the flat parse when the geometry was unreadable, and
+        # keep whichever read found more of the boxes that matter.
+        if confidence < 1.0:
+            flat, flat_confidence, text_warnings = parse_w2_text(extraction.text)
+            if flat_confidence > confidence:
+                form, confidence, strategy = flat, flat_confidence, "text"
+                warnings += [{"severity": "warning", "box": "", "message": w}
+                             for w in text_warnings]
+
         if confidence < 0.75:
             repaired = pair_orphan_amounts(extraction.text)
             if repaired:
                 salvaged, salvaged_confidence, _ = parse_w2_text(repaired)
                 if salvaged_confidence > confidence:
+                    # A repair, not a read: the confidence is cut to match.
                     form, confidence = salvaged, round(salvaged_confidence * 0.8, 3)
+                    strategy = "repaired"
                     warnings.append({
                         "severity": "warning", "box": "",
                         "message": (
-                            "The boxes were read from the layout rather than from "
-                            "labels, so check every figure against the form before "
-                            "relying on this estimate."
+                            "The boxes were matched by position in the form rather than "
+                            "read from their labels, so check every figure against your "
+                            "W-2 before relying on this estimate."
                         ),
                     })
-    else:
-        form, confidence = W2(), 0.0
 
     form.tax_year = tax_year
 
@@ -279,9 +301,10 @@ async def add_w2_file(
     audit(session, "document_uploaded", account_id=account.id, actor=account.email,
           subject=f"document:{document.id}", ip_address=client_ip(request),
           filename=file.filename, bytes=len(blob), content_type=content_type,
-          extraction=extraction.method, readable=extraction.readable)
+          extraction=extraction.method, readable=extraction.readable,
+          strategy=strategy)
     payload = _serialise(document)
-    payload["extraction"] = extraction.to_dict()
+    payload["extraction"] = {**extraction.to_dict(), "strategy": strategy}
     return payload
 
 

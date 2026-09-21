@@ -339,3 +339,14 @@ a { color: var(--accent); }
    screen that carries the most weight, and nothing else. */
 .headline { border-left: 4px solid var(--good); }
 .headline.owed { border-left-color: var(--gold); }
+
+
+/* The read-back panel. Whatever was pulled off the form is shown as editable
+   fields rather than as a result, because a figure the client has not checked
+   is a figure that should not drive an estimate. A box that could not be found
+   is marked rather than left looking like a zero the form actually stated. */
+.readback { margin: 4px 0 14px; border: 1px solid var(--line); border-radius: var(--radius);
+            padding: 12px 14px; background: var(--panel-2); }
+.readback > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--accent); }
+.readback input.missing { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--panel)); }
+.readback .btn.slim { margin-top: 4px; }

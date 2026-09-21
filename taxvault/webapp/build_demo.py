@@ -48,6 +48,75 @@ SAMPLE_SITUATION = {
 }
 
 
+def _sample_w2_pdf() -> bytes | None:
+    """A W-2 laid out as the real form is, for the demo capture.
+
+    Returns None when reportlab is not installed -- it is a build-time
+    dependency, and the build falls back to typed boxes rather than failing.
+    """
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+    except ImportError:
+        return None
+
+    import io
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+
+    def box(x, y, w, h, label, value, small=7):
+        c.setLineWidth(0.6)
+        c.rect(x, y, w, h)
+        c.setFont("Helvetica", small)
+        c.drawString(x + 3, y + h - 9, label)
+        if value:
+            c.setFont("Helvetica", 9)
+            c.drawString(x + 5, y + 5, value)
+
+    box(40, 640, 300, 46, "a  Employee's social security number", "123-45-6789")
+    box(40, 586, 300, 48, "b  Employer identification number (EIN)", "12-3456789")
+    box(40, 496, 300, 84, "c  Employer's name, address, and ZIP code", "")
+    c.setFont("Helvetica", 9)
+    c.drawString(45, 556, "NORTHWIND LOGISTICS LLC")
+    c.drawString(45, 544, "1400 Harbor Parkway, Suite 210")
+    box(40, 400, 300, 90, "e  Employee's first name and initial   Last name", "")
+    c.setFont("Helvetica", 9)
+    c.drawString(45, 460, "DANA J")
+    c.drawString(130, 460, "REED")
+    c.drawString(45, 440, "88 Cedar Street Apt 4B")
+
+    rows = [
+        ("1  Wages, tips, other compensation", "118,000.00",
+         "2  Federal income tax withheld", "14,200.00"),
+        ("3  Social security wages", "126,000.00",
+         "4  Social security tax withheld", "7,812.00"),
+        ("5  Medicare wages and tips", "126,000.00",
+         "6  Medicare tax withheld", "1,827.00"),
+        ("7  Social security tips", "", "8  Allocated tips", ""),
+        ("9", "", "10  Dependent care benefits", ""),
+        ("11  Nonqualified plans", "", "12a  See instructions for box 12", "D  8,000.00"),
+    ]
+    y = 640
+    for l1, v1, l2, v2 in rows:
+        box(350, y, 115, 46, l1, v1)
+        box(465, y, 115, 46, l2, v2)
+        y -= 46
+    box(350, y, 115, 46, "13  Statutory  Retirement  Third-party", "X  Retirement plan", small=6)
+    y -= 98
+
+    heads = ["15 State", "Employer's state ID number", "16 State wages, tips, etc.",
+             "17 State income tax"]
+    vals = ["CA", "123-4567-8", "118,000.00", "6,800.00"]
+    for x, w, head, value in zip([40, 95, 210, 310], [55, 115, 100, 85], heads, vals):
+        box(x, y, w, 40, head, value, small=6)
+
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(40, y - 24, "Form W-2   Wage and Tax Statement                    2025")
+    c.save()
+    return buffer.getvalue()
+
+
 def capture() -> dict:
     """Run the real journey against the real app and keep every response."""
     workspace = tempfile.mkdtemp(prefix="taxvault-demo-")
@@ -84,8 +153,19 @@ def capture() -> dict:
         }).json()
         auth = {"Authorization": f"Bearer {identity['token']}"}
 
-        document = client.post("/api/documents/w2/boxes",
-                               json=SAMPLE_W2, headers=auth).json()
+        # Upload a form-shaped PDF rather than typing boxes, so the demo shows
+        # what the layout reader actually pulls off a W-2 -- names included.
+        pdf = _sample_w2_pdf()
+        if pdf is not None:
+            document = client.post(
+                "/api/documents/w2/file",
+                files={"file": ("w2.pdf", pdf, "application/pdf")},
+                data={"tax_year": "2025"},
+                headers=auth,
+            ).json()
+        else:
+            document = client.post("/api/documents/w2/boxes",
+                                   json=SAMPLE_W2, headers=auth).json()
 
         def estimate(method: str) -> dict:
             return client.post("/api/estimates", headers=auth, json={

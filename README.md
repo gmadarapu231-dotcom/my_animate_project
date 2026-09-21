@@ -367,7 +367,7 @@ taxvault payment 9400 --cannot-pay   # price every way to settle a balance
 |---|---|
 | **Sign in** | A code to your email. No password exists to choose, forget, or steal. |
 | **Verify identity** | SSN + verified email + verified mobile, before any tax data opens. |
-| **Documents** | W-2 by typed boxes, pasted text, or file. A payroll-portal PDF is read and its boxes extracted; a scan is stored but reported as unread rather than guessed at. Cross-checked as it goes in — Box 4 against Box 3, Box 6 against Box 5, Box 5 less Box 1 against the Box 12 codes. |
+| **Documents** | W-2 by typed boxes, pasted text, or file. A PDF is read from its **layout**, so each figure comes out of the box it was printed in — including the state row, which a flat text read misses entirely. Names come off the form too. Everything read is shown back as editable fields before it drives an estimate. Cross-checked as it goes in — Box 4 against Box 3, Box 6 against Box 5, Box 5 less Box 1 against the Box 12 codes. |
 | **Estimate** | Federal plus every state return that follows, line by line. |
 | **Regular or planning** | Planning re-runs the whole calculation per strategy and shows what each is worth — and whether its deadline has passed. |
 | **Prior years** | Which years are unfiled, what they owe, the penalties so far, and the three-year cut-off after which a refund is gone. |
