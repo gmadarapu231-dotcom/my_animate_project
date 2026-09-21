@@ -25,8 +25,25 @@ class UnsupportedTaxYear(LookupError):
     """No parameter file exists for that year."""
 
 
+#: Parameter files in FEDERAL_DIR that are not a tax year.
+SHARED_FILE = "shared"
+
+
 def supported_years() -> list[int]:
-    return sorted(int(p.stem) for p in FEDERAL_DIR.glob("*.yaml"))
+    """Every tax year with a parameter file, oldest first.
+
+    `shared.yaml` -- and anything else not named for a year -- is skipped
+    rather than crashing the whole package on `int("shared")`.
+    """
+    years = []
+    for path in FEDERAL_DIR.glob("*.yaml"):
+        if path.stem == SHARED_FILE:
+            continue
+        try:
+            years.append(int(path.stem))
+        except ValueError:  # pragma: no cover - a stray file in the directory
+            continue
+    return sorted(years)
 
 
 def latest_year() -> int:
@@ -39,6 +56,23 @@ def latest_year() -> int:
 @functools.lru_cache(maxsize=None)
 def _load(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    """`over` wins, key by key, recursing into nested mappings.
+
+    Only mappings merge. A list in `over` REPLACES the list in `base` rather
+    than extending it, because a bracket schedule or a table of exceptions is
+    a whole statement about a year -- half a new one and half an old one would
+    be a schedule that never existed.
+    """
+    out = dict(base)
+    for key, value in over.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _merge(out[key], value)
+        else:
+            out[key] = value
+    return out
 
 
 class FederalParams:
@@ -111,7 +145,14 @@ def federal(year: int | None = None) -> FederalParams:
         raise UnsupportedTaxYear(
             f"tax year {target} is not supported; available: {supported_years()}"
         )
-    return FederalParams(_load(path))
+    shared = FEDERAL_DIR / f"{SHARED_FILE}.yaml"
+    raw = _load(path)
+    if shared.exists():
+        # The year always wins: `shared.yaml` holds only provisions that are
+        # not indexed, so a year overriding one means Congress changed it.
+        raw = _merge(_load(shared), raw)
+        raw.pop("shared", None)
+    return FederalParams(raw)
 
 
 class StateParams:

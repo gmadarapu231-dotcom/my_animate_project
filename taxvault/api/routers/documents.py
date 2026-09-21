@@ -32,6 +32,14 @@ from taxvault.db.models import TaxDocument, Taxpayer
 from taxvault.enums import DocumentKind, DocumentStatus
 from taxvault.forms.extract import extract_text, pair_orphan_amounts
 from taxvault.forms.identity_match import compare_names, compare_ssn
+from taxvault.forms.f1098 import parse_1098_text
+from taxvault.forms.f1099 import (
+    detect_form_kind,
+    kinds_present,
+    parse_1099b_text,
+    parse_1099div_text,
+    parse_1099r_text,
+)
 from taxvault.forms.w2 import W2, parse_w2_text
 from taxvault.forms.w2_layout import read_w2_layout
 
@@ -399,3 +407,222 @@ def delete_document(
     audit(session, "document_deleted", account_id=account.id, actor=account.email,
           subject=f"document:{document_id}", ip_address=client_ip(request))
     return {"deleted": document_id}
+
+
+# ===========================================================================
+# The other forms: 1099-B, 1099-DIV, 1099-R and 1098
+# ===========================================================================
+#: Which parser reads which form, and the field that identifies the payer.
+_PARSERS = {
+    DocumentKind.F1099_B.value: (parse_1099b_text, "payer"),
+    DocumentKind.F1099_DIV.value: (parse_1099div_text, "payer"),
+    DocumentKind.F1099_R.value: (parse_1099r_text, "payer"),
+    DocumentKind.F1098.value: (parse_1098_text, "lender"),
+}
+
+
+class FormText(BaseModel):
+    text: str = Field(min_length=10, max_length=200_000)
+    tax_year: int | None = None
+    kind: str = Field(default="", description="Leave empty to detect it from the text")
+
+
+def _store_other(
+    session: Session, taxpayer: Taxpayer, kind: str, payload: dict[str, Any], *,
+    tax_year: int, source: str, confidence: float, warnings: list[dict[str, str]],
+    findings: list[dict[str, str]], payer: str = "", blob: bytes | None = None,
+    filename: str = "", content_type: str = "",
+) -> TaxDocument:
+    """Store a parsed 1099 or 1098.
+
+    Deliberately separate from the W-2 path: these forms have no wages, no
+    employee name to match and no state lines, so sharing `_store` would mean
+    a pile of `if kind ==` inside it.
+    """
+    errors = [f for f in findings if f.get("severity") == "error"]
+    status = (
+        DocumentStatus.NEEDS_REVIEW.value if errors or confidence < 0.75
+        else DocumentStatus.PARSED.value
+    )
+    fingerprint = hashlib.sha256(
+        f"{taxpayer.id}|{kind}|{tax_year}|{payer}|{sorted(payload.items())}".encode()
+    ).hexdigest()
+    duplicate = session.scalars(
+        select(TaxDocument).where(
+            TaxDocument.taxpayer_id == taxpayer.id,
+            TaxDocument.checksum == fingerprint,
+        )
+    ).first()
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This {kind.replace('_', '-').upper()} has already been uploaded for "
+                f"{duplicate.tax_year}. Adding it twice would double the figures on the "
+                "estimate."
+            ),
+        )
+
+    document = TaxDocument(
+        taxpayer_id=taxpayer.id,
+        tax_year=tax_year,
+        kind=kind,
+        status=status,
+        source=source,
+        employer_name=payer or None,
+        payload=payload,
+        original_filename=filename or None,
+        content_type=content_type or None,
+        parse_confidence=confidence,
+        parse_warnings=warnings + findings,
+        checksum=fingerprint,
+    )
+    if blob is not None:
+        document.raw_blob = encrypt_field(
+            blob.decode("utf-8", errors="replace") if content_type.startswith("text/")
+            else blob.hex(),
+            purpose="document", context=f"taxpayer:{taxpayer.id}",
+        )
+    session.add(document)
+    session.flush()
+    return document
+
+
+def _parse_one(kind: str, body_text: str, tax_year: int | None) -> dict[str, Any]:
+    """Run the parser for one form kind and normalise what comes back."""
+    parser, payer_field = _PARSERS[kind]
+    form, confidence, warnings = parser(body_text)
+    if tax_year:
+        form.tax_year = tax_year
+    if not form.tax_year:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Which tax year is this {kind.replace('_', '-').upper()} for? It could "
+                "not be read from the text."
+            ),
+        )
+    findings = form.validate() if hasattr(form, "validate") else []
+    return {
+        "kind": kind,
+        "form": form,
+        "payload": form.to_dict(),
+        "tax_year": form.tax_year,
+        "payer": getattr(form, payer_field, "") or "",
+        "confidence": confidence,
+        "warnings": [{"severity": "warning", "box": "", "message": w} for w in warnings],
+        "findings": findings,
+    }
+
+
+@router.post("/form/text")
+def add_form_text(
+    body: FormText, request: Request,
+    account=Depends(verified_account),
+    taxpayer: Taxpayer = Depends(current_taxpayer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Paste a 1099 or a 1098 and have the boxes read out of it.
+
+    A consolidated brokerage statement holds several forms at once, so where
+    the text looks like more than one, each is parsed and stored separately --
+    which is what the client actually received, however many staples it had.
+    """
+    kinds = [body.kind] if body.kind else kinds_present(body.text)
+    kinds = [k for k in kinds if k in _PARSERS]
+    if not kinds:
+        guess, score = detect_form_kind(body.text)
+        if guess in _PARSERS and score >= 0.5:
+            kinds = [guess]
+    if not kinds:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This does not look like a 1099-B, 1099-DIV, 1099-R or 1098. Say which "
+                "form it is, or type the figures in directly."
+            ),
+        )
+
+    stored = []
+    for kind in kinds:
+        parsed = _parse_one(kind, body.text, body.tax_year)
+        document = _store_other(
+            session, taxpayer, kind, parsed["payload"],
+            tax_year=parsed["tax_year"], source="upload",
+            confidence=parsed["confidence"], warnings=parsed["warnings"],
+            findings=parsed["findings"], payer=parsed["payer"],
+        )
+        audit(session, "document_added", account_id=account.id, actor=account.email,
+              subject=f"document:{document.id}", ip_address=client_ip(request),
+              kind=kind, tax_year=parsed["tax_year"], confidence=parsed["confidence"])
+        stored.append(_serialise(document))
+    return {"documents": stored, "kinds": kinds}
+
+
+@router.post("/form/file")
+async def add_form_file(
+    request: Request,
+    upload: UploadFile = File(...),
+    tax_year: int | None = Form(default=None),
+    kind: str = Form(default=""),
+    account=Depends(verified_account),
+    taxpayer: Taxpayer = Depends(current_taxpayer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Upload a 1099 or 1098 PDF and read what is in it.
+
+    A scanned or photographed statement produces no text. It is stored, and
+    reported at zero confidence with a warning, rather than guessed at.
+    """
+    blob = await upload.read()
+    if len(blob) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="That file is too large to accept.")
+    content_type = upload.content_type or ""
+    if content_type and content_type not in ALLOWED_CONTENT:
+        raise HTTPException(
+            status_code=415,
+            detail=f"{content_type} is not a file type this accepts.",
+        )
+
+    extraction = extract_text(blob, content_type, upload.filename or "")
+    body_text = pair_orphan_amounts(extraction.text or "")
+    if not extraction.readable or not body_text.strip():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No text could be read from that file. If it is a scan or a photograph, "
+                "there is nothing to read -- type the figures in instead, or ask the "
+                "provider for the original PDF."
+            ),
+        )
+
+    kinds = [kind] if kind else kinds_present(body_text)
+    kinds = [k for k in kinds if k in _PARSERS]
+    if not kinds:
+        guess, score = detect_form_kind(body_text)
+        if guess in _PARSERS and score >= 0.5:
+            kinds = [guess]
+    if not kinds:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "That file did not look like a 1099-B, 1099-DIV, 1099-R or 1098. Say "
+                "which form it is and it will be read as that."
+            ),
+        )
+
+    stored = []
+    for one in kinds:
+        parsed = _parse_one(one, body_text, tax_year)
+        document = _store_other(
+            session, taxpayer, one, parsed["payload"],
+            tax_year=parsed["tax_year"], source="upload",
+            confidence=parsed["confidence"], warnings=parsed["warnings"],
+            findings=parsed["findings"], payer=parsed["payer"],
+            blob=blob, filename=upload.filename or "", content_type=content_type,
+        )
+        audit(session, "document_added", account_id=account.id, actor=account.email,
+              subject=f"document:{document.id}", ip_address=client_ip(request),
+              kind=one, tax_year=parsed["tax_year"], confidence=parsed["confidence"])
+        stored.append(_serialise(document))
+    return {"documents": stored, "kinds": kinds, "method": extraction.method}

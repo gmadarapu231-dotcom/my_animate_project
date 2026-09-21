@@ -1,0 +1,167 @@
+# Federal provisions that do NOT move with inflation.
+#
+# Every other file in this directory is one tax year, reviewed each January
+# against that year's revenue procedure. The figures below are different: they
+# are written into the statute as fixed numbers or fixed ages, and copying them
+# into each year's file would be three chances a year for them to drift apart.
+#
+# This file is merged UNDERNEATH each year's file, key by key, so a year always
+# wins where it says something. When Congress changes one of these -- and it
+# does, roughly once a decade -- put the new value in the year file it starts
+# in, and leave this file alone until the old value is out of the amendment
+# window.
+#
+# Nothing here is indexed. If you find yourself wanting to add an indexed
+# figure, it belongs in the year file instead.
+shared: true
+as_of: "2025-11-13"
+
+# ---------------------------------------------------------------- Schedule D
+capital_losses:
+  # IRC 1211(b). $3,000 has been the figure since 1978 and is not indexed.
+  ordinary_offset_cap: 3000
+  ordinary_offset_cap_married_separately: 1500
+  carryforward_years: 0          # 0 means indefinite -- IRC 1212(b)
+  wash_sale_window_days: 30      # IRC 1091: 30 days BEFORE and after
+  collectibles_rate: 0.28        # IRC 1(h)(4)
+  unrecaptured_1250_rate: 0.25   # IRC 1(h)(6)
+  long_term_holding_days: 365    # "more than one year": 366+ days held
+
+# --------------------------------------------------------------- home loans
+home_loans:
+  # IRC 163(h)(3), as amended by the TCJA and made permanent by OBBBA.
+  acquisition_debt_cap: 750000
+  acquisition_debt_cap_married_separately: 375000
+  # Debt incurred on or before 15 December 2017 keeps the older, higher cap
+  # for the life of the loan, and a refinance of it inherits the grandfather
+  # up to the balance refinanced.
+  grandfathered_debt_cap: 1000000
+  grandfathered_debt_cap_married_separately: 500000
+  grandfather_date: "2017-12-15"
+  qualified_homes: 2                    # a main home and one second home
+  # Home equity interest is deductible ONLY where the money bought, built or
+  # substantially improved the home securing the loan, and it shares the cap
+  # above rather than having one of its own.
+  home_equity_requires_improvement: true
+  # Points: IRC 461(g)(2) lets points on the purchase or improvement of a MAIN
+  # home be deducted in the year paid; everything else is spread over the term.
+  points_deductible_in_full_on_purchase: true
+  refinance_points_amortised: true
+  # Mortgage insurance is off unless a year turns it on. It lapsed after 2021,
+  # was not available for 2022-2025, and returns permanently in 2026.
+  mortgage_insurance_deductible: false
+  mortgage_insurance_phase_out_start: 100000
+  mortgage_insurance_phase_out_start_married_separately: 50000
+  mortgage_insurance_phase_out_step: 1000
+  mortgage_insurance_phase_out_rate: 0.10
+  # IRC 121, unindexed since 1997.
+  home_sale_exclusion: {single: 250000, married_jointly: 500000,
+                        married_separately: 250000, head_of_household: 250000,
+                        qualifying_surviving_spouse: 500000}
+  home_sale_ownership_years: 2
+  home_sale_lookback_years: 5
+
+# ------------------------------------------------- retirement distributions
+retirement_distributions:
+  early_withdrawal_age: 59.5
+  early_withdrawal_penalty: 0.10
+  rule_of_55_age: 55
+  public_safety_rule_of_50_age: 50
+  roth_qualified_years: 5
+  roth_qualified_age: 59.5
+  # SECURE 2.0 moved the required beginning date twice: 73 for those reaching
+  # it now, 75 for anyone born in 1960 or later.
+  rmd_age: 73
+  rmd_age_born_1960_or_later: 75
+  rmd_age_birth_year_cutoff: 1960
+  rmd_excise_rate: 0.25
+  rmd_excise_rate_if_corrected: 0.10
+  rmd_correction_window_years: 2
+  first_rmd_deadline: "1 April of the year after you reach the required age"
+  roth_401k_lifetime_rmd: false         # SECURE 2.0 ended these from 2024
+  still_working_exception: true         # employer's own plan, non-5% owners
+  # Exceptions to the 10%. Income tax is still due on every one of these --
+  # only the additional tax is waived. `cap` is the most that can be excepted.
+  penalty_exceptions:
+    - {code: rule_of_55, label: "Left the job in or after the year you turned 55", plans: [401k, 403b]}
+    - {code: disability, label: "Total and permanent disability", plans: [all]}
+    - {code: death, label: "Paid to a beneficiary after death", plans: [all]}
+    - {code: sepp, label: "Substantially equal periodic payments (72(t))", plans: [all]}
+    - {code: medical, label: "Unreimbursed medical costs above 7.5% of AGI", plans: [all]}
+    - {code: birth_or_adoption, label: "Birth or adoption of a child", plans: [all], cap: 5000}
+    - {code: disaster, label: "Federally declared disaster", plans: [all], cap: 22000}
+    - {code: domestic_abuse, label: "Domestic abuse victim", plans: [all], cap: 10300}
+    - {code: emergency_expense, label: "Emergency personal expense, once a year", plans: [all], cap: 1000}
+    - {code: terminal_illness, label: "Terminal illness", plans: [all]}
+    - {code: qdro, label: "Qualified domestic relations order", plans: [401k, 403b]}
+    - {code: irs_levy, label: "IRS levy on the account", plans: [all]}
+    - {code: military_reservist, label: "Qualified reservist called to active duty", plans: [all]}
+    - {code: first_home, label: "First home purchase", plans: [ira], cap: 10000}
+    - {code: higher_education, label: "Higher education costs", plans: [ira]}
+    - {code: health_insurance_unemployed, label: "Health insurance while unemployed", plans: [ira]}
+  # Form 1099-R box 7. `taxable` is the default for the box 2a amount; a Roth
+  # basis recovery can still make part of a "taxable" code non-taxable.
+  distribution_codes:
+    "1": {label: "Early distribution, no known exception", taxable: true, penalty: true}
+    "2": {label: "Early distribution, exception applies", taxable: true, penalty: false}
+    "3": {label: "Disability", taxable: true, penalty: false}
+    "4": {label: "Death", taxable: true, penalty: false}
+    "5": {label: "Prohibited transaction", taxable: true, penalty: true}
+    "6": {label: "Section 1035 exchange", taxable: false, penalty: false}
+    "7": {label: "Normal distribution", taxable: true, penalty: false}
+    "8": {label: "Excess contribution returned this year", taxable: true, penalty: false}
+    "B": {label: "Designated Roth account distribution", taxable: true, penalty: false}
+    "G": {label: "Direct rollover to a plan or IRA", taxable: false, penalty: false}
+    "H": {label: "Direct rollover of a Roth account", taxable: false, penalty: false}
+    "J": {label: "Early Roth IRA distribution", taxable: true, penalty: true}
+    "L": {label: "Loan treated as a distribution", taxable: true, penalty: true}
+    "M": {label: "Qualified plan loan offset", taxable: true, penalty: true}
+    "N": {label: "Recharacterised IRA contribution", taxable: false, penalty: false}
+    "P": {label: "Excess contribution taxable in the prior year", taxable: true, penalty: false}
+    "Q": {label: "Qualified Roth distribution", taxable: false, penalty: false}
+    "R": {label: "Recharacterisation for the prior year", taxable: false, penalty: false}
+    "S": {label: "Early SIMPLE distribution within 2 years", taxable: true, penalty: true, penalty_rate: 0.25}
+    "T": {label: "Roth distribution, exception applies", taxable: false, penalty: false}
+  # Uniform Lifetime Table (Pub 590-B, Table III), effective from 2022, for an
+  # owner whose sole beneficiary is not a spouse more than 10 years younger.
+  # Divisor by the age reached during the distribution year.
+  uniform_lifetime_table:
+    72: 27.4
+    73: 26.5
+    74: 25.5
+    75: 24.6
+    76: 23.7
+    77: 22.9
+    78: 22.0
+    79: 21.1
+    80: 20.2
+    81: 19.4
+    82: 18.5
+    83: 17.7
+    84: 16.8
+    85: 16.0
+    86: 15.2
+    87: 14.4
+    88: 13.7
+    89: 12.9
+    90: 12.2
+    91: 11.5
+    92: 10.8
+    93: 10.1
+    94: 9.5
+    95: 8.9
+    96: 8.4
+    97: 7.8
+    98: 7.3
+    99: 6.8
+    100: 6.4
+    101: 6.0
+    102: 5.6
+    103: 5.2
+    104: 4.9
+    105: 4.6
+    106: 4.3
+    107: 4.1
+    108: 3.9
+    109: 3.7
+    110: 3.5

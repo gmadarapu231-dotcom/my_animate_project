@@ -6,6 +6,7 @@ sign-in screen needs the state list before anyone has signed in.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -18,6 +19,7 @@ from taxvault.config import (
     states,
     supported_years,
 )
+from taxvault.engines.retirement import compute_rmd, penalty_exceptions
 from taxvault.money import money
 
 router = APIRouter(prefix="/api/reference", tags=["reference"])
@@ -117,6 +119,9 @@ def limits(year: int | None = Query(default=None)) -> dict[str, Any]:
         "contribution_limits": params.get("contribution_limits", default={}),
         "salt_cap": str(params.amount("deductions", "salt_cap")),
         "child_tax_credit": str(params.amount("credits", "child_tax_credit", "amount")),
+        "capital_gains": params.get("capital_gains", default={}),
+        "capital_losses": params.get("capital_losses", default={}),
+        "home_loans": params.get("home_loans", default={}),
         "brackets": {
             status: [
                 {"from": str(b.floor), "to": None if b.ceiling is None else str(b.ceiling),
@@ -125,6 +130,85 @@ def limits(year: int | None = Query(default=None)) -> dict[str, Any]:
             ]
             for status in params.statuses
         },
+    }
+
+
+@router.get("/retirement")
+def retirement_reference(year: int | None = Query(default=None)) -> dict[str, Any]:
+    """Ages, codes and exceptions for the retirement screen.
+
+    The Uniform Lifetime Table is deliberately left out: it is 40 rows the UI
+    has no use for, and the RMD endpoint applies it server-side.
+    """
+    params = federal(year)
+    rules = dict(params.get("retirement_distributions", default={}) or {})
+    rules.pop("uniform_lifetime_table", None)
+    limits = params.get("contribution_limits", default={}) or {}
+    return {
+        "tax_year": params.year,
+        "source": params.source,
+        "limits": {
+            "elective_deferral": str(params.amount("contribution_limits",
+                                                   "elective_deferral_401k")),
+            "catch_up": str(params.amount("contribution_limits", "catch_up_401k")),
+            "super_catch_up": str(params.amount("contribution_limits",
+                                                "super_catch_up_401k")),
+            "super_catch_up_ages": limits.get("super_catch_up_ages", []),
+            "annual_additions": str(params.amount("contribution_limits",
+                                                  "annual_additions_401k")),
+            "ira": str(params.amount("contribution_limits", "ira")),
+            "ira_catch_up": str(params.amount("contribution_limits", "ira_catch_up")),
+        },
+        "rules": rules,
+        "penalty_exceptions": penalty_exceptions(params),
+        "note": (
+            "Every exception waives the 10% additional tax only. Income tax is still due "
+            "on the distribution."
+        ),
+    }
+
+
+@router.get("/rmd")
+def rmd(
+    birth_year: int = Query(...),
+    balance: float = Query(default=0, description="Account value on 31 December last year"),
+    taken: float = Query(default=0),
+    year: int | None = Query(default=None),
+    is_roth_401k: bool = Query(default=False),
+    still_working: bool = Query(default=False),
+    owns_five_percent: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Whether a required minimum distribution is due, and what missing it costs."""
+    params = federal(year)
+    result = compute_rmd(
+        params,
+        birth_year=birth_year,
+        prior_year_balance=Decimal(str(balance)),
+        taken=Decimal(str(taken)),
+        is_roth_401k=is_roth_401k,
+        still_working_for_plan_sponsor=still_working,
+        owns_five_percent=owns_five_percent,
+    )
+    return {"tax_year": params.year, **result.to_dict()}
+
+
+@router.get("/home-loans")
+def home_loan_reference(year: int | None = Query(default=None)) -> dict[str, Any]:
+    """The debt ceilings, the grandfather date and whether PMI counts this year."""
+    params = federal(year)
+    rules = params.get("home_loans", default={}) or {}
+    return {
+        "tax_year": params.year,
+        "source": params.source,
+        "rules": rules,
+        "mortgage_insurance_deductible": bool(
+            rules.get("mortgage_insurance_deductible", False)
+        ),
+        "standard_deduction": params.get("standard_deduction", default={}),
+        "note": (
+            "Mortgage interest is an itemised deduction, so it is worth nothing until "
+            "your itemised total beats the standard deduction shown here."
+        ),
     }
 
 

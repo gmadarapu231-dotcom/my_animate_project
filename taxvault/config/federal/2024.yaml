@@ -136,7 +136,6 @@ deductions:
   salt_phase_down_rate: 0
   salt_floor: 10000
   medical_agi_floor: 0.075
-  mortgage_principal_cap: 750000
   student_loan_interest_cap: 2500
   student_loan_phase_out: {single: [80000, 95000], married_jointly: [165000, 195000]}
   educator_expense_cap: 300
@@ -166,6 +165,12 @@ contribution_limits:
   catch_up_401k: 7500
   super_catch_up_401k: 11250
   super_catch_up_ages: [60, 61, 62, 63]
+  annual_additions_401k: 69000     # IRC 415(c): employee + employer together
+  compensation_limit: 345000       # IRC 401(a)(17)
+  highly_compensated: 155000
+  roth_catch_up_wage_threshold: 145000
+  simple_deferral: 16000
+  simple_catch_up: 3500
   ira: 7000
   ira_catch_up: 1000
   ira_deduction_phase_out:

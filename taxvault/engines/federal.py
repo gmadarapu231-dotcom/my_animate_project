@@ -26,6 +26,16 @@ from decimal import Decimal
 from typing import Any
 
 from taxvault.config import FederalParams, federal
+from taxvault.engines.capital import CapitalInput, CapitalResult, compute_capital
+from taxvault.engines.mortgage import Loan, MortgageResult, compute_mortgage
+from taxvault.engines.retirement import (
+    ContributionCheck,
+    ContributionPlan,
+    Distribution,
+    DistributionResult,
+    check_contributions,
+    compute_distributions,
+)
 from taxvault.money import ZERO, cents, marginal_rate, money, phase_out, positive, tax_on, whole
 
 
@@ -37,6 +47,11 @@ _NON_AMOUNTS = frozenset({
     "tax_year", "filing_status", "resident_state", "age", "spouse_age",
     "children_under_17", "other_dependents", "education_credit_kind",
 })
+
+#: Fields holding a dataclass or a list of them. `asdict` would flatten these
+#: into plain dicts and `TaxProfile(**data)` would then hand a dict to code
+#: expecting the object, so `normalised` restores them by reference instead.
+_STRUCTURED = frozenset({"capital", "distributions", "loans", "retirement_plan"})
 
 
 @dataclass
@@ -77,8 +92,15 @@ class TaxProfile:
     qualified_dividends: Decimal = ZERO       # subset of ordinary_dividends
     short_term_gains: Decimal = ZERO
     long_term_gains: Decimal = ZERO
+    capital_gain_distributions: Decimal = ZERO   # 1099-DIV box 2a, always long-term
+    capital_loss_carryforward_short: Decimal = ZERO
+    capital_loss_carryforward_long: Decimal = ZERO
+    wash_sale_disallowed: Decimal = ZERO         # 1099-B box 1g
+    collectibles_gain: Decimal = ZERO            # 28% rate
+    unrecaptured_1250_gain: Decimal = ZERO       # 25% rate
     rental_income: Decimal = ZERO
-    retirement_distributions: Decimal = ZERO
+    retirement_distributions: Decimal = ZERO   # simple total; `distributions` wins
+    retirement_penalty: Decimal = ZERO         # 10% early-withdrawal additional tax
     social_security_benefits: Decimal = ZERO
     unemployment: Decimal = ZERO
     other_income: Decimal = ZERO
@@ -124,14 +146,33 @@ class TaxProfile:
     prior_year_tax: Decimal = ZERO
     prior_year_agi: Decimal = ZERO
 
+    # --- structured detail (optional; each one overrides its scalar above) ---
+    #: Schedule D in full: carryforwards, wash sales, the 28% and 25% slices.
+    #: Without it, `short_term_gains` and `long_term_gains` are used as-is,
+    #: which is right for a client who simply has a gain and no history.
+    capital: CapitalInput | None = None
+    #: Form 1099-R rows. Without them, `retirement_distributions` is taken as
+    #: fully taxable with no early-withdrawal penalty, which is what a normal
+    #: retirement distribution looks like.
+    distributions: list[Distribution] = field(default_factory=list)
+    #: Form 1098 rows. Without them, `mortgage_interest` is deducted as stated
+    #: -- correct below the debt ceiling, generous above it.
+    loans: list[Loan] = field(default_factory=list)
+    #: What is going INTO an employer plan. This never changes the calculation
+    #: -- a pre-tax deferral is already out of W-2 box 1 -- but it drives the
+    #: contribution-limit warnings and the planning strategies.
+    retirement_plan: ContributionPlan | None = None
+
     def normalised(self, params: FederalParams) -> "TaxProfile":
         """Coerce every amount to Decimal and the status to its canonical name."""
         # Anything not in `_NON_AMOUNTS` is an amount, so a new field added to
         # this dataclass is coerced automatically rather than silently staying
         # a float. Booleans are skipped explicitly: `bool` is an `int` subclass.
         data = asdict(self)
+        for key in _STRUCTURED:
+            data[key] = getattr(self, key)
         for key, value in data.items():
-            if key in _NON_AMOUNTS or isinstance(value, bool):
+            if key in _NON_AMOUNTS or key in _STRUCTURED or isinstance(value, bool):
                 continue
             data[key] = money(value)
         data["filing_status"] = params.normalise_status(self.filing_status)
@@ -167,6 +208,7 @@ class FederalResult:
     self_employment_tax: Decimal = ZERO
     additional_medicare_tax: Decimal = ZERO
     net_investment_income_tax: Decimal = ZERO
+    early_withdrawal_penalty: Decimal = ZERO
     nonrefundable_credits: Decimal = ZERO
     refundable_credits: Decimal = ZERO
     total_tax: Decimal = ZERO
@@ -177,6 +219,12 @@ class FederalResult:
     lines: list[dict[str, Any]] = field(default_factory=list)
     credits_detail: dict[str, str] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    #: Sub-results, kept so the UI can show the working rather than a total.
+    capital: dict[str, Any] = field(default_factory=dict)
+    retirement: dict[str, Any] = field(default_factory=dict)
+    mortgage: dict[str, Any] = field(default_factory=dict)
+    contributions: dict[str, Any] = field(default_factory=dict)
 
     @property
     def refund(self) -> Decimal:
@@ -254,7 +302,10 @@ def _senior_deduction(profile: TaxProfile, params: FederalParams, agi: Decimal) 
     )
 
 
-def _itemised(profile: TaxProfile, params: FederalParams, agi: Decimal) -> tuple[Decimal, list[str]]:
+def _itemised(
+    profile: TaxProfile, params: FederalParams, agi: Decimal,
+    mortgage: MortgageResult | None = None,
+) -> tuple[Decimal, list[str]]:
     notes: list[str] = []
     status = profile.filing_status
 
@@ -289,8 +340,29 @@ def _itemised(profile: TaxProfile, params: FederalParams, agi: Decimal) -> tuple
 
     charity_limit = agi * params.rate("deductions", "charitable_cash_agi_limit")
     charity = min(profile.charitable_cash, charity_limit) + profile.charitable_noncash
+    # OBBBA puts a 0.5%-of-AGI floor under itemised giving from 2026: the first
+    # slice of what you give stops counting, which is a real cut for someone
+    # who gives steadily rather than in one large gift.
+    charity_floor = params.rate("deductions", "charitable_itemised_agi_floor")
+    if charity_floor > ZERO and charity > ZERO:
+        lost = min(charity, cents(agi * charity_floor))
+        charity = positive(charity - lost)
+        if lost > ZERO:
+            notes.append(
+                f"From {params.year} the first {charity_floor:.1%} of AGI you give "
+                f"({lost:,.0f}) no longer counts as an itemised deduction."
+            )
 
-    total = salt + profile.mortgage_interest + charity + medical + profile.other_itemised
+    # Home loan interest. With Form 1098 detail the debt ceiling and the
+    # home-equity use test are applied; without it, the stated figure is taken
+    # at face value, which is right below the ceiling and generous above it.
+    if mortgage is not None:
+        home_interest = mortgage.total_deduction
+        notes.extend(mortgage.notes)
+    else:
+        home_interest = profile.mortgage_interest
+
+    total = salt + home_interest + charity + medical + profile.other_itemised
     return cents(total), notes
 
 
@@ -337,7 +409,8 @@ def _obbba_deductions(profile: TaxProfile, params: FederalParams, agi: Decimal) 
 
 
 def _preferential_tax(
-    ordinary_taxable: Decimal, preferential: Decimal, params: FederalParams, status: str
+    ordinary_taxable: Decimal, preferential: Decimal, params: FederalParams, status: str,
+    *, collectibles: Decimal = ZERO, unrecaptured_1250: Decimal = ZERO,
 ) -> Decimal:
     """Tax on qualified dividends and long-term gain, stacked above ordinary income.
 
@@ -351,9 +424,29 @@ def _preferential_tax(
     fifteen_top = money(table.get("fifteen_up_to", 0))
     rates = [money(r) for r in params.get("capital_gains", "rates", default=[0, "0.15", "0.20"])]
 
+    # Collectibles (28%) and unrecaptured section 1250 gain (25%) are carved
+    # out first and taxed at their own ceilings, each capped at the ordinary
+    # rate that would otherwise apply -- a 12%-bracket client never pays 28%
+    # on a coin sale. The rest is the ordinary 0/15/20 net capital gain.
+    special_due = ZERO
+    special_total = min(positive(collectibles) + positive(unrecaptured_1250), preferential)
+    if special_total > ZERO:
+        schedule = params.brackets(status)
+        ordinary_rate = marginal_rate(ordinary_taxable + special_total, schedule)
+        collect = min(positive(collectibles), preferential)
+        unrec = min(positive(unrecaptured_1250), preferential - collect)
+        special_due = (
+            collect * min(money(params.get("capital_losses", "collectibles_rate",
+                                           default="0.28")), ordinary_rate)
+            + unrec * min(money(params.get("capital_losses", "unrecaptured_1250_rate",
+                                           default="0.25")), ordinary_rate)
+        )
+        preferential = positive(preferential - collect - unrec)
+        ordinary_taxable = ordinary_taxable + collect + unrec
+
     remaining = preferential
     base = ordinary_taxable
-    due = ZERO
+    due = special_due
 
     at_zero = min(remaining, positive(zero_top - base))
     due += at_zero * rates[0]
@@ -392,10 +485,15 @@ def _additional_medicare(profile: TaxProfile, params: FederalParams) -> Decimal:
     return cents(positive(base - threshold) * params.rate("payroll", "additional_medicare_rate"))
 
 
-def _niit(profile: TaxProfile, params: FederalParams, magi: Decimal) -> Decimal:
+def _niit(profile: TaxProfile, params: FederalParams, magi: Decimal,
+          capital: CapitalResult | None = None) -> Decimal:
+    # Net investment income counts the NET capital gain, after this year's
+    # losses -- including the $3,000 a net loss sets against other income.
+    gain = (capital.net_investment_gain if capital is not None
+            else profile.short_term_gains + profile.long_term_gains)
     investment = (
-        profile.taxable_interest + profile.ordinary_dividends + profile.short_term_gains
-        + profile.long_term_gains + profile.rental_income
+        profile.taxable_interest + profile.ordinary_dividends + gain
+        + profile.rental_income
     )
     if investment <= ZERO:
         return ZERO
@@ -488,8 +586,9 @@ def _actc(profile: TaxProfile, params: FederalParams, unused_credit: Decimal) ->
 def _eitc(profile: TaxProfile, params: FederalParams, agi: Decimal) -> tuple[Decimal, str]:
     if not profile.eitc_eligible or profile.filing_status == "married_separately":
         return ZERO, ""
-    investment = (profile.taxable_interest + profile.ordinary_dividends
-                  + profile.short_term_gains + profile.long_term_gains)
+    investment = positive(profile.taxable_interest + profile.ordinary_dividends
+                          + profile.short_term_gains + profile.long_term_gains
+                          + profile.capital_gain_distributions)
     limit = params.amount("credits", "earned_income_credit", "investment_income_limit")
     if investment > limit:
         earned_now = profile.wages + profile.self_employment_income
@@ -632,14 +731,39 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
     result = FederalResult(tax_year=params.year, filing_status=status)
     result.notes.append(f"Computed on {params.year} law ({params.source}).")
 
+    # --- 0. Schedule D and Form 1099-R, before anything is added up -------
+    # Both change what "income" is, so they run first: a net capital loss
+    # takes $3,000 OUT of income, and a rollover reported on a 1099-R puts
+    # none of it in.
+    capital = compute_capital(_capital_input(profile), params, filing_status=status)
+    result.capital = capital.to_dict()
+    result.notes.extend(capital.notes)
+
+    retirement = _retirement_result(profile, params)
+    result.retirement = retirement.to_dict()
+    result.notes.extend(retirement.notes)
+    result.warnings.extend(retirement.warnings)
+    retirement_income = retirement.taxable
+
+    if profile.retirement_plan is not None:
+        # Informational only: a pre-tax deferral is already out of W-2 box 1,
+        # so deducting it here again would count it twice.
+        contributions = check_contributions(profile.retirement_plan, params)
+        result.contributions = contributions.to_dict()
+        result.notes.extend(contributions.notes)
+        result.warnings.extend(contributions.warnings)
+
     # --- 1. total income ---------------------------------------------------
     ordinary_income_pieces = (
         profile.wages + profile.taxable_interest + profile.ordinary_dividends
-        + profile.short_term_gains + profile.rental_income + profile.retirement_distributions
+        + capital.ordinary_component + profile.rental_income + retirement_income
         + profile.unemployment + profile.other_income + profile.self_employment_income
+        - capital.loss_deduction
     )
-    taxable_ss = _taxable_social_security(profile, params, ordinary_income_pieces + profile.long_term_gains)
-    total_income = cents(ordinary_income_pieces + profile.long_term_gains + taxable_ss)
+    taxable_ss = _taxable_social_security(
+        profile, params, ordinary_income_pieces + capital.preferential_component
+    )
+    total_income = cents(ordinary_income_pieces + capital.preferential_component + taxable_ss)
     result.total_income = total_income
     result.line("Wages, salaries, tips (Box 1)", profile.wages)
     if profile.taxable_interest:
@@ -647,10 +771,11 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
     if profile.ordinary_dividends:
         result.line("Ordinary dividends", profile.ordinary_dividends,
                     note=f"of which {profile.qualified_dividends:,.0f} qualified")
-    if profile.short_term_gains or profile.long_term_gains:
-        result.line("Capital gains", profile.short_term_gains + profile.long_term_gains,
-                    form="Sch D",
-                    note=f"{profile.long_term_gains:,.0f} long-term at preferential rates")
+    for row in capital.lines:
+        result.lines.append(row)
+    if retirement_income:
+        result.line("IRA and pension distributions", retirement_income, form="1099-R",
+                    note="ordinary income, not capital gain")
     if profile.self_employment_income:
         result.line("Business income", profile.self_employment_income, form="Sch C")
     if taxable_ss:
@@ -675,7 +800,12 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
 
     # --- 3. deduction ------------------------------------------------------
     standard = _standard_deduction(profile, params)
-    itemised, itemised_notes = _itemised(profile, params, agi)
+    mortgage = None
+    if profile.loans:
+        mortgage = compute_mortgage(profile.loans, params, filing_status=status, agi=agi)
+        result.mortgage = mortgage.to_dict()
+        result.warnings.extend(mortgage.warnings)
+    itemised, itemised_notes = _itemised(profile, params, agi, mortgage)
     senior = _senior_deduction(profile, params, agi)
     result.standard_deduction, result.itemised_deduction, result.senior_deduction = (
         standard, itemised, senior
@@ -693,6 +823,14 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
             f"Itemising would give {itemised:,.0f} against a standard deduction of "
             f"{standard:,.0f}, so the standard deduction is taken."
         )
+        if mortgage is not None and mortgage.total_deduction > ZERO:
+            result.notes.append(
+                f"That means your {mortgage.total_deduction:,.0f} of mortgage interest is "
+                f"worth nothing extra this year: you would need {standard - itemised + mortgage.total_deduction:,.0f} "
+                "of total itemised deductions to beat the standard deduction. This is the "
+                "normal outcome for most households with a mortgage, and it is better to "
+                "know it than to keep the receipts for nothing."
+            )
 
     obbba, obbba_notes = _obbba_deductions(profile, params, agi)
     result.obbba_deductions = obbba
@@ -715,7 +853,7 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
         result.line("Tips / overtime / car loan deduction (OBBBA)", -obbba)
 
     taxable_before_qbi = positive(agi - deduction_total)
-    preferential = min(profile.qualified_dividends + positive(profile.long_term_gains),
+    preferential = min(profile.qualified_dividends + capital.preferential_component,
                        taxable_before_qbi)
 
     # --- 4. QBI ------------------------------------------------------------
@@ -734,7 +872,11 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
     preferential = min(preferential, taxable)
     ordinary_taxable = positive(taxable - preferential)
     result.ordinary_tax = tax_on(ordinary_taxable, params.brackets(status))
-    result.preferential_tax = _preferential_tax(ordinary_taxable, preferential, params, status)
+    result.preferential_tax = _preferential_tax(
+        ordinary_taxable, preferential, params, status,
+        collectibles=capital.collectibles_gain,
+        unrecaptured_1250=capital.unrecaptured_1250_gain,
+    )
     result.line("Tax on ordinary income", result.ordinary_tax)
     if result.preferential_tax or preferential:
         result.line("Tax on qualified dividends and long-term gain", result.preferential_tax,
@@ -786,17 +928,27 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
     result.additional_medicare_tax = positive(
         _additional_medicare(profile, params) - ZERO
     )
-    result.net_investment_income_tax = _niit(profile, params, agi)
+    result.net_investment_income_tax = _niit(profile, params, agi, capital)
+    # The 10% on an early retirement withdrawal is an ADDITIONAL tax, not a
+    # penalty on the tax owed: it sits beside the income tax on the same
+    # money, so a client in the 22% bracket loses 32% of what they took out.
+    result.early_withdrawal_penalty = cents(
+        retirement.penalty + positive(profile.retirement_penalty)
+    )
     if se_tax:
         result.line("Self-employment tax", se_tax, form="Sch SE")
     if result.additional_medicare_tax:
         result.line("Additional Medicare tax", result.additional_medicare_tax, form="8959")
     if result.net_investment_income_tax:
         result.line("Net investment income tax", result.net_investment_income_tax, form="8960")
+    if result.early_withdrawal_penalty:
+        result.line("Additional tax on early distributions",
+                    result.early_withdrawal_penalty, form="5329")
 
     result.total_tax = cents(
         positive(tax_before_credits - applied)
         + se_tax + result.additional_medicare_tax + result.net_investment_income_tax
+        + result.early_withdrawal_penalty
     )
     result.line("Total tax", result.total_tax)
 
@@ -815,8 +967,12 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
     result.total_payments = cents(
         profile.federal_withheld + profile.estimated_payments
         + profile.excess_social_security + result.refundable_credits
+        + retirement.federal_withheld
     )
     result.line("Federal income tax withheld (Box 2)", profile.federal_withheld)
+    if retirement.federal_withheld:
+        result.line("Withheld on retirement distributions", retirement.federal_withheld,
+                    form="1099-R")
     if profile.estimated_payments:
         result.line("Estimated tax payments", profile.estimated_payments)
     if profile.excess_social_security:
@@ -835,3 +991,41 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
         result.effective_rate = (result.total_tax / agi).quantize(Decimal("0.0001"))
     result.marginal_rate = marginal_rate(taxable, params.brackets(status))
     return result
+
+
+# ===========================================================================
+# Adapters: the scalar fields, or the structured detail when it is given
+# ===========================================================================
+def _capital_input(profile: TaxProfile) -> CapitalInput:
+    """Schedule D input, from `profile.capital` or from the simple fields.
+
+    A client who just says "I made $8,000 on shares" gets the simple path. One
+    whose broker sent a 1099-B with a carryforward and a wash sale gets the
+    full netting. Both end up in the same calculation.
+    """
+    if profile.capital is not None:
+        return profile.capital
+    return CapitalInput(
+        short_term=profile.short_term_gains,
+        long_term=profile.long_term_gains,
+        capital_gain_distributions=profile.capital_gain_distributions,
+        carryforward_short=profile.capital_loss_carryforward_short,
+        carryforward_long=profile.capital_loss_carryforward_long,
+        wash_sale_disallowed=profile.wash_sale_disallowed,
+        collectibles_gain=profile.collectibles_gain,
+        unrecaptured_1250_gain=profile.unrecaptured_1250_gain,
+    )
+
+
+def _retirement_result(profile: TaxProfile, params: FederalParams) -> DistributionResult:
+    """1099-R detail where there is any, otherwise the plain total.
+
+    Without the forms, `retirement_distributions` is treated as fully taxable
+    and penalty-free -- which is exactly what a normal retirement-age
+    distribution is, and understates nothing.
+    """
+    if profile.distributions:
+        return compute_distributions(profile.distributions, params)
+    plain = DistributionResult()
+    plain.gross = plain.taxable = cents(positive(profile.retirement_distributions))
+    return plain

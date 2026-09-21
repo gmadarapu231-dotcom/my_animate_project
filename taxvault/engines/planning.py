@@ -428,8 +428,12 @@ def build_strategies(
 
     # --- 9. Capital loss harvesting ----------------------------------------
     gains = profile.short_term_gains + profile.long_term_gains
+    loss_cap = money(params.get("capital_losses", "ordinary_offset_cap", default=3000))
+    if profile.filing_status == "married_separately":
+        loss_cap = money(params.get("capital_losses",
+                                    "ordinary_offset_cap_married_separately", default=1500))
     if gains > ZERO:
-        offset = min(gains, money(3000) + gains)
+        offset = min(gains, loss_cap + gains)
         fed, st = _price(
             base_federal, base_state,
             _with(profile,
@@ -443,9 +447,10 @@ def build_strategies(
                 category="investments",
                 summary=f"Realising losses could offset up to {offset:,.0f} of gain.",
                 how_it_works=(
-                    "Losses offset gains dollar for dollar, and up to $3,000 of net loss "
-                    "offsets ordinary income. Short-term gains are worth offsetting first: "
-                    "they are taxed at the full marginal rate."
+                    "Losses offset gains dollar for dollar, and up to "
+                    f"{loss_cap:,.0f} of net loss offsets ordinary income. Short-term "
+                    "gains are worth offsetting first: they are taxed at the full "
+                    "marginal rate, not at 15%."
                 ),
                 window=WINDOW_YEAR_END, amount=offset, federal_saving=fed, state_saving=st,
                 confidence="medium",
@@ -456,6 +461,156 @@ def build_strategies(
                     "prices the opportunity, it does not confirm the losses are there.",
                 ],
             ))
+
+    # --- 9b. Gain harvesting at the 0% rate ---------------------------------
+    # The mirror image of loss harvesting, and far less known. Below the 0%
+    # breakpoint, long-term gain is taxed at nothing at all -- so a client in
+    # a low-income year can sell and immediately rebuy, resetting their basis
+    # upward for free. There is no wash-sale rule on gains.
+    zero_top = money(params.get("capital_gains", profile.filing_status,
+                                default={}).get("zero_up_to", 0))
+    if zero_top > ZERO and base_result.taxable_income < zero_top:
+        room = positive(zero_top - base_result.taxable_income)
+        if room > money(1000):
+            add(Strategy(
+                id=PlanningStrategy.ZERO_RATE_GAIN_HARVEST.value,
+                label="Realise long-term gains at the 0% rate",
+                category="investments",
+                summary=f"You have {room:,.0f} of room below the 0% capital gains "
+                        "breakpoint. Long-term gain realised inside it is taxed at nothing.",
+                how_it_works=(
+                    "The 0% band is measured on total taxable income, so what is left "
+                    "after your ordinary income is room for tax-free gain. Selling and "
+                    "buying straight back resets your cost basis upward at no cost -- the "
+                    "wash-sale rule applies to losses, not to gains. It only works on "
+                    "positions held more than a year."
+                ),
+                window=WINDOW_YEAR_END, amount=room, headroom=room,
+                federal_saving=ZERO, state_saving=ZERO, actionable=True, confidence="medium",
+                caveats=[
+                    "The gain still counts as income for anything AGI-tested: ACA "
+                    "subsidies, IRMAA on Medicare premiums two years later, and the "
+                    "taxable share of Social Security.",
+                    "Most states tax the gain at their ordinary rate even where the "
+                    "federal rate is 0%.",
+                    "Realising too much pushes the rest of the gain into the 15% band; "
+                    "the room shown is the room at today's figures.",
+                ],
+            ))
+
+    # --- 9c. Waiting for long-term treatment --------------------------------
+    if profile.short_term_gains > ZERO:
+        fed, st = _price(
+            base_federal, base_state,
+            _with(profile, short_term_gains=ZERO,
+                  long_term_gains=profile.long_term_gains + profile.short_term_gains),
+        )
+        if fed + st > ZERO:
+            add(Strategy(
+                id=PlanningStrategy.HOLD_FOR_LONG_TERM.value,
+                label="Hold positions past one year before selling",
+                category="investments",
+                summary=f"Your {profile.short_term_gains:,.0f} of short-term gain would cost "
+                        f"{fed + st:,.0f} less at long-term rates.",
+                how_it_works=(
+                    "A position held more than one year is taxed at 0%, 15% or 20% instead "
+                    "of your ordinary rate, which can be 37%. The line is the day AFTER the "
+                    "first anniversary of purchase -- one day early and the whole gain is "
+                    "short-term. Check the acquisition dates on your 1099-B before selling "
+                    "anything else this year."
+                ),
+                window=WINDOW_YEAR_END, amount=profile.short_term_gains,
+                federal_saving=fed, state_saving=st, confidence="medium",
+                caveats=[
+                    "Only worth it where you are willing to hold: a position that falls "
+                    "more than the tax saved is a bad trade with a good tax outcome.",
+                    "This prices the whole short-term gain as if it could all be deferred. "
+                    "Which lots are actually near the anniversary is on your 1099-B.",
+                ],
+            ))
+
+    # --- 9d. Roth against traditional ---------------------------------------
+    if has_employer_plan and profile.wages > ZERO:
+        marginal = base_result.marginal_rate
+        if marginal <= money("0.12"):
+            add(Strategy(
+                id=PlanningStrategy.ROTH_VS_TRADITIONAL.value,
+                label="Put 401(k) contributions into the Roth side",
+                category="retirement",
+                summary=f"At a {marginal:.0%} marginal rate, the deduction from a pre-tax "
+                        "contribution is worth little. Roth money comes out tax-free.",
+                how_it_works=(
+                    "A pre-tax contribution saves tax at today's rate and is taxed at "
+                    "your rate in retirement; a Roth contribution is the reverse. At 10% "
+                    "or 12% you are buying a cheap deduction and selling expensive "
+                    "tax-free growth. It also matters that everything in a traditional "
+                    "401(k) comes out as ORDINARY income -- decades of growth that would "
+                    "have been long-term capital gain in a brokerage account is taxed at "
+                    "your full rate on the way out."
+                ),
+                window=WINDOW_YEAR_END, actionable=True, confidence="medium",
+                federal_saving=ZERO, state_saving=ZERO,
+                caveats=[
+                    "This is a bet on your rate in retirement being no lower than today's. "
+                    "At 22% and above the pre-tax side usually wins.",
+                    "Switching does not change the contribution limit -- the "
+                    f"{money(limits.get('elective_deferral_401k', 0)):,.0f} is shared "
+                    "between the two.",
+                ],
+            ))
+
+    # --- 9e. What an early withdrawal actually costs -------------------------
+    if base_result.early_withdrawal_penalty > ZERO:
+        penalty = base_result.early_withdrawal_penalty
+        add(Strategy(
+            id=PlanningStrategy.AVOID_EARLY_WITHDRAWAL.value,
+            label="Check for an exception to the 10% early-withdrawal tax",
+            category="retirement",
+            summary=f"You are paying {penalty:,.0f} in additional tax on an early "
+                    "distribution. Several exceptions waive it.",
+            how_it_works=(
+                "The 10% is on top of the income tax, so a withdrawal in the 22% bracket "
+                "loses 32% before it reaches you. The exceptions -- leaving the job at 55 "
+                "or later, disability, medical costs above 7.5% of AGI, a birth or "
+                "adoption, a federally declared disaster, a 72(t) payment stream -- each "
+                "waive the 10% but NOT the income tax. If one applies, it is claimed on "
+                "Form 5329 and the plan does not need to know."
+            ),
+            window=WINDOW_FILING, amount=penalty, federal_saving=ZERO, state_saving=ZERO,
+            actionable=True, confidence="high",
+            caveats=[
+                "An exception has to be true, not merely useful: the IRS matches the "
+                "1099-R code against the Form 5329 claim.",
+                "Where the money was taken within 60 days and put back into another "
+                "retirement account, it is a rollover and neither tax applies.",
+            ],
+        ))
+
+    # --- 9f. Home equity interest that is not deductible ---------------------
+    disallowed = money((base_result.mortgage or {}).get("disallowed_interest", 0))
+    if disallowed > ZERO:
+        add(Strategy(
+            id=PlanningStrategy.HOME_EQUITY_TRACING.value,
+            label="Trace what the home equity borrowing actually paid for",
+            category="deductions",
+            summary=f"{disallowed:,.0f} of interest is currently not deductible because the "
+                    "borrowing was not traced to work on the home.",
+            how_it_works=(
+                "Interest on a home equity loan or HELOC is deductible only to the extent "
+                "the money bought, built or substantially improved the home securing it. "
+                "The test is what the money DID, not what the loan is called. If part of "
+                "it paid for a kitchen, a roof or an extension, that part qualifies -- but "
+                "you need the invoices and the bank records to show which dollars went "
+                "where, and they have to be kept for as long as the loan runs."
+            ),
+            window=WINDOW_FILING, amount=disallowed, federal_saving=ZERO, state_saving=ZERO,
+            actionable=True, confidence="medium",
+            caveats=[
+                "Only the improvement share qualifies, and it counts against the same "
+                "$750,000 ceiling as the first mortgage rather than having its own.",
+                "Routine repairs and maintenance are not improvements.",
+            ],
+        ))
 
     # --- 10. Withholding for next year --------------------------------------
     if base_result.balance > money(1000):
