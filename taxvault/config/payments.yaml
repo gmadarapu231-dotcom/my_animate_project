@@ -87,6 +87,153 @@ offer_in_compromise:
     IRS agrees the full amount cannot be collected. Most offers are rejected,
     and the application fee and initial payment are not refunded.
 
+# ---------------------------------------------------------------------------
+# Where the client actually goes to pay
+# ---------------------------------------------------------------------------
+# This system does not move money. It works out what is owed and hands the
+# client off to the government's own payment channel, which is the only place
+# a federal tax payment can be made. Every link below is an official irs.gov
+# address; nothing here routes through a third party we chose.
+irs_links:
+  direct_pay:
+    label: "IRS Direct Pay"
+    url: "https://www.irs.gov/payments/direct-pay"
+    cost: "Free"
+    settles_in: "Same day if scheduled before 8pm ET"
+    note: >-
+      Pays straight from a checking or savings account. No registration, and a
+      confirmation number is issued immediately. This is the route to use
+      unless there is a reason not to.
+  eftps:
+    label: "EFTPS"
+    url: "https://www.eftps.gov/"
+    cost: "Free"
+    settles_in: "Next business day"
+    note: >-
+      The Treasury's own system. Enrolment takes about a week because the PIN
+      arrives by post, so it suits someone paying quarterly rather than someone
+      paying today.
+  card:
+    label: "Debit or credit card"
+    url: "https://www.irs.gov/payments/pay-your-taxes-by-debit-or-credit-card"
+    cost: "About 1.85% of the payment"
+    settles_in: "Same day"
+    note: >-
+      The IRS lists three authorised processors and each charges its own fee.
+      Only worth it if card rewards or a 0% promotion beat the fee.
+  online_payment_agreement:
+    label: "Apply for a payment plan"
+    url: "https://www.irs.gov/payments/online-payment-agreement-application"
+    cost: "Setup fee from $22"
+    settles_in: "Decision usually immediate"
+    note: "Short-term and long-term instalment agreements, applied for online."
+  voucher:
+    label: "Form 1040-V payment voucher"
+    url: "https://www.irs.gov/pub/irs-pdf/f1040v.pdf"
+    cost: "Postage"
+    settles_in: "Whenever it is postmarked"
+    note: "Post with a cheque. Keep proof of postage; the postmark is the payment date."
+  refund_status:
+    label: "Where's My Refund?"
+    url: "https://www.irs.gov/wheres-my-refund"
+    cost: "Free"
+    settles_in: "Updated daily"
+    note: "Track a refund 24 hours after e-filing, or four weeks after posting a return."
+  extension:
+    label: "File an extension (Form 4868)"
+    url: "https://www.irs.gov/forms-pubs/about-form-4868"
+    cost: "Free"
+    settles_in: "Immediate"
+    note: "Six more months to file. Not six more months to pay."
+  account:
+    label: "Your IRS online account"
+    url: "https://www.irs.gov/payments/your-online-account"
+    cost: "Free"
+    settles_in: "Immediate"
+    note: "Shows balance, payment history and notices. Identity verification required."
+
+# What to type into Direct Pay. It is a session-based application and takes no
+# parameters from a link, so the client is handed the exact values instead.
+direct_pay_fields:
+  balance_due:
+    reason: "Balance Due"
+    apply_to: "Income Tax - Form 1040"
+  estimated:
+    reason: "Estimated Tax"
+    apply_to: "1040ES (for 1040, 1040A, 1040EZ)"
+  extension:
+    reason: "Extension"
+    apply_to: "4868 (for 1040, 1040A, 1040EZ)"
+  amended:
+    reason: "Amended Return"
+    apply_to: "1040X"
+  installment:
+    reason: "Installment Agreement"
+    apply_to: "Income Tax - Form 1040"
+
+# ---------------------------------------------------------------------------
+# Paying for the preparation itself
+# ---------------------------------------------------------------------------
+# Separate from the tax, and the separation is the point: these settle a fee to
+# the preparer, and none of them can send money to the IRS.
+service_fee:
+  zelle:
+    label: "Zelle"
+    cost: "Free"
+    settles_in: "Usually minutes"
+    irreversible: true
+    note: >-
+      Sends from the client's own banking app to the practice's enrolled
+      address. Free and fast, and final: a Zelle payment cannot be recalled,
+      so the address must be checked before sending.
+  ach_debit:
+    label: "Bank transfer (ACH)"
+    cost: "Free"
+    settles_in: "1-3 business days"
+    irreversible: false
+  card:
+    label: "Debit or credit card"
+    cost: "Processor fee, typically 2.9% + 30c"
+    settles_in: "Immediate"
+    irreversible: false
+  fee_from_refund:
+    label: "Deduct from refund"
+    cost: "Bank product fee, often $30-$45"
+    settles_in: "When the refund arrives"
+    irreversible: false
+    note: >-
+      Convenient and expensive: it is a short-term loan against the refund, and
+      the fee is large relative to the days saved.
+
+# Why Zelle is not offered for the tax itself. Shown rather than left out,
+# because "it is missing" and "it does not work" are different answers.
+not_accepted_by_irs:
+  - method: zelle
+    label: "Zelle"
+    reason: >-
+      The IRS does not accept Zelle. It is a bank-to-bank network for sending
+      money to people you know, with no facility for a government tax account,
+      and a Zelle transfer cannot be reversed once sent. Anyone asking for tax
+      to be paid by Zelle is running a scam.
+    instead: "irs_direct_pay"
+  - method: venmo_cashapp_paypal
+    label: "Venmo, Cash App or PayPal"
+    reason: >-
+      Not IRS payment channels either. PayPal and Venmo can be used only as a
+      funding source inside one of the IRS's authorised card processors, which
+      charges the card fee.
+    instead: "card"
+  - method: cryptocurrency
+    label: "Cryptocurrency"
+    reason: "The IRS does not accept payment in cryptocurrency."
+    instead: "irs_direct_pay"
+  - method: gift_card
+    label: "Gift cards"
+    reason: >-
+      Never. The IRS never asks for payment in gift cards, and a demand for one
+      is always fraud.
+    instead: "irs_direct_pay"
+
 extension:
   form: "4868"
   note: >-

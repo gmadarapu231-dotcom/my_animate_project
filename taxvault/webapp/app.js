@@ -25,6 +25,8 @@ const state = {
   compare: null,
   method: 'regular',
   chosen: null,          // null = "apply everything that helps"
+  handoff: null,         // where to go to pay, once a method is picked
+  serviceFee: null,
   taxYear: null,
   situation: loadSituation(),
   pendingMobile: '',     // the number verified this session; the input is gone after re-render
@@ -164,6 +166,7 @@ function go(view) {
   render();
   if (view === 'documents') refreshDocuments();
   if (view === 'filings') refreshFilings();
+  if (view === 'payment' && !state.serviceFee) refreshServiceFee();
 }
 
 function steps(current) {
@@ -1018,6 +1021,37 @@ function viewPayment() {
     <button class="btn" id="save-payment" disabled>Save my choice</button>
   </div>`}
 
+  ${state.handoff ? handoffCard(state.handoff) : ''}
+
+  ${!refund ? `
+  <div class="card">
+    <h2>Why can't I pay by Zelle?</h2>
+    <p class="sub">A fair question, and the answer protects you.</p>
+    ${(state.handoff && state.handoff.not_accepted ? state.handoff.not_accepted : []).map((r) => `
+      <div class="note warn">
+        <strong>${esc(r.label)}</strong> — ${esc(r.reason)}
+      </div>`).join('') || `
+      <div class="note info">Pick a payment method above to see the detail.</div>`}
+  </div>` : ''}
+
+  <div class="card">
+    <h2>Paying for this service</h2>
+    <p class="sub">
+      Separate from your tax. This settles the preparation fee, and Zelle works here.
+    </p>
+    <div id="fee-options">
+      ${state.serviceFee ? state.serviceFee.options.map((o) => `
+        <div class="choice" style="cursor:default">
+          <strong>${esc(o.label)}${o.recommended ? ' · recommended' : ''}</strong>
+          <span>${esc(o.cost)}${o.settles_in ? ` · ${esc(o.settles_in)}` : ''}</span>
+          ${o.irreversible ? `<span style="color:var(--warn)">
+            Cannot be reversed once sent — check the address before you send.</span>` : ''}
+          ${o.note ? `<span style="margin-top:6px">${esc(o.note)}</span>` : ''}
+        </div>`).join('') : '<div class="skeleton" style="width:70%"></div>'}
+    </div>
+    ${state.serviceFee ? `<div class="note info">${esc(state.serviceFee.note)}</div>` : ''}
+  </div>
+
   ${Number(nextYear.shortfall) > 0 ? `
   <div class="card">
     <h2>Staying ahead next year</h2>
@@ -1035,6 +1069,73 @@ function viewPayment() {
     </table>` : ''}
     <div class="note info">${esc(nextYear.note || '')}</div>
   </div>` : ''}`;
+}
+
+function handoffCard(h) {
+  return `
+  <div class="card handoff">
+    <h2>Pay ${esc(h.jurisdiction === 'state' ? h.state_code : 'the IRS')}: ${money2(h.amount)}</h2>
+    <p class="sub">
+      We never take your tax payment. You pay ${esc(h.destination)} directly, on their
+      own site, and keep the confirmation number.
+    </p>
+
+    ${h.url ? `
+      <a class="btn go" href="${esc(h.url)}" target="_blank" rel="noopener noreferrer">
+        Open ${esc(h.destination)} →
+      </a>` : `
+      <div class="note warn">
+        No verified payment address is held for ${esc(h.destination)}. Go to the
+        state's own revenue site — type the address yourself.
+      </div>`}
+    <div class="meta-line">${esc(h.cost)}${h.settles_in ? ` · ${esc(h.settles_in)}` : ''}${
+      h.due_on ? ` · due ${day(h.due_on)}` : ''}</div>
+
+    ${h.fields && h.fields.length ? `
+      <h3>Enter exactly this</h3>
+      <table class="lines">
+        <tbody>${h.fields.map((f) => `
+          <tr>
+            <td>${esc(f.label)}${f.note ? `<span class="form">${esc(f.note)}</span>` : ''}</td>
+            <td class="num"><strong>${esc(f.value)}</strong></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : ''}
+
+    ${h.steps && h.steps.length ? `
+      <h3>Step by step</h3>
+      <ol class="steps-list">${h.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ol>` : ''}
+
+    ${(h.warnings || []).map((w) => `<div class="note warn">${esc(w)}</div>`).join('')}
+
+    <h3>Once you have paid</h3>
+    <div class="row two">
+      <div class="field">
+        <label for="confirmation">Confirmation number</label>
+        <input id="confirmation" placeholder="From the payment site" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="paid-on">Date paid</label>
+        <input id="paid-on" type="date">
+      </div>
+    </div>
+    <button class="btn slim" id="record-payment">Record this payment</button>
+
+    ${h.alternatives && h.alternatives.length ? `
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;color:var(--accent);font-weight:550">Other ways to pay</summary>
+        ${h.alternatives.map((alt) => `
+          <div class="note info" style="margin-top:8px">
+            <a href="${esc(alt.url)}" target="_blank" rel="noopener noreferrer">${esc(alt.label)}</a>
+            ${alt.cost ? ` — ${esc(alt.cost)}` : ''}${alt.note ? `<br>${esc(alt.note)}` : ''}
+          </div>`).join('')}
+      </details>` : ''}
+
+    ${h.scam_warning ? `
+      <div class="note bad" style="margin-top:14px">
+        <strong>${esc(h.scam_warning.headline)}</strong><br>${esc(h.scam_warning.body)}
+      </div>` : ''}
+  </div>`;
 }
 
 function paymentRow(option) {
@@ -1428,7 +1529,40 @@ function wirePayment() {
       if (note) note.textContent = `Selected: ${label}`;
       const save = el('save-payment');
       if (save) save.disabled = false;
+
+      // A balance has somewhere to be paid; a refund has nowhere to go.
+      const result = state.estimate;
+      const balance = result ? Number(result.totals.total_balance) : 0;
+      if (balance > 0) {
+        const isState = selected.startsWith('CA:') || button.dataset.state;
+        guard(null, async () => {
+          state.handoff = await api('/api/payments/handoff?' + new URLSearchParams({
+            amount: String(Math.abs(Number(result.totals.federal_balance))),
+            tax_year: String(result.tax_year),
+            jurisdiction: 'federal',
+            method: selected,
+          }));
+          render();
+        });
+      }
     }));
+
+  const record = el('record-payment');
+  if (record) record.addEventListener('click', () => guard(record, async () => {
+    if (!state.estimate || !state.estimate.estimate_id) {
+      throw new Error('Run and save an estimate first.');
+    }
+    const result = await api('/api/payments/record', { method: 'POST', body: {
+      estimate_id: state.estimate.estimate_id,
+      jurisdiction: state.handoff ? state.handoff.jurisdiction : 'federal',
+      state_code: state.handoff ? state.handoff.state_code : '',
+      method: selected || 'irs_direct_pay',
+      amount: Number(state.handoff ? state.handoff.amount : 0),
+      confirmation_number: (el('confirmation').value || '').trim(),
+      paid_on: el('paid-on').value || null,
+    }});
+    toast(result.note, result.confirmation_number ? '' : 'bad');
+  }));
 
   const save = el('save-payment');
   if (save) save.addEventListener('click', () => guard(save, async () => {
@@ -1467,6 +1601,15 @@ async function refreshDocuments() {
     const data = await api('/api/documents');
     state.documents = data.documents;
     if (state.view === 'documents') render();
+  } catch (error) {
+    if (error.status !== 403) toast(error.message, 'bad');
+  }
+}
+
+async function refreshServiceFee() {
+  try {
+    state.serviceFee = await api('/api/payments/service-fee');
+    if (state.view === 'payment') render();
   } catch (error) {
     if (error.status !== 403) toast(error.message, 'bad');
   }

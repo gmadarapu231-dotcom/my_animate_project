@@ -39,6 +39,8 @@ states:
   TX: {name: Texas, type: none, note: "No individual income tax; constitutionally prohibited."}
   WA:
     name: Washington
+    revenue_department: Washington Department of Revenue
+    payment_url: https://dor.wa.gov/taxes-rates/other-taxes/capital-gains-tax
     type: none
     capital_gains_excise: {rate: 0.07, standard_deduction: 276000, rate_over_1m: 0.0985}
     note: "No tax on wages. A 7% excise tax applies to long-term capital gains above the annual standard deduction (9.9% on the portion over $1M)."
@@ -47,26 +49,28 @@ states:
   # -------------------------------------------------------------------------
   # Flat rate
   # -------------------------------------------------------------------------
-  AZ: {name: Arizona, type: flat, rate: 0.025, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Matches the federal standard deduction."}
-  CO: {name: Colorado, type: flat, rate: 0.044, starts_from: federal_taxable_income, joint: doubled, note: "Starts from federal taxable income, so the federal standard deduction flows through."}
-  GA: {name: Georgia, type: flat, rate: 0.0519, standard_deduction: {single: 12000, married_jointly: 24000, head_of_household: 12000}, dependent_exemption: 4000, joint: doubled, note: "Rate steps down annually toward 4.99%."}
-  ID: {name: Idaho, type: flat, rate: 0.053, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Conforms to the federal standard deduction."}
-  IL: {name: Illinois, type: flat, rate: 0.0495, personal_exemption: 2850, joint: doubled, note: "Retirement income (pensions, 401k, IRA, Social Security) is fully exempt."}
-  IN: {name: Indiana, type: flat, rate: 0.030, personal_exemption: 1000, dependent_exemption: 1000, joint: doubled, local_rate_typical: 0.017, local_note: "All 92 counties levy a local income tax, roughly 1.0%-3.0%."}
-  IA: {name: Iowa, type: flat, rate: 0.038, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Moved to a single flat rate in 2025. Retirement income exempt at 55+."}
-  KY: {name: Kentucky, type: flat, rate: 0.040, standard_deduction: {single: 3270, married_jointly: 6540, head_of_household: 3270}, joint: doubled, local_rate_typical: 0.0175, local_note: "Most cities and counties levy an occupational licence tax on wages."}
-  LA: {name: Louisiana, type: flat, rate: 0.030, standard_deduction: {single: 12500, married_jointly: 25000, head_of_household: 12500}, joint: doubled, note: "Replaced graduated brackets with a flat 3% in 2025."}
-  MI: {name: Michigan, type: flat, rate: 0.0425, personal_exemption: 5800, joint: doubled, local_rate_typical: 0.012, local_note: "24 cities levy an income tax; Detroit is 2.4% resident."}
-  MS: {name: Mississippi, type: flat, rate: 0.044, exempt_first: {single: 10000, married_jointly: 10000}, joint: same, note: "Rate applies only above the first $10,000 of taxable income; scheduled to fall to 3% by 2030."}
-  NC: {name: North Carolina, type: flat, rate: 0.0425, standard_deduction: {single: 12750, married_jointly: 25500, head_of_household: 19125}, joint: doubled, note: "Rate steps down to 3.99% in 2026."}
-  PA: {name: Pennsylvania, type: flat, rate: 0.0307, joint: doubled, local_rate_typical: 0.015, local_note: "Local earned income tax averages ~1.5%; Philadelphia is 3.75% resident.", note: "No standard deduction. Retirement income is exempt."}
-  UT: {name: Utah, type: flat, rate: 0.045, taxpayer_credit: {rate: 0.06, phase_out_start: {single: 16702, married_jointly: 33404}}, joint: doubled, note: "A taxpayer credit replaces the standard deduction and phases out with income."}
+  AZ: {name: Arizona, revenue_department: "Arizona Department of Revenue", payment_url: "https://aztaxes.gov/", type: flat, rate: 0.025, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Matches the federal standard deduction."}
+  CO: {name: Colorado, revenue_department: "Colorado Department of Revenue", payment_url: "https://tax.colorado.gov/individual-income-tax-payment-options", type: flat, rate: 0.044, starts_from: federal_taxable_income, joint: doubled, note: "Starts from federal taxable income, so the federal standard deduction flows through."}
+  GA: {name: Georgia, revenue_department: "Georgia Department of Revenue", payment_url: "https://gtc.dor.ga.gov/", type: flat, rate: 0.0519, standard_deduction: {single: 12000, married_jointly: 24000, head_of_household: 12000}, dependent_exemption: 4000, joint: doubled, note: "Rate steps down annually toward 4.99%."}
+  ID: {name: Idaho, revenue_department: "Idaho State Tax Commission", payment_url: "https://tax.idaho.gov/taxes/income-tax/individual-income/pay/", type: flat, rate: 0.053, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Conforms to the federal standard deduction."}
+  IL: {name: Illinois, revenue_department: "Illinois Department of Revenue", payment_url: "https://mytax.illinois.gov/", type: flat, rate: 0.0495, personal_exemption: 2850, joint: doubled, note: "Retirement income (pensions, 401k, IRA, Social Security) is fully exempt."}
+  IN: {name: Indiana, revenue_department: "Indiana Department of Revenue", payment_url: "https://www.in.gov/dor/online-services/intime-tax-center/", type: flat, rate: 0.030, personal_exemption: 1000, dependent_exemption: 1000, joint: doubled, local_rate_typical: 0.017, local_note: "All 92 counties levy a local income tax, roughly 1.0%-3.0%."}
+  IA: {name: Iowa, revenue_department: "Iowa Department of Revenue", payment_url: "https://tax.iowa.gov/make-payment", type: flat, rate: 0.038, standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}, joint: doubled, note: "Moved to a single flat rate in 2025. Retirement income exempt at 55+."}
+  KY: {name: Kentucky, revenue_department: "Kentucky Department of Revenue", payment_url: "https://revenue.ky.gov/Collections/Pages/E-Payments.aspx", type: flat, rate: 0.040, standard_deduction: {single: 3270, married_jointly: 6540, head_of_household: 3270}, joint: doubled, local_rate_typical: 0.0175, local_note: "Most cities and counties levy an occupational licence tax on wages."}
+  LA: {name: Louisiana, revenue_department: "Louisiana Department of Revenue", payment_url: "https://latap.revenue.louisiana.gov/", type: flat, rate: 0.030, standard_deduction: {single: 12500, married_jointly: 25000, head_of_household: 12500}, joint: doubled, note: "Replaced graduated brackets with a flat 3% in 2025."}
+  MI: {name: Michigan, revenue_department: "Michigan Department of Treasury", payment_url: "https://mitax.michigan.gov/", type: flat, rate: 0.0425, personal_exemption: 5800, joint: doubled, local_rate_typical: 0.012, local_note: "24 cities levy an income tax; Detroit is 2.4% resident."}
+  MS: {name: Mississippi, revenue_department: "Mississippi Department of Revenue", payment_url: "https://tap.dor.ms.gov/", type: flat, rate: 0.044, exempt_first: {single: 10000, married_jointly: 10000}, joint: same, note: "Rate applies only above the first $10,000 of taxable income; scheduled to fall to 3% by 2030."}
+  NC: {name: North Carolina, revenue_department: "North Carolina Department of Revenue", payment_url: "https://www.ncdor.gov/file-pay", type: flat, rate: 0.0425, standard_deduction: {single: 12750, married_jointly: 25500, head_of_household: 19125}, joint: doubled, note: "Rate steps down to 3.99% in 2026."}
+  PA: {name: Pennsylvania, revenue_department: "Pennsylvania Department of Revenue", payment_url: "https://mypath.pa.gov/", type: flat, rate: 0.0307, joint: doubled, local_rate_typical: 0.015, local_note: "Local earned income tax averages ~1.5%; Philadelphia is 3.75% resident.", note: "No standard deduction. Retirement income is exempt."}
+  UT: {name: Utah, revenue_department: "Utah State Tax Commission", payment_url: "https://tap.utah.gov/", type: flat, rate: 0.045, taxpayer_credit: {rate: 0.06, phase_out_start: {single: 16702, married_jointly: 33404}}, joint: doubled, note: "A taxpayer credit replaces the standard deduction and phases out with income."}
 
   # -------------------------------------------------------------------------
   # Graduated
   # -------------------------------------------------------------------------
   AL:
     name: Alabama
+    revenue_department: Alabama Department of Revenue
+    payment_url: https://myalabamataxes.alabama.gov/
     type: graduated
     joint: doubled
     standard_deduction: {single: 3000, married_jointly: 8500, head_of_household: 5200}
@@ -76,12 +80,16 @@ states:
     note: "Federal income tax paid is deductible on the state return."
   AR:
     name: Arkansas
+    revenue_department: Arkansas Department of Finance and Administration
+    payment_url: https://atap.arkansas.gov/
     type: graduated
     joint: same
     standard_deduction: {single: 2410, married_jointly: 4820, head_of_household: 2410}
     brackets: {single: [{up_to: 4500, rate: 0.02}, {up_to: 8900, rate: 0.03}, {rate: 0.039}]}
   CA:
     name: California
+    revenue_department: California Franchise Tax Board
+    payment_url: https://www.ftb.ca.gov/pay/
     type: graduated
     joint: doubled
     standard_deduction: {single: 5540, married_jointly: 11080, head_of_household: 11080}
@@ -94,6 +102,8 @@ states:
     note: "Top combined rate reaches 13.3%. No preferential rate for capital gains."
   CT:
     name: Connecticut
+    revenue_department: Connecticut Department of Revenue Services
+    payment_url: https://portal.ct.gov/drs/individuals/individual-tax-page/make-a-payment
     type: graduated
     joint: doubled
     personal_exemption: {single: 15000, married_jointly: 24000}
@@ -103,6 +113,8 @@ states:
     note: "A recapture provision claws back lower-bracket benefit at high income."
   DE:
     name: Delaware
+    revenue_department: Delaware Division of Revenue
+    payment_url: https://revenue.delaware.gov/services/
     type: graduated
     joint: same
     standard_deduction: {single: 5700, married_jointly: 11400, head_of_household: 5700}
@@ -112,6 +124,8 @@ states:
     local_note: "Wilmington levies a 1.25% wage tax."
   DC:
     name: District of Columbia
+    revenue_department: DC Office of Tax and Revenue
+    payment_url: https://mytax.dc.gov/
     type: graduated
     joint: same
     standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
@@ -120,6 +134,8 @@ states:
                {up_to: 250000, rate: 0.085}, {up_to: 500000, rate: 0.0925}, {up_to: 1000000, rate: 0.0975}, {rate: 0.1075}]
   HI:
     name: Hawaii
+    revenue_department: Hawaii Department of Taxation
+    payment_url: https://hitax.hawaii.gov/
     type: graduated
     joint: doubled
     standard_deduction: {single: 4400, married_jointly: 8800, head_of_household: 6424}
@@ -130,6 +146,8 @@ states:
     note: "Act 46 (2024) is widening brackets and raising the standard deduction each year through 2031."
   KS:
     name: Kansas
+    revenue_department: Kansas Department of Revenue
+    payment_url: https://www.kdor.ks.gov/apps/kcsc/increment.aspx
     type: graduated
     joint: doubled
     standard_deduction: {single: 3605, married_jointly: 8240, head_of_household: 6180}
@@ -137,12 +155,16 @@ states:
     brackets: {single: [{up_to: 23000, rate: 0.052}, {rate: 0.0558}]}
   ME:
     name: Maine
+    revenue_department: Maine Revenue Services
+    payment_url: https://www.maine.gov/revenue/taxes/income-estate-tax
     type: graduated
     joint: doubled
     standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
     brackets: {single: [{up_to: 26800, rate: 0.058}, {up_to: 63450, rate: 0.0675}, {rate: 0.0715}]}
   MD:
     name: Maryland
+    revenue_department: Comptroller of Maryland
+    payment_url: https://interactive.marylandtaxes.gov/individuals/payment/
     type: graduated
     joint: same
     standard_deduction: {single: 2700, married_jointly: 5450, head_of_household: 5450}
@@ -155,6 +177,8 @@ states:
     local_note: "Every county levies a local income tax, 2.25%-3.20%, collected on the state return."
   MA:
     name: Massachusetts
+    revenue_department: Massachusetts Department of Revenue
+    payment_url: https://mtc.dor.state.ma.us/mtc/_/
     type: flat
     rate: 0.05
     joint: doubled
@@ -163,12 +187,16 @@ states:
     note: "5% flat, plus a 4% surtax on income above the indexed $1,083,150 threshold. Short-term gains are taxed at 8.5%."
   MN:
     name: Minnesota
+    revenue_department: Minnesota Department of Revenue
+    payment_url: https://www.revenue.state.mn.us/make-payment
     type: graduated
     joint: doubled
     standard_deduction: {single: 14950, married_jointly: 29900, head_of_household: 22500}
     brackets: {single: [{up_to: 32570, rate: 0.0535}, {up_to: 106990, rate: 0.068}, {up_to: 198630, rate: 0.0785}, {rate: 0.0985}]}
   MO:
     name: Missouri
+    revenue_department: Missouri Department of Revenue
+    payment_url: https://dors.mo.gov/tax/
     type: graduated
     joint: same
     standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
@@ -179,12 +207,16 @@ states:
     local_note: "Kansas City and St. Louis levy a 1% earnings tax."
   MT:
     name: Montana
+    revenue_department: Montana Department of Revenue
+    payment_url: https://tap.dor.mt.gov/
     type: graduated
     joint: doubled
     standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
     brackets: {single: [{up_to: 21100, rate: 0.047}, {rate: 0.059}]}
   NE:
     name: Nebraska
+    revenue_department: Nebraska Department of Revenue
+    payment_url: https://revenue.nebraska.gov/about/make-payment-only
     type: graduated
     joint: doubled
     standard_deduction: {single: 8350, married_jointly: 16700, head_of_household: 12250}
@@ -192,6 +224,8 @@ states:
     note: "Rate schedule is stepping down toward a 3.99% flat rate by 2027."
   NJ:
     name: New Jersey
+    revenue_department: New Jersey Division of Taxation
+    payment_url: https://www.nj.gov/treasury/taxation/payments-notices.shtml
     type: graduated
     joint: table
     personal_exemption: 1000
@@ -204,6 +238,8 @@ states:
     note: "401(k) contributions are NOT deductible for New Jersey, so state wages exceed federal Box 1."
   NM:
     name: New Mexico
+    revenue_department: New Mexico Taxation and Revenue Department
+    payment_url: https://tap.state.nm.us/
     type: graduated
     joint: doubled
     standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
@@ -211,6 +247,8 @@ states:
                         {up_to: 66500, rate: 0.047}, {up_to: 210000, rate: 0.049}, {rate: 0.059}]}
   NY:
     name: New York
+    revenue_department: New York State Department of Taxation and Finance
+    payment_url: https://www.tax.ny.gov/pay/
     type: graduated
     joint: table
     standard_deduction: {single: 8000, married_jointly: 16050, head_of_household: 11200}
@@ -225,6 +263,8 @@ states:
     local_note: "New York City residents pay 3.08%-3.88% city tax; Yonkers adds a surcharge. MCTMT applies to self-employment in the metro area."
   ND:
     name: North Dakota
+    revenue_department: North Dakota Office of State Tax Commissioner
+    payment_url: https://apps.nd.gov/tax/tap/
     type: graduated
     joint: table
     brackets:
@@ -233,6 +273,8 @@ states:
     note: "Lowest top rate of any graduated state; most filers pay 0% or 1.95%."
   OH:
     name: Ohio
+    revenue_department: Ohio Department of Taxation
+    payment_url: https://tax.ohio.gov/individual/pay-online
     type: graduated
     joint: same
     personal_exemption: 2400
@@ -242,6 +284,8 @@ states:
     note: "Consolidating to a 2.75% flat rate by 2026."
   OK:
     name: Oklahoma
+    revenue_department: Oklahoma Tax Commission
+    payment_url: https://oktap.tax.ok.gov/
     type: graduated
     joint: doubled
     standard_deduction: {single: 6350, married_jointly: 12700, head_of_household: 9350}
@@ -249,6 +293,8 @@ states:
                         {up_to: 4900, rate: 0.0275}, {up_to: 7200, rate: 0.0375}, {rate: 0.0475}]}
   OR:
     name: Oregon
+    revenue_department: Oregon Department of Revenue
+    payment_url: https://revenueonline.dor.oregon.gov/
     type: graduated
     joint: doubled
     standard_deduction: {single: 2800, married_jointly: 5600, head_of_household: 4500}
@@ -257,18 +303,24 @@ states:
     note: "A subtraction for federal income tax paid, capped, is available."
   RI:
     name: Rhode Island
+    revenue_department: Rhode Island Division of Taxation
+    payment_url: https://taxportal.ri.gov/
     type: graduated
     joint: same
     standard_deduction: {single: 10900, married_jointly: 21850, head_of_household: 16350}
     brackets: {single: [{up_to: 79900, rate: 0.0375}, {up_to: 181650, rate: 0.0475}, {rate: 0.0599}]}
   SC:
     name: South Carolina
+    revenue_department: South Carolina Department of Revenue
+    payment_url: https://dor.sc.gov/pay
     type: graduated
     joint: same
     standard_deduction: {single: 15750, married_jointly: 31500, head_of_household: 23625}
     brackets: {single: [{up_to: 3560, rate: 0.0}, {up_to: 17830, rate: 0.03}, {rate: 0.062}]}
   VT:
     name: Vermont
+    revenue_department: Vermont Department of Taxes
+    payment_url: https://myvtax.vermont.gov/
     type: graduated
     joint: table
     standard_deduction: {single: 7400, married_jointly: 14850, head_of_household: 7400}
@@ -277,6 +329,8 @@ states:
       married_jointly: [{up_to: 79950, rate: 0.0335}, {up_to: 193300, rate: 0.066}, {up_to: 294600, rate: 0.076}, {rate: 0.0875}]
   VA:
     name: Virginia
+    revenue_department: Virginia Department of Taxation
+    payment_url: https://www.tax.virginia.gov/individual-income-tax-payment-options
     type: graduated
     joint: same
     standard_deduction: {single: 8500, married_jointly: 17000, head_of_household: 8500}
@@ -285,6 +339,8 @@ states:
     note: "The top bracket starts at only $17,000, so nearly every filer is at 5.75% on the margin."
   WV:
     name: West Virginia
+    revenue_department: West Virginia Tax Division
+    payment_url: https://mytaxes.wvtax.gov/
     type: graduated
     joint: same
     personal_exemption: 2000
@@ -293,6 +349,8 @@ states:
     note: "Social Security benefits are fully exempt from 2026."
   WI:
     name: Wisconsin
+    revenue_department: Wisconsin Department of Revenue
+    payment_url: https://tap.revenue.wi.gov/
     type: graduated
     joint: table
     standard_deduction: {single: 13930, married_jointly: 25790, head_of_household: 17980}

@@ -119,6 +119,18 @@
       (body && body.method === 'planning') ? F.planning : F.regular],
     ['GET', /^\/api\/filings\/history/, () => F.filings],
     ['POST', /^\/api\/payments\/choose$/, () => F.payment],
+    ['GET', /^\/api\/payments\/handoff/, () => F.handoff],
+    ['GET', /^\/api\/payments\/service-fee$/, () => F.service_fee],
+    ['POST', /^\/api\/payments\/record$/, (body) => ({
+      id: 1, recorded: true, amount: String(body.amount || 0),
+      confirmation_number: body.confirmation_number || null,
+      note: body.confirmation_number
+        ? 'Recorded as you reported it. Keep the confirmation number: it is the only '
+          + 'evidence the payment was made, and the IRS does not issue another.'
+        : 'Recorded, but without a confirmation number there is no proof the payment '
+          + 'was made. Find it in your IRS account or your bank statement and add it.',
+    })],
+
     ['GET', /^\/api\/payments\/options/, () => ({
       direction: 'refund', balance: '-14346.68',
       options: F.regular.payment.options,

@@ -194,6 +194,13 @@ def capture() -> dict:
             "compare": compare,
             "filings": filings,
             "payment": payment,
+            # The handoff is shown against a balance, so capture one even
+            # though the sample return refunds.
+            "handoff": client.get("/api/payments/handoff", headers=auth, params={
+                "amount": 3261.14, "tax_year": 2025,
+                "jurisdiction": "federal", "method": "irs_direct_pay",
+            }).json(),
+            "service_fee": client.get("/api/payments/service-fee", headers=auth).json(),
         }
 
     # The token is a real signed credential for a throwaway database, but there
