@@ -292,3 +292,37 @@ def test_the_home_loan_reference_says_whether_pmi_counts_this_year(client):
 
 def test_2026_is_a_supported_year(client):
     assert 2026 in client.get("/api/reference/years").json()["supported"]
+
+
+def test_the_year_being_filed_is_not_the_newest_year_on_file(client):
+    """Shipping 2026 figures must not retarget the app at a year nobody can file.
+
+    In any month of 2026 the return being prepared is tax year 2025: 2026 has
+    not finished. The newest year is offered for planning and labelled as such.
+    """
+    body = client.get("/api/reference/years").json()
+    assert body["current"] < body["planning"]
+    assert body["planning"] == max(body["supported"])
+    assert body["current"] not in (max(body["supported"]),)
+    assert body["current"] in body["filing_years"]
+    assert "cannot be filed yet" in body["note"]
+
+
+def test_the_same_return_can_be_worked_out_on_either_year_s_law(client):
+    """Mortgage insurance is the clearest case: worth nothing in 2025, something in 2026."""
+    from tests.test_tax_journey import auth
+
+    token = _ready(client)
+    situation = {
+        "filing_status": "single", "age": 44, "other_income": 90000,
+        "loans": [{"lender": "Cascade", "balance": 300000, "interest_paid": 12000,
+                   "mortgage_insurance": 1800, "origination": "2024-01-01"}],
+    }
+    got = {}
+    for year in (2025, 2026):
+        response = client.post("/api/estimates", headers=auth(token),
+                               json={"tax_year": year, "situation": situation, "save": False})
+        assert response.status_code == 200, response.text
+        got[year] = response.json()["federal"]["mortgage"]["mortgage_insurance_deduction"]
+    assert got[2025] == "0"
+    assert got[2026] == "1800.00"

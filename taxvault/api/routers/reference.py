@@ -6,6 +6,7 @@ sign-in screen needs the state list before anyone has signed in.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -27,14 +28,34 @@ router = APIRouter(prefix="/api/reference", tags=["reference"])
 
 @router.get("/years")
 def years() -> dict[str, Any]:
-    current = latest_year()
+    """Which years can be worked out, and which one a client is filing now.
+
+    `current` is the year being FILED, which is not the newest parameter file
+    on disk. In September 2026 the return being prepared is tax year 2025 --
+    2026 has not finished, so nobody can file it. Shipping the 2026 figures
+    must not quietly retarget the app at a year that cannot be filed yet;
+    those figures are for planning, and `planning` is where they are offered.
+    """
+    supported = supported_years()
+    this_year = date.today().year
+    finished = [y for y in supported if y < this_year]
+    current = finished[-1] if finished else latest_year()
     params = federal(current)
+    planning = latest_year()
     return {
-        "supported": supported_years(),
+        "supported": supported,
         "current": current,
+        "planning": planning,
+        "filing_years": finished or supported,
         "due_date": params.due_date,
         "extended_due_date": params.extended_due_date,
         "source": params.source,
+        "note": (
+            f"Tax year {current} is the return being filed now. "
+            f"Tax year {planning} is open for planning: the year is not over, so it "
+            "cannot be filed yet."
+            if planning != current else ""
+        ),
     }
 
 

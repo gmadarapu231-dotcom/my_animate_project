@@ -590,6 +590,7 @@ function viewEstimate() {
         <select id="resident-state"><option value="">From your W-2</option>${stateOptions(s.resident_state || '')}</select>
       </div>
     </div>
+    ${yearPicker()}
     <div class="row three">
       ${numField('age', 'Your age', s.age ?? 40)}
       ${numField('spouse_age', 'Spouse age', s.spouse_age ?? '')}
@@ -610,22 +611,20 @@ function viewEstimate() {
         ${numField('taxable_interest', 'Interest', s.taxable_interest ?? '')}
         ${numField('ordinary_dividends', 'Dividends', s.ordinary_dividends ?? '')}
         ${numField('qualified_dividends', 'of which qualified', s.qualified_dividends ?? '')}
-        ${numField('long_term_gains', 'Long-term gains', s.long_term_gains ?? '')}
-        ${numField('short_term_gains', 'Short-term gains', s.short_term_gains ?? '')}
         ${numField('self_employment_income', 'Self-employment profit', s.self_employment_income ?? '')}
         ${numField('social_security_benefits', 'Social Security received', s.social_security_benefits ?? '')}
-        ${numField('retirement_distributions', 'Retirement withdrawals', s.retirement_distributions ?? '')}
         ${numField('unemployment', 'Unemployment', s.unemployment ?? '')}
       </div>
       <h3>Deductions you might itemise</h3>
       <div class="row three">
         ${numField('state_local_income_tax', 'State income tax paid', s.state_local_income_tax ?? '')}
         ${numField('property_tax', 'Property tax', s.property_tax ?? '')}
-        ${numField('mortgage_interest', 'Mortgage interest', s.mortgage_interest ?? '')}
         ${numField('charitable_cash', 'Charitable giving', s.charitable_cash ?? '')}
         ${numField('medical_expenses', 'Medical costs', s.medical_expenses ?? '')}
         ${numField('student_loan_interest', 'Student loan interest', s.student_loan_interest ?? '')}
       </div>
+      <p class="note info">Shares, your 401(k) and your mortgage each have their own
+         card below — they carry rules a single box cannot express.</p>
       <h3>For planning mode</h3>
       <div class="row three">
         ${numField('existing_401k', '401(k) so far this year', s.existing_401k ?? '')}
@@ -642,6 +641,10 @@ function viewEstimate() {
       </div>
     </details>
   </div>
+
+  ${investmentsCard(s)}
+  ${retirementCard(s)}
+  ${homeLoansCard(s)}
 
   <div class="card">
     <h2>How should we work it out?</h2>
@@ -681,6 +684,298 @@ function viewEstimate() {
     <div class="card"><div class="empty">
       <span class="glyph">◎</span>No estimate yet.<br>Fill in what applies and run it.
     </div></div>`}`;
+}
+
+/* ------------------------------------------------- investments, 401(k), home
+ *
+ * Three cards rather than three more boxes in the long list, because each of
+ * these carries rules that a single figure cannot express: a capital loss has
+ * a character and a carryforward, a 401(k) withdrawal has a box 7 code, and a
+ * mortgage has a date and a use that decide whether the interest counts at
+ * all. Asking properly is the difference between an estimate and a guess.
+ */
+/**
+ * Which tax year to work out.
+ *
+ * The newest year on file is not always the one being filed: in September a
+ * client is filing last year's return, while this year is still running and
+ * can only be planned for. The two are labelled differently so nobody works
+ * out a return they cannot yet send.
+ */
+function yearPicker() {
+  const years = state.years;
+  if (!years || !(years.supported || []).length) return '';
+  const chosen = state.taxYear || years.current;
+  return `
+  <div class="field">
+    <label for="tax-year">Tax year</label>
+    <select id="tax-year">
+      ${years.supported.map((y) => `<option value="${y}" ${Number(chosen) === Number(y) ? 'selected' : ''}>${y}${
+        Number(y) === Number(years.current) ? ' — the return you file now'
+        : Number(y) === Number(years.planning) ? ' — planning only, the year is not over'
+        : ' — an earlier year'}</option>`).join('')}
+    </select>
+  </div>
+  ${Number(chosen) !== Number(years.current) && Number(chosen) === Number(years.planning) ? `
+    <p class="note warn">
+      ${esc(years.note || '')} Rules do change between years — mortgage insurance is not
+      deductible for 2025 and is again from 2026, and the 401(k) limit rises — so the
+      same figures can give two different answers.
+    </p>` : ''}`;
+}
+
+function investmentsCard(s) {
+  return `
+  <div class="card">
+    <h2>Shares and investments</h2>
+    <p class="sub">From your 1099-B and 1099-DIV. Enter a loss with a minus sign.</p>
+    <div class="row two">
+      ${numField('short_term_gains', 'Short-term gain or loss', s.short_term_gains ?? '')}
+      ${numField('long_term_gains', 'Long-term gain or loss', s.long_term_gains ?? '')}
+    </div>
+    <p class="note info">
+      Held <strong>one year or less</strong> is short-term and taxed as ordinary income, at up
+      to 37%. Held <strong>more than a year</strong> is long-term: 0%, 15% or 20%. The line is
+      the day after the first anniversary, and one day early costs the whole difference.
+    </p>
+    <details ${['capital_gain_distributions', 'wash_sale_disallowed',
+                'capital_loss_carryforward_short', 'capital_loss_carryforward_long',
+                'collectibles_gain', 'unrecaptured_1250_gain']
+                .some((k) => Number(s[k] || 0)) ? 'open' : ''}>
+      <summary style="cursor:pointer;color:var(--accent);font-weight:550;margin:8px 0">
+        Carried-forward losses, fund distributions and wash sales
+      </summary>
+      <div class="row two">
+        ${numField('capital_gain_distributions', 'Capital gain distributions (1099-DIV box 2a)', s.capital_gain_distributions ?? '')}
+        ${numField('wash_sale_disallowed', 'Wash sale loss disallowed (box 1g)', s.wash_sale_disallowed ?? '')}
+      </div>
+      <div class="row two">
+        ${numField('capital_loss_carryforward_short', 'Short-term loss carried forward', s.capital_loss_carryforward_short ?? '')}
+        ${numField('capital_loss_carryforward_long', 'Long-term loss carried forward', s.capital_loss_carryforward_long ?? '')}
+      </div>
+      <p class="note info">
+        A loss you could not use in an earlier year never expires. It is on the last line of
+        your previous Schedule D, and it keeps its short-term or long-term character —
+        which matters, because short-term loss is worth more.
+      </p>
+      <div class="row two">
+        ${numField('collectibles_gain', 'Gain on collectibles (28% rate)', s.collectibles_gain ?? '')}
+        ${numField('unrecaptured_1250_gain', 'Unrecaptured 1250 gain (25% rate)', s.unrecaptured_1250_gain ?? '')}
+      </div>
+    </details>
+    <p class="note warn">
+      Buying and selling <em>inside</em> a 401(k) or an IRA is not a taxable event and does
+      not belong here. There is no 1099-B for it and nothing to report until the money
+      actually leaves the account.
+    </p>
+  </div>`;
+}
+
+function retirementCard(s) {
+  const rows = s.distributions || [];
+  return `
+  <div class="card">
+    <h2>Your 401(k) and retirement accounts</h2>
+    <p class="sub">What is going in, and anything that came out.</p>
+
+    <h3>Contributions this year</h3>
+    <div class="row three">
+      ${numField('plan_traditional_401k', 'Pre-tax 401(k)', s.plan_traditional_401k ?? '')}
+      ${numField('plan_roth_401k', 'Roth 401(k)', s.plan_roth_401k ?? '')}
+      ${numField('plan_employer_contribution', 'Employer match', s.plan_employer_contribution ?? '')}
+    </div>
+    <div class="row two">
+      ${numField('plan_compensation', 'Plan-year pay', s.plan_compensation ?? '')}
+      ${numField('plan_prior_year_wages', "Last year's wages from this employer", s.plan_prior_year_wages ?? '')}
+    </div>
+    <p class="note info">
+      A pre-tax contribution is already out of Box 1 of your W-2, so entering it here does
+      not reduce your tax again — it is used to check you are inside the limit and to
+      compare Roth against pre-tax. Last year's wages decide whether a catch-up has to be Roth.
+    </p>
+
+    <h3>Money that came out (Form 1099-R)</h3>
+    ${rows.length ? rows.map((row, i) => distributionRow(row, i)).join('') : `
+      <p class="note info">Nothing taken out this year. If you withdrew from a 401(k) or an
+         IRA, add it — under 59½ there is a 10% additional tax on top of the income tax,
+         and several exceptions waive it.</p>`}
+    <div class="actions">
+      <button class="btn ghost slim" id="add-distribution">+ Add a 1099-R</button>
+    </div>
+
+    <details ${state.rmd ? 'open' : ''}>
+      <summary style="cursor:pointer;color:var(--accent);font-weight:550;margin:12px 0 8px">
+        Required minimum distributions
+      </summary>
+      <div class="row three">
+        ${numField('rmd_birth_year', 'Year you were born', s.rmd_birth_year ?? '')}
+        ${numField('rmd_prior_year_balance', 'Balance at 31 December last year', s.rmd_prior_year_balance ?? '')}
+        ${numField('rmd_taken', 'Taken so far this year', s.rmd_taken ?? '')}
+      </div>
+      <div class="check">
+        <input type="checkbox" id="rmd_still_working" ${s.rmd_still_working ? 'checked' : ''}>
+        <label for="rmd_still_working">I still work for the employer whose plan this is</label>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="rmd_is_roth" ${s.rmd_is_roth ? 'checked' : ''}>
+        <label for="rmd_is_roth">This is a Roth 401(k)</label>
+      </div>
+      <div class="actions">
+        <button class="btn ghost slim" id="check-rmd">Check my required minimum</button>
+      </div>
+      ${state.rmd ? rmdResult(state.rmd) : ''}
+    </details>
+  </div>`;
+}
+
+function distributionRow(row, index) {
+  const codes = [
+    ['7', '7 — Normal distribution'],
+    ['1', '1 — Early, no exception known'],
+    ['2', '2 — Early, exception applies'],
+    ['3', '3 — Disability'],
+    ['4', '4 — Death'],
+    ['G', 'G — Direct rollover'],
+    ['H', 'H — Direct rollover of a Roth'],
+    ['B', 'B — Designated Roth account'],
+    ['Q', 'Q — Qualified Roth distribution'],
+    ['L', 'L — Loan treated as a distribution'],
+    ['S', 'S — Early SIMPLE, within 2 years'],
+  ];
+  const exceptions = (state.retirementRef && state.retirementRef.penalty_exceptions) || [];
+  return `
+  <div class="strategy" data-dist-row="${index}">
+    <div class="row three">
+      <div class="field">
+        <label>Who paid it</label>
+        <input data-dist="payer" data-index="${index}" value="${esc(row.payer || '')}" placeholder="Fidelity, Vanguard…">
+      </div>
+      <div class="field">
+        <label>Gross amount (box 1)</label>
+        <input data-dist="gross" data-index="${index}" inputmode="decimal" value="${esc(row.gross ?? '')}" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Tax withheld (box 4)</label>
+        <input data-dist="federal_withheld" data-index="${index}" inputmode="decimal" value="${esc(row.federal_withheld ?? '')}" placeholder="0">
+      </div>
+    </div>
+    <div class="row three">
+      <div class="field">
+        <label>Code (box 7)</label>
+        <select data-dist="code" data-index="${index}">
+          ${codes.map(([v, l]) => `<option value="${v}" ${(row.code || '7') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Kind of account</label>
+        <select data-dist="plan_kind" data-index="${index}">
+          ${[['401k', '401(k)'], ['403b', '403(b)'], ['ira', 'IRA'], ['simple', 'SIMPLE']]
+            .map(([v, l]) => `<option value="${v}" ${(row.plan_kind || '401k') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Exception to the 10% <span class="hint">if any</span></label>
+        <select data-dist="penalty_exception" data-index="${index}">
+          <option value="">None</option>
+          ${exceptions.map((e) => `<option value="${esc(e.code)}" ${row.penalty_exception === e.code ? 'selected' : ''}>${esc(e.label)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost slim" data-remove-dist="${index}">Remove this one</button>
+    </div>
+  </div>`;
+}
+
+function rmdResult(r) {
+  if (!r) return '';
+  const body = (r.warnings || []).concat(r.notes || [])
+    .map((n) => `<li>${esc(n)}</li>`).join('');
+  return `<div class="note ${Number(r.excise || 0) > 0 ? 'bad' : 'info'}" style="margin-top:10px">
+    ${r.required ? `<strong>Required this year: ${money(r.amount)}</strong>` : '<strong>Nothing required this year.</strong>'}
+    ${body ? `<ul>${body}</ul>` : ''}
+  </div>`;
+}
+
+function homeLoansCard(s) {
+  const rows = s.loans || [];
+  return `
+  <div class="card">
+    <h2>Your home loans</h2>
+    <p class="sub">From Form 1098. Box 1 is rarely the whole deduction.</p>
+    ${rows.length ? rows.map((row, i) => loanRow(row, i)).join('') : `
+      <p class="note info">No mortgage entered. If you have one, add it — the interest is
+         only worth something if your itemised deductions beat the standard deduction, and
+         this will tell you either way.</p>`}
+    <div class="actions">
+      <button class="btn ghost slim" id="add-loan">+ Add a mortgage or HELOC</button>
+    </div>
+    <p class="note warn">
+      The question no lender answers is what the money paid for. Interest on a home equity
+      loan or HELOC is deductible <strong>only</strong> where the borrowing bought, built or
+      substantially improved the home securing it. Used for a car, a card or tuition, none
+      of that interest counts — whatever the loan is called.
+    </p>
+  </div>`;
+}
+
+function loanRow(row, index) {
+  return `
+  <div class="strategy" data-loan-row="${index}">
+    <div class="row three">
+      <div class="field">
+        <label>Lender</label>
+        <input data-loan="lender" data-index="${index}" value="${esc(row.lender || '')}" placeholder="Your bank">
+      </div>
+      <div class="field">
+        <label>Interest paid (box 1)</label>
+        <input data-loan="interest_paid" data-index="${index}" inputmode="decimal" value="${esc(row.interest_paid ?? '')}" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Balance (box 2)</label>
+        <input data-loan="balance" data-index="${index}" inputmode="decimal" value="${esc(row.balance ?? '')}" placeholder="0">
+      </div>
+    </div>
+    <div class="row three">
+      <div class="field">
+        <label>Origination date <span class="hint">box 3 or 11</span></label>
+        <input data-loan="origination" data-index="${index}" type="date" value="${esc(row.origination || '')}">
+      </div>
+      <div class="field">
+        <label>Mortgage insurance (box 5)</label>
+        <input data-loan="mortgage_insurance" data-index="${index}" inputmode="decimal" value="${esc(row.mortgage_insurance ?? '')}" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Points (box 6)</label>
+        <input data-loan="points_paid" data-index="${index}" inputmode="decimal" value="${esc(row.points_paid ?? '')}" placeholder="0">
+      </div>
+    </div>
+    <div class="row two">
+      <div class="field">
+        <label>What did this borrowing pay for?</label>
+        <select data-loan="used_for" data-index="${index}">
+          ${[['purchase', 'Buying or building the home'],
+             ['improve', 'Substantially improving the home'],
+             ['other', 'Something else (a car, a card, tuition…)']]
+            .map(([v, l]) => `<option value="${v}" ${(row.used_for || 'purchase') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Kind of loan</label>
+        <select data-loan="kind" data-index="${index}">
+          ${[['acquisition', 'Mortgage'], ['refinance', 'Refinance'], ['home_equity', 'Home equity loan or HELOC']]
+            .map(([v, l]) => `<option value="${v}" ${(row.kind || 'acquisition') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="check">
+      <input type="checkbox" data-loan-check="is_main_home" data-index="${index}" ${row.is_main_home !== false ? 'checked' : ''}>
+      <label>This is my main home</label>
+    </div>
+    <div class="actions">
+      <button class="btn ghost slim" data-remove-loan="${index}">Remove this one</button>
+    </div>
+  </div>`;
 }
 
 function numField(id, label, value) {
@@ -727,6 +1022,7 @@ function estimateResult(result) {
       ${Number(federal.self_employment_tax) ? `<dt>Self-employment tax</dt><dd>${money(federal.self_employment_tax)}</dd>` : ''}
       ${Number(federal.net_investment_income_tax) ? `<dt>Net investment income tax</dt><dd>${money(federal.net_investment_income_tax)}</dd>` : ''}
       ${Number(federal.additional_medicare_tax) ? `<dt>Additional Medicare tax</dt><dd>${money(federal.additional_medicare_tax)}</dd>` : ''}
+      ${Number(federal.early_withdrawal_penalty) ? `<dt>10% on early retirement withdrawals</dt><dd>${money(federal.early_withdrawal_penalty)}</dd>` : ''}
       <dt><strong>Total federal tax</strong></dt><dd><strong>${money(federal.total_tax)}</strong></dd>
       <dt>Withheld and paid</dt><dd>${money(federal.total_payments)}</dd>
       <dt><strong>${Number(federal.balance) > 0 ? 'Federal owed' : 'Federal refund'}</strong></dt>
@@ -745,6 +1041,10 @@ function estimateResult(result) {
     </details>
   </div>
 
+  ${capitalCard(federal.capital)}
+  ${mortgageCard(federal.mortgage)}
+  ${planWarningsCard(federal)}
+
   ${(result.states || []).map(stateCard).join('')}
 
   ${result.method === 'planning' ? strategiesCard(result) : ''}
@@ -760,6 +1060,103 @@ function estimateResult(result) {
   <div class="actions">
     <button class="btn" data-go="payment">${refund ? 'Choose how to get paid' : 'Choose how to pay'}</button>
     <button class="btn ghost" data-go="filings">Check earlier years</button>
+  </div>`;
+}
+
+/* ---------------------------------------------------- the new breakdowns */
+
+/** Schedule D, shown as working rather than as one number. */
+function capitalCard(capital) {
+  if (!capital) return '';
+  const any = ['short_term_net', 'long_term_net', 'loss_deduction', 'carryforward_short',
+               'carryforward_long'].some((key) => Number(capital[key] || 0) !== 0);
+  if (!any) return '';
+  const carry = Number(capital.total_carryforward || 0);
+  return `
+  <div class="card">
+    <h2>Shares and investments</h2>
+    <p class="sub">How your sales netted out, and what each part is taxed at.</p>
+    <dl class="kv">
+      <dt>Net short-term ${Number(capital.short_term_net) < 0 ? 'loss' : 'gain'}</dt>
+      <dd>${money2(capital.short_term_net)}</dd>
+      <dt>Net long-term ${Number(capital.long_term_net) < 0 ? 'loss' : 'gain'}</dt>
+      <dd>${money2(capital.long_term_net)}</dd>
+      ${Number(capital.ordinary_component) ? `
+        <dt>Taxed as ordinary income</dt><dd>${money(capital.ordinary_component)}</dd>` : ''}
+      ${Number(capital.preferential_component) ? `
+        <dt>Taxed at 0% / 15% / 20%</dt><dd>${money(capital.preferential_component)}</dd>` : ''}
+      ${Number(capital.collectibles_gain) ? `
+        <dt>Collectibles, at up to 28%</dt><dd>${money(capital.collectibles_gain)}</dd>` : ''}
+      ${Number(capital.unrecaptured_1250_gain) ? `
+        <dt>Unrecaptured 1250, at up to 25%</dt><dd>${money(capital.unrecaptured_1250_gain)}</dd>` : ''}
+      ${Number(capital.loss_deduction) ? `
+        <dt>Set against your other income</dt><dd>−${money(capital.loss_deduction)}</dd>` : ''}
+    </dl>
+    ${carry ? `
+      <div class="note warn">
+        <strong>${money(carry)} carries forward to next year.</strong>
+        ${Number(capital.carryforward_short) ? `${money(capital.carryforward_short)} of it stays short-term` : ''}${
+          Number(capital.carryforward_short) && Number(capital.carryforward_long) ? ' and ' : ''}${
+          Number(capital.carryforward_long) ? `${money(capital.carryforward_long)} stays long-term` : ''}.
+        There is no time limit on using it, and it does not expire — but it only ever
+        comes back at ${money(3000)} a year against ordinary income, so it is worth
+        spending against future gains.
+      </div>` : ''}
+  </div>`;
+}
+
+/** What actually survived of Form 1098 box 1, and why. */
+function mortgageCard(mortgage) {
+  if (!mortgage || !Number(mortgage.total_interest || 0)) return '';
+  const lost = Number(mortgage.disallowed_interest || 0);
+  return `
+  <div class="card">
+    <h2>Your home loan</h2>
+    <p class="sub">Box 1 is what you paid. This is what counts.</p>
+    <dl class="kv">
+      <dt>Interest paid</dt><dd>${money(mortgage.total_interest)}</dd>
+      <dt>Deductible interest</dt><dd>${money(mortgage.deductible_interest)}</dd>
+      ${Number(mortgage.points_deduction) ? `<dt>Points</dt><dd>${money(mortgage.points_deduction)}</dd>` : ''}
+      ${Number(mortgage.mortgage_insurance_deduction) ? `
+        <dt>Mortgage insurance</dt><dd>${money(mortgage.mortgage_insurance_deduction)}</dd>` : ''}
+      <dt>Debt that qualifies</dt><dd>${money(mortgage.allowed_debt)} of ${money(mortgage.qualifying_debt)}</dd>
+      <dt><strong>Goes to Schedule A</strong></dt><dd><strong>${money(mortgage.total_deduction)}</strong></dd>
+    </dl>
+    ${lost ? `
+      <div class="note warn">
+        ${money(lost)} of the interest you paid is not deductible. The reasons are in the
+        notes below — usually a balance over the ceiling, or borrowing that did not go
+        into the house.
+      </div>` : ''}
+  </div>`;
+}
+
+/** Contribution-limit and withdrawal warnings, where there are any. */
+function planWarningsCard(federal) {
+  const warnings = federal.warnings || [];
+  const retirement = federal.retirement || {};
+  const rows = retirement.rows || [];
+  if (!warnings.length && !rows.length) return '';
+  return `
+  <div class="card">
+    <h2>Your retirement accounts</h2>
+    ${rows.length ? `
+      <table class="lines">
+        <thead><tr><th>From</th><th>Code</th><th class="num">Gross</th><th class="num">Taxable</th><th class="num">10%</th></tr></thead>
+        <tbody>${rows.map((row) => `
+          <tr>
+            <td>${esc(row.payer || 'Not stated')}<span class="form">${esc(row.label || '')}</span></td>
+            <td>${esc(row.code)}</td>
+            <td class="num">${money(row.gross)}</td>
+            <td class="num">${money(row.taxable)}</td>
+            <td class="num">${Number(row.penalty) ? money(row.penalty) : '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : ''}
+    ${warnings.length ? `
+      <div class="note warn" style="margin-top:12px">
+        <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>
+      </div>` : ''}
   </div>`;
 }
 
@@ -1675,6 +2072,7 @@ function collectSituation() {
     return parseFloat(String(node.value).replace(/[^0-9.\-]/g, '')) || 0;
   };
   const int = (id) => Math.round(num(id));
+  if (el('tax-year')) state.taxYear = Number(el('tax-year').value);
   const situation = {
     filing_status: el('filing-status') ? el('filing-status').value : 'single',
     resident_state: el('resident-state') ? el('resident-state').value : '',
@@ -1689,22 +2087,131 @@ function collectSituation() {
     'dependent_care_expenses', 'estimated_payments', 'taxable_interest', 'ordinary_dividends',
     'qualified_dividends', 'long_term_gains', 'short_term_gains', 'self_employment_income',
     'social_security_benefits', 'retirement_distributions', 'unemployment',
-    'state_local_income_tax', 'property_tax', 'mortgage_interest', 'charitable_cash',
+    'state_local_income_tax', 'property_tax', 'charitable_cash',
     'medical_expenses', 'student_loan_interest', 'existing_401k', 'existing_hsa',
-    'traditional_ira',
+    'traditional_ira', 'capital_gain_distributions', 'wash_sale_disallowed',
+    'capital_loss_carryforward_short', 'capital_loss_carryforward_long',
+    'collectibles_gain', 'unrecaptured_1250_gain',
   ].forEach((key) => { situation[key] = num(key); });
   // Self-employment profit is qualified business income unless told otherwise.
   situation.qbi_income = situation.self_employment_income;
+
+  // --- Schedule D ---------------------------------------------------------
+  // Only send the structured form where there is something the two plain
+  // boxes cannot carry. Otherwise the server uses the simple fields, and a
+  // client who typed two numbers gets exactly the same answer.
+  const extras = ['capital_gain_distributions', 'wash_sale_disallowed',
+                  'capital_loss_carryforward_short', 'capital_loss_carryforward_long',
+                  'collectibles_gain', 'unrecaptured_1250_gain'];
+  if (extras.some((key) => situation[key])) {
+    situation.sales = {
+      short_term: situation.short_term_gains,
+      long_term: situation.long_term_gains,
+      capital_gain_distributions: situation.capital_gain_distributions,
+      carryforward_short: situation.capital_loss_carryforward_short,
+      carryforward_long: situation.capital_loss_carryforward_long,
+      wash_sale_disallowed: situation.wash_sale_disallowed,
+      collectibles_gain: situation.collectibles_gain,
+      unrecaptured_1250_gain: situation.unrecaptured_1250_gain,
+    };
+  }
+
+  // --- 401(k) -------------------------------------------------------------
+  ['plan_traditional_401k', 'plan_roth_401k', 'plan_employer_contribution',
+   'plan_compensation', 'plan_prior_year_wages'].forEach((key) => {
+    situation[key] = num(key);
+  });
+  if (situation.plan_traditional_401k || situation.plan_roth_401k
+      || situation.plan_employer_contribution) {
+    situation.plan = {
+      traditional_401k: situation.plan_traditional_401k,
+      roth_401k: situation.plan_roth_401k,
+      employer_contribution: situation.plan_employer_contribution,
+      compensation: situation.plan_compensation,
+      prior_year_wages: situation.plan_prior_year_wages,
+    };
+  }
+
+  // --- repeatable rows ----------------------------------------------------
+  situation.distributions = collectRows('dist', null, (row) => ({
+    payer: row.payer || '',
+    gross: toNumber(row.gross),
+    code: row.code || '7',
+    federal_withheld: toNumber(row.federal_withheld),
+    plan_kind: row.plan_kind || '401k',
+    penalty_exception: row.penalty_exception || '',
+    age_at_distribution: situation.age,
+  })).filter((row) => row.gross > 0);
+
+  situation.loans = collectRows('loan', 'loan-check', (row) => ({
+    lender: row.lender || '',
+    balance: toNumber(row.balance),
+    interest_paid: toNumber(row.interest_paid),
+    points_paid: toNumber(row.points_paid),
+    mortgage_insurance: toNumber(row.mortgage_insurance),
+    origination: row.origination || '',
+    kind: row.kind || 'acquisition',
+    used_for: row.used_for || 'purchase',
+    is_main_home: row.is_main_home !== false,
+    is_refinance: (row.kind || '') === 'refinance',
+  })).filter((row) => row.interest_paid > 0 || row.balance > 0);
+
+  ['rmd_birth_year', 'rmd_prior_year_balance', 'rmd_taken'].forEach((key) => {
+    situation[key] = num(key);
+  });
+  situation.rmd_still_working = el('rmd_still_working') ? el('rmd_still_working').checked : false;
+  situation.rmd_is_roth = el('rmd_is_roth') ? el('rmd_is_roth').checked : false;
+
   state.situation = situation;
   saveSituation();
   return situation;
 }
 
+function toNumber(value) {
+  if (value === '' || value === null || value === undefined) return 0;
+  return parseFloat(String(value).replace(/[^0-9.\-]/g, '')) || 0;
+}
+
+/**
+ * Gather a set of repeatable rows back out of the DOM.
+ *
+ * Each input carries `data-<name>` for its field and `data-index` for its row,
+ * so the rows survive being re-rendered and a removed row does not shift the
+ * others' values onto each other.
+ */
+function collectRows(name, checkName, shape) {
+  const rows = [];
+  document.querySelectorAll(`[data-${name}]`).forEach((node) => {
+    const index = Number(node.dataset.index || 0);
+    rows[index] = rows[index] || {};
+    rows[index][node.dataset[name]] = node.value;
+  });
+  if (checkName) {
+    document.querySelectorAll(`[data-${checkName}]`).forEach((node) => {
+      const index = Number(node.dataset.index || 0);
+      rows[index] = rows[index] || {};
+      rows[index][node.dataset[checkName.replace(/-(.)/g, (m, c) => c.toUpperCase())]] = node.checked;
+    });
+  }
+  return rows.filter(Boolean).map(shape);
+}
+
+//: Screen-only fields. They drive the cards above but the API does not take
+//: them, and Pydantic would reject the request outright if they were sent.
+const SCREEN_ONLY = [
+  'plan_traditional_401k', 'plan_roth_401k', 'plan_employer_contribution',
+  'plan_compensation', 'plan_prior_year_wages',
+  'rmd_birth_year', 'rmd_prior_year_balance', 'rmd_taken', 'rmd_still_working',
+  'rmd_is_roth',
+];
+
 function estimateBody(method) {
+  const situation = { ...collectSituation() };
+  SCREEN_ONLY.forEach((key) => { delete situation[key]; });
   return {
     tax_year: state.taxYear || (state.years && state.years.current) || 2025,
     method,
-    situation: collectSituation(),
+    situation,
     strategies: method === 'planning' ? state.chosen : null,
   };
 }
@@ -1745,6 +2252,81 @@ function wireEstimate() {
       });
       render();
     })));
+
+  const year = el('tax-year');
+  if (year) year.addEventListener('change', () => {
+    collectSituation();
+    state.estimate = null;      // it was worked out on a different year's law
+    state.compare = null;
+    render();
+  });
+
+  wireRepeatables();
+}
+
+/**
+ * The add and remove buttons on the 1099-R and 1098 rows.
+ *
+ * Every one of these collects the whole form first, so adding a second
+ * mortgage never loses what was typed into the first.
+ */
+function wireRepeatables() {
+  const addDistribution = el('add-distribution');
+  if (addDistribution) addDistribution.addEventListener('click', () => {
+    const situation = collectSituation();
+    situation.distributions = (situation.distributions || []).concat([{ code: '7', plan_kind: '401k' }]);
+    state.situation = situation;
+    saveSituation();
+    render();
+  });
+
+  const addLoan = el('add-loan');
+  if (addLoan) addLoan.addEventListener('click', () => {
+    const situation = collectSituation();
+    situation.loans = (situation.loans || []).concat([{ used_for: 'purchase', kind: 'acquisition', is_main_home: true }]);
+    state.situation = situation;
+    saveSituation();
+    render();
+  });
+
+  document.querySelectorAll('[data-remove-dist]').forEach((button) =>
+    button.addEventListener('click', () => {
+      const situation = collectSituation();
+      situation.distributions = (situation.distributions || [])
+        .filter((_, i) => i !== Number(button.dataset.removeDist));
+      state.situation = situation;
+      saveSituation();
+      render();
+    }));
+
+  document.querySelectorAll('[data-remove-loan]').forEach((button) =>
+    button.addEventListener('click', () => {
+      const situation = collectSituation();
+      situation.loans = (situation.loans || [])
+        .filter((_, i) => i !== Number(button.dataset.removeLoan));
+      state.situation = situation;
+      saveSituation();
+      render();
+    }));
+
+  const rmd = el('check-rmd');
+  if (rmd) rmd.addEventListener('click', () => guard(rmd, async () => {
+    const s = collectSituation();
+    if (!s.rmd_birth_year) {
+      toast('Which year were you born? The start age depends on it.', 'bad');
+      return;
+    }
+    const query = new URLSearchParams({
+      birth_year: String(s.rmd_birth_year),
+      balance: String(s.rmd_prior_year_balance || 0),
+      taken: String(s.rmd_taken || 0),
+      year: String(state.taxYear || (state.years && state.years.current) || 2025),
+      is_roth_401k: String(!!s.rmd_is_roth),
+      still_working: String(!!s.rmd_still_working),
+    });
+    state.rmd = await api(`/api/reference/rmd?${query.toString()}`);
+    render();
+  }));
 }
 
 function wireFilings() {
@@ -1976,12 +2558,16 @@ async function boot() {
     button.addEventListener('click', () => { if (!button.disabled) go(button.dataset.view); }));
 
   try {
-    const [years, states] = await Promise.all([
+    const [years, states, retirement] = await Promise.all([
       api('/api/reference/years'),
       api('/api/reference/states'),
+      // The penalty exceptions fill a dropdown, so they have to be here before
+      // the estimate screen first renders.
+      api('/api/reference/retirement').catch(() => null),
     ]);
     state.years = years;
     state.states = states;
+    state.retirementRef = retirement;
     state.taxYear = years.current;
   } catch (error) {
     toast(error.message, 'bad');

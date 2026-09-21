@@ -43,8 +43,40 @@ SAMPLE_SITUATION = {
     "filing_status": "married_jointly", "resident_state": "CA",
     "age": 43, "spouse_age": 41, "children_under_17": 2,
     "dependent_care_expenses": 7000, "state_local_income_tax": 6800,
-    "property_tax": 6000, "mortgage_interest": 13000, "charitable_cash": 2500,
+    "property_tax": 6000, "charitable_cash": 2500,
     "existing_401k": 8000, "has_hdhp": True, "hdhp_family": True,
+
+    # Shares: a short-term loss against a long-term gain, plus a loss carried
+    # in from an earlier year. Chosen so the demo shows the thing clients get
+    # wrong -- the survivor of the netting keeps LONG-term treatment.
+    "sales": {
+        "short_term": -4200,
+        "long_term": 16800,
+        "capital_gain_distributions": 1240,
+        "carryforward_long": 3000,
+        "wash_sale_disallowed": 640,
+    },
+
+    # A rollover: reported, and not taxable. It shows the 1099-R table without
+    # pretending this household took an early withdrawal.
+    "distributions": [{
+        "payer": "Meridian 401(k) Plan",
+        "gross": 64000, "code": "G", "plan_kind": "401k", "age_at_distribution": 43,
+    }],
+
+    # The mortgage, as Form 1098 states it rather than as one number: a
+    # balance over the ceiling, so the demo shows the proration.
+    "loans": [{
+        "lender": "Cascade Mutual Bank",
+        "balance": 812000, "interest_paid": 31400,
+        "mortgage_insurance": 1860, "origination": "2019-06-14",
+        "used_for": "purchase", "kind": "acquisition", "is_main_home": True,
+    }],
+
+    "plan": {
+        "traditional_401k": 8000, "roth_401k": 0,
+        "employer_contribution": 5900, "compensation": 118000,
+    },
 }
 
 
@@ -200,6 +232,12 @@ def capture() -> dict:
             "handoff": client.get("/api/payments/handoff", headers=auth, params={
                 "amount": 3261.14, "tax_year": 2025,
                 "jurisdiction": "federal", "method": "irs_direct_pay",
+            }).json(),
+            "retirement_reference": client.get("/api/reference/retirement").json(),
+            "home_loans_reference": client.get("/api/reference/home-loans").json(),
+            # One worked RMD, so the demo's button has something real to show.
+            "rmd": client.get("/api/reference/rmd", params={
+                "birth_year": 1953, "balance": 500000, "taken": 0,
             }).json(),
             "service_fee": client.get("/api/payments/service-fee", headers=auth).json(),
             "fee": client.post("/api/billing/quote", headers=auth, json={

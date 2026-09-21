@@ -49,6 +49,20 @@
     ['GET', /^\/api\/reference\/states$/, () => F.states],
     ['GET', /^\/api\/auth\/session$/, () => session()],
     ['GET', /^\/api\/reference\/irs/, () => F.irs],
+    ['GET', /^\/api\/reference\/retirement$/, () => F.retirement_reference],
+    ['GET', /^\/api\/reference\/home-loans$/, () => F.home_loans_reference],
+    // The RMD depends on the birth year, so answer from the fixture only for
+    // the one it was captured with, and say so otherwise rather than showing
+    // someone else's figure as if it were theirs.
+    ['GET', /^\/api\/reference\/rmd/, (body, query) => {
+      if (Number(query.get('birth_year')) === 1953) return F.rmd;
+      return {
+        required: false, amount: '0', notes: [
+          'This offline demo can only work out the one example it was built with '
+          + '(born 1953). The running app computes it for any year of birth.',
+        ], warnings: [],
+      };
+    }],
 
     ['POST', /^\/api\/auth\/sign-in$/, () => ({
       channel: 'email', sent_to: 'y•••@example.com', delivered: false,
@@ -319,7 +333,9 @@
 
   window.fetch = function demoFetch(input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
-    const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+    const full = url.replace(/^https?:\/\/[^/]+/, '');
+    const path = full.split('?')[0];
+    const query = new URLSearchParams(full.split('?')[1] || '');
     const method = ((init && init.method) || 'GET').toUpperCase();
 
     if (!path.startsWith('/api')) {
@@ -345,7 +361,7 @@
 
     for (const [verb, pattern, handler] of ROUTES) {
       if (verb === method && pattern.test(path)) {
-        const result = handler(body);
+        const result = handler(body, query);
         const [payload, status] = Array.isArray(result) ? result : [result, 200];
         // A beat of latency, so the UI's loading states are visible rather
         // than flashing past.
@@ -363,7 +379,8 @@
     banner.innerHTML =
       '<strong>Demo.</strong> No server, nothing stored, nothing sent. '
       + 'Any email works and the code is always <code>000000</code>. '
-      + 'The figures are real output from the tax engine for a sample 2025 return — '
+      + 'Uploads are genuinely read; the estimate is real engine output for a <em>sample</em> '
+      + '2025 return and does not recalculate from what you type here — '
       + '<strong>do not enter a real Social Security number.</strong>';
     document.body.appendChild(banner);
   });

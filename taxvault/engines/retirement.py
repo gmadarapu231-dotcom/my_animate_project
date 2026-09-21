@@ -474,7 +474,7 @@ def compute_rmd(
         )
         result.notes.append(
             f"This is your first required year. You may delay this one until "
-            f"{result.deadline.lower()} -- but then you take two in the same tax year, "
+            f"{result.deadline} -- but then you take two in the same tax year, "
             "and two distributions stacked into one year can push you into a higher "
             "bracket, raise the tax on your Social Security, and lift your Medicare "
             "premium two years later."
