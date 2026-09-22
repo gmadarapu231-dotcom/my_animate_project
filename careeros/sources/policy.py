@@ -94,14 +94,19 @@ class Challenge(SourceError):
         super().__init__(f"{host} returned {status}{': ' + hint if hint else ''} - not retried")
 
 
-#: Markers that mean "a human check", not "a posting".
+#: Markers that mean "a human check", not "a posting". Most specific first, so
+#: the reported hint names the actual control ("recaptcha", not "captcha") --
+#: that is the difference between a message the user can act on and one they
+#: cannot.
 _CHALLENGE_MARKERS = (
+    "recaptcha",
+    "hcaptcha",
+    "px-captcha",
     "captcha",
     "are you a robot",
     "unusual traffic",
     "cf-browser-verification",
     "attention required! | cloudflare",
-    "px-captcha",
     "please enable javascript and cookies",
     "access to this page has been denied",
 )

@@ -15,6 +15,7 @@ from careeros.api.routers import (
     agent,
     applications,
     auth,
+    autopilot,
     email,
     insights,
     jobs,
@@ -53,6 +54,7 @@ app = FastAPI(
 install_security(app)
 
 app.include_router(auth.router)
+app.include_router(autopilot.router)
 app.include_router(sources.router)
 app.include_router(agent.router)
 app.include_router(jobs.router)

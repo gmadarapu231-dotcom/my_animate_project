@@ -139,6 +139,10 @@ class User(Base, TimestampMixin):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_auth_method: Mapped[Optional[str]] = mapped_column(String(24))
 
+    #: Autopilot rules -- see careeros.apply.guardrails.AutopilotPolicy. Off and
+    #: dry-run by default, so installing this changes nothing until asked.
+    autopilot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
     work_auth: Mapped[list["WorkAuthorization"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     tracks: Mapped[list["CareerTrack"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     employers: Mapped[list["Employer"]] = relationship(back_populates="user", cascade="all, delete-orphan")

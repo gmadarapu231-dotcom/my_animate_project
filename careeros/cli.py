@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 import textwrap
 from pathlib import Path
@@ -600,6 +601,200 @@ def cmd_verify_evidence(args: argparse.Namespace) -> None:
     print(f"{changed} item(s) {verb}.")
 
 
+#: Policy fields settable by a `--flag value` option. `enabled` and `dry_run`
+#: are deliberately NOT here: they are store_true flags, whose default is False
+#: rather than None, so a generic "if the flag is not None, apply it" loop would
+#: read a *missing* --dry-run as "go live". That is the one mistake this module
+#: must not make, so the two switches are handled explicitly below.
+_AUTOPILOT_FIELDS = (
+    "interval_hours", "max_per_run", "max_per_day",
+    "min_match_score", "min_priority_score", "channels", "allow_unknown_verdict",
+    "require_deadline_open", "company_blocklist", "company_allowlist",
+    "domains", "countries", "min_salary", "skip_if_applicants_over", "quiet_hours",
+)
+
+#: The two fields that display order shows first.
+_AUTOPILOT_SWITCHES = ("enabled", "dry_run")
+
+
+def _print_report(report) -> None:
+    data = report.to_dict()
+    if report.skipped_reason:
+        print(f"Skipped: {report.skipped_reason}")
+        return
+
+    counts = data["counts"]
+    print(f"Pass finished in {data['duration_seconds']}s\n")
+    if data["discovery"]:
+        found = data["discovery"]["found"]
+        ingested = (data["discovery"].get("ingest") or {}).get("inserted")
+        tail = f", {ingested} new" if ingested is not None else ""
+        print(f"  Found      {found} posting(s) from providers{tail}")
+    print(f"  Classified {counts['classified']}")
+    print(f"  Tailored   {counts['tailored']} résumé(s)")
+    print(f"  Considered {counts['considered']} job(s)")
+    if counts["submitted"]:
+        print(f"  SUBMITTED  {counts['submitted']}")
+    if counts["would_submit"]:
+        print(f"  Would send {counts['would_submit']} (dry run)")
+    print(f"  For you    {counts['assisted']} need submitting by hand")
+
+    acted = [v for v in report.verdicts if v.allowed]
+    if acted:
+        print("\nApplied:" if counts["submitted"] else "\nWould apply:")
+        for verdict in acted:
+            message = (verdict.submission or {}).get("message", "")
+            print(f"  {verdict.company} — {verdict.title}")
+            print(f"    [{verdict.tier}] {textwrap.shorten(message, width=92, placeholder=' ...')}")
+            for note in verdict.notes:
+                print(f"    note: {textwrap.shorten(note, width=88, placeholder=' ...')}")
+
+    if data["blocked_by"]:
+        print("\nNot applied, by reason:")
+        for reason, count in data["blocked_by"].items():
+            print(f"  {count:>3}  {textwrap.shorten(reason, width=90, placeholder=' ...')}")
+
+    for error in data["errors"][:5]:
+        print(f"\n  ! {error}")
+
+
+def cmd_autopilot(args: argparse.Namespace) -> None:
+    """Search and apply on a timer, within rules you set."""
+    from careeros.apply.guardrails import AutopilotPolicy
+    from careeros.autopilot import (
+        AlreadyRunning,
+        RunLock,
+        load_policy,
+        lock_path,
+        run_forever,
+        run_once,
+        save_policy,
+    )
+    from careeros.db.session import new_session
+
+    action = args.action or "status"
+
+    if action in ("enable", "disable", "set"):
+        with session_scope() as session:
+            user = _require_user(session)
+            policy = load_policy(user)
+            if action == "enable":
+                policy.enabled = True
+            elif action == "disable":
+                policy.enabled = False
+            for field in _AUTOPILOT_FIELDS:
+                value = getattr(args, field, None)
+                if value is None:
+                    continue
+                current = getattr(policy, field)
+                setattr(policy, field, tuple(value) if isinstance(current, tuple) else value)
+            # Going live is only ever an explicit act.
+            if args.live and args.dry_run:
+                print("--live and --dry-run contradict each other.", file=sys.stderr)
+                raise SystemExit(2)
+            if args.live:
+                policy.dry_run = False
+            elif args.dry_run:
+                policy.dry_run = True
+            save_policy(session, user, policy)
+            summary, as_dict = policy.summary(), policy.to_dict()
+
+        print(summary)
+        if args.json:
+            print(json.dumps(as_dict, indent=2))
+        elif as_dict["enabled"] and as_dict["dry_run"]:
+            print("\nStill a dry run: it assembles and reports, and sends nothing.")
+            print("When the reports look right:  careeros autopilot set --live")
+        elif as_dict["enabled"]:
+            print("\nLIVE. Applications will be submitted automatically.")
+            print(f"Caps: {as_dict['max_per_run']} per run, {as_dict['max_per_day']} per day.")
+        return
+
+    if action == "status":
+        with session_scope() as session:
+            user = _require_user(session)
+            policy = load_policy(user)
+            as_dict = policy.to_dict()
+            summary = policy.summary()
+        if args.json:
+            print(json.dumps(as_dict, indent=2))
+            return
+        print(summary + "\n")
+        for key in _AUTOPILOT_SWITCHES + _AUTOPILOT_FIELDS:
+            value = as_dict[key]
+            shown = ", ".join(str(v) for v in value) if isinstance(value, list) else value
+            print(f"  {key:<24} {shown if shown not in ([], '', None) else '-'}")
+        lock = lock_path()
+        print(f"\n  lock file                {lock} {'(held)' if lock.exists() else ''}")
+        return
+
+    if action == "install":
+        interval = args.interval_hours or 4
+        binary = shutil.which("careeros") or "careeros"
+        print("Two ways to run this every "
+              f"{interval:g} hours. A timer is sturdier than a loop: it survives a reboot.\n")
+        print("cron — `crontab -e`, then add:")
+        print(f"  0 */{int(interval)} * * *  {binary} autopilot once >> ~/.careeros/autopilot.log 2>&1\n")
+        print("systemd — ~/.config/systemd/user/careeros.service:")
+        print("  [Unit]\n  Description=CareerOS autopilot\n")
+        print(f"  [Service]\n  Type=oneshot\n  ExecStart={binary} autopilot once\n")
+        print("~/.config/systemd/user/careeros.timer:")
+        print("  [Unit]\n  Description=Run CareerOS autopilot\n")
+        print(f"  [Timer]\n  OnBootSec=10min\n  OnUnitActiveSec={int(interval)}h\n  Persistent=true\n")
+        print("  [Install]\n  WantedBy=timers.target\n")
+        print("  systemctl --user daemon-reload && systemctl --user enable --now careeros.timer\n")
+        print(f"In the foreground instead:  {binary} autopilot loop")
+        return
+
+    if action == "once":
+        try:
+            with RunLock():
+                with session_scope() as session:
+                    report = run_once(
+                        session,
+                        discover_jobs=not args.no_discover,
+                        use_ai=not args.no_ai,
+                    )
+        except AlreadyRunning as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(1)
+        if args.json:
+            print(json.dumps(report.to_dict(), indent=2, default=str))
+        else:
+            _print_report(report)
+        return
+
+    if action == "loop":
+        interval = args.interval_hours
+        print(f"Running every {interval or 'policy interval'} hour(s). Ctrl-C to stop.\n")
+        try:
+            run_forever(
+                new_session,
+                interval_hours=interval,
+                max_passes=args.passes,
+                on_report=lambda r: (
+                    print(f"\n=== {r.started_at:%Y-%m-%d %H:%M} UTC ==="),
+                    _print_report(r),
+                ),
+            )
+        except KeyboardInterrupt:
+            print("\nStopped.")
+        return
+
+    print(f"Unknown action {action!r}.", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _boolish(value: str) -> bool:
+    """argparse type for an explicit yes/no flag."""
+    lowered = str(value).strip().lower()
+    if lowered in ("1", "true", "yes", "y", "on"):
+        return True
+    if lowered in ("0", "false", "no", "n", "off"):
+        return False
+    raise argparse.ArgumentTypeError(f"expected yes or no, got {value!r}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="careeros",
@@ -719,6 +914,38 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--name", help="full name, used only when creating the account")
     p.add_argument("--describe", action="store_true", help="show which sign-in methods are configured")
     p.set_defaults(func=cmd_signin)
+
+    p = sub.add_parser("autopilot", help="search and apply on a timer, within rules you set")
+    p.add_argument(
+        "action",
+        nargs="?",
+        choices=["status", "enable", "disable", "set", "once", "loop", "install"],
+        help="status (default), enable, disable, set, once, loop, install",
+    )
+    p.add_argument("--live", action="store_true", help="stop dry-running and actually submit")
+    p.add_argument("--dry-run", action="store_true", help="assemble and report, send nothing")
+    p.add_argument("--interval-hours", type=float, help="how often to run (default 4)")
+    p.add_argument("--max-per-run", type=int)
+    p.add_argument("--max-per-day", type=int)
+    p.add_argument("--min-match-score", type=float)
+    p.add_argument("--min-priority-score", type=float)
+    p.add_argument("--channels", action="append", choices=["api", "email"],
+                   help="which submission channels may be automated (repeatable)")
+    p.add_argument("--company-blocklist", action="append", help="never apply here (repeatable)")
+    p.add_argument("--company-allowlist", action="append", help="only apply here (repeatable)")
+    p.add_argument("--domains", action="append", help="restrict to these domain ids (repeatable)")
+    p.add_argument("--countries", action="append", help="restrict to these countries (repeatable)")
+    p.add_argument("--min-salary", type=float)
+    p.add_argument("--skip-if-applicants-over", type=int)
+    p.add_argument("--quiet-hours", action="append", help='e.g. "22:00-07:00" (repeatable)')
+    p.add_argument("--allow-unknown-verdict", type=_boolish,
+                   help="apply when sponsorship is not mentioned (default yes)")
+    p.add_argument("--require-deadline-open", type=_boolish)
+    p.add_argument("--no-discover", action="store_true", help="once/loop: skip the search step")
+    p.add_argument("--no-ai", action="store_true", help="once/loop: heuristics only")
+    p.add_argument("--passes", type=int, help="loop: stop after this many passes")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_autopilot)
 
     p = sub.add_parser("serve", help="run the dashboard + API")
     p.add_argument("--host", default="127.0.0.1")

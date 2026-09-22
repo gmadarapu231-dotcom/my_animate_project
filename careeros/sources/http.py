@@ -149,6 +149,7 @@ class HttpClient:
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         json_body: Any = None,
+        raw_body: bytes | None = None,
         tier: AccessTier = AccessTier.OFFICIAL_API,
     ) -> Response:
         if not tier.may_fetch:
@@ -170,7 +171,11 @@ class HttpClient:
 
         sent_headers = dict(headers or {})
         body: bytes | None = None
-        if json_body is not None:
+        if raw_body is not None:
+            # A pre-encoded body, for multipart form posts. The caller owns the
+            # Content-Type, since it carries the boundary.
+            body = raw_body
+        elif json_body is not None:
             body = json.dumps(json_body).encode("utf-8")
             sent_headers.setdefault("Content-Type", "application/json")
             sent_headers.setdefault("Accept", "application/json")
