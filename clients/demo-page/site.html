@@ -393,7 +393,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
       your behalf.</p>
     <div class="cta">
       <a class="go" href="#console">Open the live demo ↓</a>
-      <a href="#sourcing">Where jobs come from</a>
+      <a href="#autopilot">How it applies</a>
       <a href="https://github.com/gmadarapu231-dotcom/my_animate_project" target="_blank" rel="noopener">Read the source →</a>
     </div>
     <div class="facts" id="facts"></div>
@@ -519,9 +519,107 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
   </div>
 </section>
 
+<section class="band" id="resume">
+  <div class="wrap">
+    <p class="eyebrow dark">05 — Your résumé is the query</p>
+    <h2 class="sec">Upload it once. The searches come from it.</h2>
+    <div class="split">
+      <div>
+        <p class="body prose">A <span class="inline">.docx</span> is a zip with XML inside, so it is
+          read without a dependency; <span class="inline">.txt</span> and
+          <span class="inline">.md</span> read directly, <span class="inline">.pdf</span> needs one
+          optional package. Parsing is structural and deterministic — no model — so employers, titles,
+          date ranges and bullets come out of a résumé in <strong>any</strong> field. A veterinary
+          practice manager's CV parses with the same machinery as a network engineer's.</p>
+        <p class="body prose">The search terms are your own job titles, most recent first. Nothing was
+          typed into a settings box, and nothing about your field is hard-coded.</p>
+        <p class="body prose">Everything the parser reads lands <strong>unverified</strong> — this is
+          the one place in the system that infers career facts rather than being told them, so its
+          output is second-class by construction. You confirm the accurate items, and only then can a
+          résumé cite them. A recruiter asking about a bullet you never wrote is the failure this
+          prevents.</p>
+      </div>
+      <div>
+        <div class="note">
+          <h4>Read from one résumé</h4>
+          <div class="tw"><table id="resumeTable"></table></div>
+          <p style="margin-top:12px" id="resumeTerms"></p>
+        </div>
+        <div class="note" style="margin-top:14px">
+          <h4>What it could not find, it says</h4>
+          <p>No employment entries, no bullets, no dated roles — each produces a named warning rather
+            than a confident-looking blank. An undated role is flagged, and the years-of-experience
+            figure says it is understated.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="autopilot">
+  <div class="wrap">
+    <p class="eyebrow dark">06 — Applying, every four hours</p>
+    <h2 class="sec">It applies where the employer published a route.</h2>
+    <p class="body prose">Search, rank, tailor, apply — on a timer, within rules you set. Where a
+      posting can legitimately be submitted to, it is. Where it cannot, the packet is finished and
+      waiting, which is a click rather than an hour.</p>
+
+    <div class="tw" style="margin-top:26px">
+      <table id="channelTable"></table>
+    </div>
+
+    <div class="split" style="margin-top:34px">
+      <div>
+        <h3 class="sub">On the four boards that are not automated</h3>
+        <p class="body prose">LinkedIn, Indeed, Naukri and Glassdoor all need an authenticated session
+          as <em>you</em>, plus getting past bot protection, to submit. Doing that would mean holding
+          your logins for those sites and defeating a control each put there deliberately — and it
+          reliably gets accounts restricted, which costs more than the time it saves.</p>
+        <p class="body prose">So their postings still <strong>reach</strong> you through Google Jobs and
+          the aggregators, and applying to them is assisted: tailored résumé, cover letter and
+          pre-filled screening answers ready, you press submit. An application address in the
+          description does beat a login wall — the employer published it, so using it is not a
+          workaround.</p>
+        <p class="body prose">A tier is a ceiling, not a promise. A board in the API tier that answers
+          with a CAPTCHA hands that one back to you. Nothing here solves a challenge, replays a token
+          or retries with different headers.</p>
+      </div>
+      <div>
+        <div class="note">
+          <h4 id="passHead">One pass, dry run</h4>
+          <div class="tw"><table id="passTable"></table></div>
+          <p style="margin-top:12px"><span class="small muted" id="passNote"></span></p>
+        </div>
+        <div class="note" style="margin-top:14px">
+          <h4>Not yours to switch off</h4>
+          <ul class="tight" id="neverList"></ul>
+          <p>Everything else is yours: match floor, caps per run and per day, company block and allow
+            lists, countries, salary floor, applicant ceiling, quiet hours.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:26px">
+      <h4>Why it did not apply to the rest</h4>
+      <div class="tw"><table id="blockedTable"></table></div>
+      <p style="margin-top:12px">Every job in a pass gets a verdict, so the report answers
+        “why not that one?” for the whole list — which is what makes a loop left running auditable
+        rather than alarming.</p>
+    </div>
+
+    <div class="codeblock"><span class="c"># off and dry-run by default</span>
+careeros resume ~/Documents/my_resume.docx
+careeros verify-evidence <span class="c">--list</span>
+careeros autopilot enable <span class="c">--min-match-score 75</span>
+careeros autopilot once          <span class="c"># see what it would send</span>
+careeros autopilot set <span class="p">--live</span>    <span class="c"># when the reports look right</span>
+careeros autopilot install       <span class="c"># cron + systemd timer, every 4h</span></div>
+  </div>
+</section>
+
 <section class="band" id="evidence">
   <div class="wrap">
-    <p class="eyebrow dark">05 — Evidence</p>
+    <p class="eyebrow dark">07 — Evidence</p>
     <h2 class="sec">A résumé is a query over verified facts.</h2>
     <div class="split">
       <div>
@@ -550,7 +648,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="auth">
   <div class="wrap">
-    <p class="eyebrow dark">06 — Authorization</p>
+    <p class="eyebrow dark">08 — Authorization</p>
     <h2 class="sec">Silence is never read as a yes.</h2>
     <div class="split">
       <div>
@@ -582,7 +680,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="domains">
   <div class="wrap">
-    <p class="eyebrow dark">07 — Coverage</p>
+    <p class="eyebrow dark">09 — Coverage</p>
     <h2 class="sec">No job category is written into the code.</h2>
     <div class="split">
       <div>
@@ -609,7 +707,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="limits">
   <div class="wrap">
-    <p class="eyebrow dark">08 — Limits</p>
+    <p class="eyebrow dark">10 — Limits</p>
     <h2 class="sec">The safest tool is the one that does not exist.</h2>
     <p class="body prose">The agent is not restricted from these actions by a prompt or a policy check.
       The tools were never built, so there is nothing to jailbreak. Every registry build asserts the list
@@ -623,7 +721,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="run">
   <div class="wrap">
-    <p class="eyebrow dark">09 — Running it</p>
+    <p class="eyebrow dark">11 — Running it</p>
     <h2 class="sec">The demo is frozen. The system is not.</h2>
     <p class="body prose">Everything above is captured output. To run the real thing — live job sources,
       a real agent loop, Gmail drafts that wait for your approval — clone the repository and start the
@@ -674,8 +772,8 @@ cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
     ["Job", "Classified into a domain — seeded or newly named."],
     ["Eligibility", "The verdict, with the phrase it was drawn from."],
     ["Priority", "Deadline tier first, then score. Today outranks everything."],
-    ["Résumé", "Assembled from verified evidence, then gated."],
-    ["Application", "Assembled for you. You press submit."],
+    ["Résumé", "Read in, verified by you, then assembled and gated."],
+    ["Application", "Submitted where the employer published a route; assembled otherwise."],
     ["Email", "Drafted. High-impact topics never leave draft state."],
     ["Interview", "Tracked through 16 lifecycle states."],
     ["Outcome", "Rejections analysed; the analysis feeds back in."],
@@ -729,6 +827,67 @@ cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
       <tr><td style="color:var(--bad)">Password</td><td class="muted">—</td>
         <td class="mono" style="color:var(--bad)">no such column</td></tr>
     </tbody>`;
+
+  /* --- résumé intake ---------------------------------------------------- */
+  const intake = F.resumeIntake;
+  const parsed = intake.parsed;
+  document.getElementById("resumeTable").innerHTML =
+    `<thead><tr><th>Read</th><th class="n">Count</th><th>Example</th></tr></thead><tbody>` +
+    [
+      ["Employers", parsed.employers.length, parsed.employers.map((e) => e.name).join(", ")],
+      ["Roles dated", parsed.employers.filter((e) => e.start_date).length,
+       parsed.employers.map((e) => `${e.start_date || "?"}→${e.current ? "now" : e.end_date || "?"}`).join(", ")],
+      ["Years", parsed.total_experience_years, "unioned, so overlaps are not double-counted"],
+      ["Evidence proposals", parsed.evidence.length,
+       (parsed.evidence.find((e) => Object.keys(e.metrics).length) || parsed.evidence[0] || {}).text || ""],
+      ["Skills matched", Object.keys(parsed.skills).length, Object.keys(parsed.skills).slice(0, 5).join(", ")],
+      ["Certifications", parsed.certifications.length, parsed.certifications.slice(0, 2).join("; ")],
+    ].map(([label, count, example]) => `<tr>
+      <td>${esc(label)}</td><td class="n mono">${esc(String(count))}</td>
+      <td class="muted">${esc(String(example).slice(0, 78))}${String(example).length > 78 ? "…" : ""}</td>
+    </tr>`).join("") + `</tbody>`;
+  document.getElementById("resumeTerms").innerHTML =
+    `<span class="small muted">Search terms derived: </span>` +
+    intake.search_terms.map((t) => `<span class="chip dom">${esc(t)}</span>`).join(" ") +
+    `<br><span class="small muted" style="display:inline-block;margin-top:8px">` +
+    `All ${parsed.evidence.length} proposals stored <b>unverified</b> — ${esc(intake.intake.next_step)}</span>`;
+
+  /* --- application channels --------------------------------------------- */
+  const TIER_TONE = { api: "ok", email: "ok", assisted: "warn", blocked: "bad" };
+  document.getElementById("channelTable").innerHTML =
+    `<thead><tr><th>Board or platform</th><th>Route</th><th>Automated</th><th>Why</th></tr></thead><tbody>` +
+    F.channels.map((row) => `<tr>
+      <td>${esc(row.board)}</td>
+      <td><span class="chip ${TIER_TONE[row.tier] || ""}">${esc(row.tier_label)}</span></td>
+      <td class="mono" style="color:var(--${row.automatable ? "ok" : "bad"})">${row.automatable ? "yes" : "no"}</td>
+      <td class="muted">${esc(row.reason)}</td>
+    </tr>`).join("") + `</tbody>`;
+
+  /* --- one autopilot pass ----------------------------------------------- */
+  const run = F.autopilotRun;
+  const rc = run.counts;
+  document.getElementById("passHead").textContent =
+    `One pass — ${F.autopilot.policy.dry_run ? "dry run" : "live"}, every ${F.autopilot.policy.interval_hours}h`;
+  document.getElementById("passTable").innerHTML =
+    `<tbody>` + [
+      ["Jobs considered", rc.considered],
+      ["Résumés tailored", rc.tailored],
+      ["Would submit", rc.would_submit],
+      ["Actually submitted", rc.submitted],
+      ["Waiting for you", rc.assisted],
+    ].map(([label, value]) => `<tr>
+      <td>${esc(label)}</td><td class="n mono">${esc(String(value))}</td></tr>`).join("") + `</tbody>`;
+  const acted = run.verdicts.filter((v) => v.allowed);
+  document.getElementById("passNote").innerHTML = acted.length
+    ? "Would apply: " + acted.map((v) => `${esc(v.company)} <span class="chip">${esc(v.tier)}</span>`).join(", ")
+    : "Nothing cleared the guardrails in this pass.";
+  document.getElementById("neverList").innerHTML =
+    F.autopilot.never_configurable.map((line) => `<li>${esc(line)}</li>`).join("");
+
+  document.getElementById("blockedTable").innerHTML =
+    `<thead><tr><th class="n">Jobs</th><th>Reason it stopped</th></tr></thead><tbody>` +
+    Object.entries(run.blocked_by).map(([reason, count]) => `<tr>
+      <td class="n mono">${count}</td><td class="muted">${esc(reason)}</td></tr>`).join("") + `</tbody>`;
 
   document.getElementById("withheldHead").textContent =
     `Withheld capabilities — ${t.withheld_capabilities.length} of them`;

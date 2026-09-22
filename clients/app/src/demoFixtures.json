@@ -10874,5 +10874,600 @@
   },
   "passwords": "never stored or requested",
   "session_ttl_seconds": 2592000
+ },
+ "resumeIntake": {
+  "parsed": {
+   "full_name": "Priya Raman",
+   "email": "priya.raman@example.com",
+   "phone": "+1 512 555 0134",
+   "links": {
+    "linkedin": "linkedin.com/in/priyaraman",
+    "github": "github.com/praman"
+   },
+   "location": null,
+   "current_title": "Senior Network Security Engineer",
+   "titles": [
+    "Senior Network Security Engineer",
+    "Network Engineer"
+   ],
+   "total_experience_years": 8.2,
+   "employers": [
+    {
+     "name": "Cobalt Bank",
+     "title": "Senior Network Security Engineer",
+     "location": "Austin, TX",
+     "start_date": "2021-03-01",
+     "end_date": null,
+     "current": true,
+     "raw_line": "Cobalt Bank — Senior Network Security Engineer — Austin, TX / Mar 2021 – Present"
+    },
+    {
+     "name": "Orrin Systems",
+     "title": "Network Engineer",
+     "location": "Dallas, TX",
+     "start_date": "2018-06-01",
+     "end_date": "2021-02-01",
+     "current": false,
+     "raw_line": "Orrin Systems, Network Engineer, Dallas, TX / 06/2018 - 02/2021"
+    }
+   ],
+   "evidence": [
+    {
+     "text": "Led a zero trust microsegmentation programme across 14 data centre sites, cutting lateral movement paths by 68%",
+     "kind": "achievement",
+     "employer_name": "Cobalt Bank",
+     "role_title": "Senior Network Security Engineer",
+     "skills": [
+      "zero_trust"
+     ],
+     "technologies": [
+      "microsegmentation",
+      "zero trust"
+     ],
+     "metrics": {
+      "%": 68
+     },
+     "start_date": "2021-03-01",
+     "end_date": null,
+     "confidence": 0.75,
+     "verification": "unverified"
+    },
+    {
+     "text": "Redesigned BGP and OSPF routing for 4,200 branch devices with no unplanned outage",
+     "kind": "responsibility",
+     "employer_name": "Cobalt Bank",
+     "role_title": "Senior Network Security Engineer",
+     "skills": [
+      "routing_switching"
+     ],
+     "technologies": [
+      "bgp",
+      "ospf",
+      "routing"
+     ],
+     "metrics": {},
+     "start_date": "2021-03-01",
+     "end_date": null,
+     "confidence": 0.6,
+     "verification": "unverified"
+    },
+    {
+     "text": "Deployed Cisco ISE for 9000 users and integrated it with Splunk for SOC alerting",
+     "kind": "achievement",
+     "employer_name": "Cobalt Bank",
+     "role_title": "Senior Network Security Engineer",
+     "skills": [
+      "network_security",
+      "observability",
+      "soc_operations",
+      "splunk"
+     ],
+     "technologies": [
+      "alerting",
+      "cisco ise",
+      "soc",
+      "splunk"
+     ],
+     "metrics": {
+      "user": 9000
+     },
+     "start_date": "2021-03-01",
+     "end_date": null,
+     "confidence": 0.75,
+     "verification": "unverified"
+    },
+    {
+     "text": "Owned Palo Alto firewall policy and the quarterly rule review",
+     "kind": "responsibility",
+     "employer_name": "Cobalt Bank",
+     "role_title": "Senior Network Security Engineer",
+     "skills": [
+      "network_security"
+     ],
+     "technologies": [
+      "firewall",
+      "palo alto"
+     ],
+     "metrics": {},
+     "start_date": "2021-03-01",
+     "end_date": null,
+     "confidence": 0.6,
+     "verification": "unverified"
+    },
+    {
+     "text": "Built SD-WAN overlay across 60 retail sites, reducing MPLS spend by 35%",
+     "kind": "achievement",
+     "employer_name": "Orrin Systems",
+     "role_title": "Network Engineer",
+     "skills": [
+      "mpls",
+      "sd_wan"
+     ],
+     "technologies": [
+      "mpls",
+      "sd-wan"
+     ],
+     "metrics": {
+      "%": 35
+     },
+     "start_date": "2018-06-01",
+     "end_date": "2021-02-01",
+     "confidence": 0.75,
+     "verification": "unverified"
+    },
+    {
+     "text": "Automated switch configuration with Python and Ansible, saving 12 hours a week",
+     "kind": "achievement",
+     "employer_name": "Orrin Systems",
+     "role_title": "Network Engineer",
+     "skills": [
+      "python",
+      "terraform"
+     ],
+     "technologies": [
+      "ansible",
+      "python"
+     ],
+     "metrics": {
+      "hour": 12
+     },
+     "start_date": "2018-06-01",
+     "end_date": "2021-02-01",
+     "confidence": 0.75,
+     "verification": "unverified"
+    }
+   ],
+   "skills": {
+    "network_security": 1.0,
+    "zero_trust": 1.0,
+    "routing_switching": 1.0,
+    "incident_response": 1.0,
+    "azure": 1.0,
+    "splunk": 1.0,
+    "soc_operations": 0.55,
+    "observability": 0.55,
+    "sd_wan": 0.55,
+    "mpls": 1.0,
+    "python": 1.0,
+    "terraform": 1.0,
+    "siem": 1.0
+   },
+   "certifications": [
+    "CCNP Enterprise — Cisco, 2021",
+    "CompTIA Security+ — 2022",
+    "AZ-500 Microsoft Azure Security Engineer — 2024"
+   ],
+   "education": [
+    "B.E. Electronics and Communication, Anna University, 2017"
+   ],
+   "summary": "Network security engineer with 8 years across financial services and SaaS. Focused on zero-trust segmentation, BGP/OSPF routing and Cisco ISE.",
+   "sections_found": [
+    "summary",
+    "experience",
+    "skills",
+    "certifications",
+    "education"
+   ],
+   "warnings": [],
+   "counts": {
+    "employers": 2,
+    "evidence": 6,
+    "skills": 13
+   }
+  },
+  "search_terms": [
+   "Senior Network Security Engineer",
+   "Network Engineer",
+   "Network Security",
+   "Zero Trust Architecture",
+   "Routing & Switching",
+   "Incident Response"
+  ],
+  "committed": true,
+  "intake": {
+   "employers_created": 2,
+   "employers_matched": 0,
+   "evidence_created": 6,
+   "evidence_skipped": 0,
+   "certifications_created": 1,
+   "profile_fields_set": [
+    "links"
+   ],
+   "evidence_ids": [
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+   ],
+   "notes": [],
+   "verification_state": "unverified",
+   "next_step": "6 item(s) are stored unverified. Confirm the ones that are accurate before any résumé can cite them."
+  },
+  "file": {
+   "name": "sample_resume.txt",
+   "bytes": 1357,
+   "characters": 1335
+  }
+ },
+ "channels": [
+  {
+   "tier": "api",
+   "tier_label": "ATS application API",
+   "automatable": true,
+   "provider": "greenhouse",
+   "apply_url": "https://boards.greenhouse.io/cobaltbank/jobs/5550001",
+   "email": null,
+   "parameters": {
+    "board": "cobaltbank",
+    "job_id": "5550001"
+   },
+   "reason": "greenhouse publishes an application endpoint for this board.",
+   "endpoint_verified": true,
+   "board": "Greenhouse"
+  },
+  {
+   "tier": "api",
+   "tier_label": "ATS application API",
+   "automatable": true,
+   "provider": "lever",
+   "apply_url": "https://jobs.lever.co/northwind/9c1f2e3a",
+   "email": null,
+   "parameters": {
+    "site": "northwind",
+    "posting_id": "9c1f2e3a"
+   },
+   "reason": "lever publishes an application endpoint for this board.",
+   "endpoint_verified": true,
+   "board": "Lever"
+  },
+  {
+   "tier": "email",
+   "tier_label": "apply by email",
+   "automatable": true,
+   "provider": "email",
+   "apply_url": "https://careers.example.com/req/9912",
+   "email": "careers@example.com",
+   "parameters": {},
+   "reason": "The posting asks for applications at careers@example.com.",
+   "endpoint_verified": true,
+   "board": "Any employer"
+  },
+  {
+   "tier": "assisted",
+   "tier_label": "web form — you submit",
+   "automatable": false,
+   "provider": "workday",
+   "apply_url": "https://acme.myworkdayjobs.com/en-US/careers/job/R-9912",
+   "email": null,
+   "parameters": {},
+   "reason": "workday is a web form with no public submission endpoint. The packet is assembled; the form is yours to submit.",
+   "endpoint_verified": true,
+   "board": "Workday"
+  },
+  {
+   "tier": "assisted",
+   "tier_label": "web form — you submit",
+   "automatable": false,
+   "provider": "taleo",
+   "apply_url": "https://acme.taleo.net/careersection/jobdetail.ftl?job=1",
+   "email": null,
+   "parameters": {},
+   "reason": "taleo is a web form with no public submission endpoint. The packet is assembled; the form is yours to submit.",
+   "endpoint_verified": true,
+   "board": "Taleo"
+  },
+  {
+   "tier": "blocked",
+   "tier_label": "login wall — cannot be automated",
+   "automatable": false,
+   "provider": "linkedin.com",
+   "apply_url": "https://www.linkedin.com/jobs/view/4123456789",
+   "email": null,
+   "parameters": {},
+   "reason": "LinkedIn Easy Apply needs an authenticated session as you, and job pages sit behind bot protection. Automating it would mean holding your LinkedIn credentials and defeating that control — and it gets accounts restricted. Apply through the link instead; the packet is ready.",
+   "endpoint_verified": true,
+   "board": "LinkedIn"
+  },
+  {
+   "tier": "blocked",
+   "tier_label": "login wall — cannot be automated",
+   "automatable": false,
+   "provider": "indeed.com",
+   "apply_url": "https://www.indeed.com/viewjob?jk=abc",
+   "email": null,
+   "parameters": {},
+   "reason": "Indeed's on-site apply requires an Indeed account session and is Cloudflare-protected. The packet is assembled for you to submit.",
+   "endpoint_verified": true,
+   "board": "Indeed"
+  },
+  {
+   "tier": "blocked",
+   "tier_label": "login wall — cannot be automated",
+   "automatable": false,
+   "provider": "naukri.com",
+   "apply_url": "https://in.naukri.com/job-listings-network-engineer-1",
+   "email": null,
+   "parameters": {},
+   "reason": "Naukri requires a logged-in session and blocks automated posts. Apply through the link; the tailored résumé is ready to attach.",
+   "endpoint_verified": true,
+   "board": "Naukri"
+  },
+  {
+   "tier": "blocked",
+   "tier_label": "login wall — cannot be automated",
+   "automatable": false,
+   "provider": "dice.com",
+   "apply_url": "https://www.dice.com/job-detail/abc",
+   "email": null,
+   "parameters": {},
+   "reason": "Dice apply requires a Dice account session.",
+   "endpoint_verified": true,
+   "board": "Dice"
+  },
+  {
+   "tier": "blocked",
+   "tier_label": "login wall — cannot be automated",
+   "automatable": false,
+   "provider": "glassdoor.com",
+   "apply_url": "https://www.glassdoor.com/job-listing/x",
+   "email": null,
+   "parameters": {},
+   "reason": "Glassdoor proxies to the employer behind a login wall.",
+   "endpoint_verified": true,
+   "board": "Glassdoor"
+  }
+ ],
+ "autopilot": {
+  "policy": {
+   "enabled": true,
+   "dry_run": true,
+   "interval_hours": 4.0,
+   "max_per_run": 5,
+   "max_per_day": 15,
+   "min_match_score": 50.0,
+   "min_priority_score": 0.0,
+   "channels": [
+    "api",
+    "email"
+   ],
+   "allow_unknown_verdict": true,
+   "require_deadline_open": true,
+   "company_blocklist": [],
+   "company_allowlist": [],
+   "domains": [],
+   "countries": [],
+   "min_salary": null,
+   "skip_if_applicants_over": null,
+   "quiet_hours": []
+  },
+  "summary": "Every 4h: search, rank, then assembling only (dry run) up to 5 per run and 15 per day, at match 50+ via api, email.",
+  "never_configurable": [
+   "The tailored résumé must pass the factuality check.",
+   "It must cite at least one verified evidence item.",
+   "A work-authorization verdict of not_compatible stops the application.",
+   "No submission bypasses a CAPTCHA, a login wall or bot protection."
+  ]
+ },
+ "autopilotRun": {
+  "started_at": "2026-09-22T03:29:09.777142+00:00",
+  "finished_at": "2026-09-22T03:29:11.533404+00:00",
+  "duration_seconds": 1.8,
+  "policy": {
+   "enabled": true,
+   "dry_run": true,
+   "interval_hours": 4.0,
+   "max_per_run": 5,
+   "max_per_day": 15,
+   "min_match_score": 50.0,
+   "min_priority_score": 0.0,
+   "channels": [
+    "api",
+    "email"
+   ],
+   "allow_unknown_verdict": true,
+   "require_deadline_open": true,
+   "company_blocklist": [],
+   "company_allowlist": [],
+   "domains": [],
+   "countries": [],
+   "min_salary": null,
+   "skip_if_applicants_over": null,
+   "quiet_hours": []
+  },
+  "skipped_reason": null,
+  "discovery": null,
+  "counts": {
+   "classified": 10,
+   "tailored": 6,
+   "considered": 9,
+   "submitted": 0,
+   "would_submit": 2,
+   "assisted": 7
+  },
+  "blocked_by": {
+   "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit.": 7,
+   "work-authorization verdict is not_compatible": 3,
+   "no tailored résumé for this job yet": 3,
+   "match 20.0 is below your floor of 50": 1
+  },
+  "verdicts": [
+   {
+    "job_id": 1,
+    "title": "Senior Network Security Engineer",
+    "company": "Cobalt Bank",
+    "tier": "api",
+    "allowed": true,
+    "blockers": [],
+    "notes": [
+     "Dry run: this would be submitted, but nothing is sent."
+    ],
+    "submission": {
+     "ok": true,
+     "tier": "api",
+     "provider": "greenhouse",
+     "dry_run": true,
+     "reference": null,
+     "message": "Would POST to https://boards-api.greenhouse.io/v1/boards/cobaltbank/jobs/5550001",
+     "downgraded_to": null,
+     "artifacts": {
+      "endpoint": "https://boards-api.greenhouse.io/v1/boards/cobaltbank/jobs/5550001",
+      "fields": [
+       "email",
+       "first_name",
+       "last_name",
+       "phone"
+      ],
+      "resume_filename": "priya-raman-senior-network-security-engineer.txt",
+      "docs": "https://developers.greenhouse.io/job-board.html#submit-an-application"
+     },
+     "submitted_at": null
+    }
+   },
+   {
+    "job_id": 3,
+    "title": "Senior SAP Security Consultant",
+    "company": "Halden Consulting",
+    "tier": "email",
+    "allowed": true,
+    "blockers": [],
+    "notes": [
+     "Dry run: this would be submitted, but nothing is sent."
+    ],
+    "submission": {
+     "ok": true,
+     "tier": "email",
+     "provider": "email",
+     "dry_run": true,
+     "reference": null,
+     "message": "Would email careers@halden.example.com",
+     "downgraded_to": null,
+     "artifacts": {
+      "to": "careers@halden.example.com",
+      "subject": "Application: Senior SAP Security Consultant — Halden Consulting",
+      "body_characters": 336,
+      "attachment": "priya-raman-senior-sap-security-consultant.txt"
+     },
+     "submitted_at": null
+    }
+   },
+   {
+    "job_id": 4,
+    "title": "Network Engineer - Data Centre",
+    "company": "Sahyadri Technologies",
+    "tier": "assisted",
+    "allowed": false,
+    "blockers": [
+     "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit."
+    ],
+    "notes": [],
+    "submission": null
+   },
+   {
+    "job_id": 6,
+    "title": "Senior Data Scientist",
+    "company": "Kavach Analytics",
+    "tier": "assisted",
+    "allowed": false,
+    "blockers": [
+     "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit."
+    ],
+    "notes": [],
+    "submission": null
+   },
+   {
+    "job_id": 8,
+    "title": "Healthcare Data Analyst",
+    "company": "Willow Health Partners",
+    "tier": "assisted",
+    "allowed": false,
+    "blockers": [
+     "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit."
+    ],
+    "notes": [
+     "Sponsorship is not stated in this posting. The application says nothing about your status beyond what your profile holds — verify with the employer."
+    ],
+    "submission": null
+   },
+   {
+    "job_id": 9,
+    "title": "Veterinary Practice Manager",
+    "company": "Brightpaw Veterinary Group",
+    "tier": "assisted",
+    "allowed": false,
+    "blockers": [
+     "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit.",
+     "match 20.0 is below your floor of 50"
+    ],
+    "notes": [
+     "Sponsorship is not stated in this posting. The application says nothing about your status beyond what your profile holds — verify with the employer."
+    ],
+    "submission": null
+   },
+   {
+    "job_id": 2,
+    "title": "Cloud Security Engineer",
+    "company": "Vertex Health",
+    "tier": "assisted",
+    "allowed": false,
+    "blockers": [
+     "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit.",
+     "work-authorization verdict is not_compatible",
+     "no tailored résumé for this job yet"
+    ],
+    "notes": [],
+    "submission": null
+   },
+   {
+    "job_id": 5,
+    "title": "IAM Engineer",
+    "company": "Orrin Logistics",
+    "tier": "assisted",
+    "allowed": false,
+    "blockers": [
+     "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit.",
+     "work-authorization verdict is not_compatible",
+     "no tailored résumé for this job yet"
+    ],
+    "notes": [],
+    "submission": null
+   },
+   {
+    "job_id": 7,
+    "title": "SOC Analyst (Tier 2)",
+    "company": "Ironvale Security",
+    "tier": "assisted",
+    "allowed": false,
+    "blockers": [
+     "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit.",
+     "work-authorization verdict is not_compatible",
+     "no tailored résumé for this job yet"
+    ],
+    "notes": [],
+    "submission": null
+   }
+  ],
+  "errors": []
  }
 }
