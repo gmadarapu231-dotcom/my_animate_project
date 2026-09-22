@@ -490,6 +490,116 @@ def cmd_signin(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_resume(args: argparse.Namespace) -> None:
+    """Read a résumé: fill the profile, propose evidence, derive search terms."""
+    from careeros.resume_intake import ExtractionError, intake_file
+
+    with session_scope() as session:
+        user = _require_user(session)
+        try:
+            report = intake_file(
+                session,
+                user,
+                args.path,
+                commit=not args.dry_run,
+                overwrite_profile=args.overwrite,
+            )
+        except ExtractionError as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(2)
+
+    if args.json:
+        print(json.dumps(report, indent=2, default=str))
+        return
+
+    parsed = report["parsed"]
+    print(f"{report['file']['name']}  {report['file']['characters']} characters, "
+          f"sections: {', '.join(parsed['sections_found']) or 'none recognised'}\n")
+
+    print(f"  {parsed['full_name'] or '(no name found)'}")
+    if parsed["current_title"]:
+        print(f"  {parsed['current_title']}")
+    contact = " · ".join(filter(None, [parsed["email"], parsed["phone"]]))
+    if contact:
+        print(f"  {contact}")
+    print(f"  {parsed['total_experience_years']} years across {len(parsed['employers'])} role(s)\n")
+
+    for employer in parsed["employers"]:
+        span = f"{employer['start_date'] or '?'} -> {'present' if employer['current'] else employer['end_date'] or '?'}"
+        where = f" · {employer['location']}" if employer["location"] else ""
+        print(f"  {employer['name']}")
+        print(f"    {employer['title'] or '(no title)'}{where} · {span}")
+    print()
+
+    print(f"  {len(parsed['evidence'])} evidence proposal(s):")
+    for item in parsed["evidence"][:8]:
+        marker = "!" if item["kind"] == "achievement" else "·"
+        metrics = f"  {item['metrics']}" if item["metrics"] else ""
+        print(f"    {marker} {textwrap.shorten(item['text'], width=76, placeholder=' ...')}{metrics}")
+    if len(parsed["evidence"]) > 8:
+        print(f"    ... and {len(parsed['evidence']) - 8} more")
+
+    if parsed["skills"]:
+        top = sorted(parsed["skills"].items(), key=lambda kv: -kv[1])[:12]
+        print(f"\n  Skills matched ({len(parsed['skills'])}): " + ", ".join(k for k, _ in top))
+    if parsed["certifications"]:
+        print(f"  Certifications: {', '.join(parsed['certifications'][:6])}")
+
+    print(f"\n  Search terms derived: {', '.join(report['search_terms'])}")
+
+    for warning in parsed["warnings"]:
+        print(f"\n  ! {warning}")
+
+    if report["committed"]:
+        intake = report["intake"]
+        print(f"\nSaved: {intake['employers_created']} new employer(s), "
+              f"{intake['evidence_created']} evidence item(s), "
+              f"{intake['certifications_created']} certification(s)")
+        if intake["evidence_skipped"]:
+            print(f"       {intake['evidence_skipped']} already known, skipped")
+        print(f"\n{intake['next_step']}")
+        print("Nothing on a generated résumé can cite an unverified item.")
+        print("  careeros verify-evidence --all        confirm everything read from this file")
+        print("  careeros discover                    search using these terms")
+    else:
+        print("\nDry run: nothing saved.")
+
+
+def cmd_verify_evidence(args: argparse.Namespace) -> None:
+    """Confirm evidence the parser proposed. This is the human gate."""
+    from careeros.db.models import EvidenceItem
+    from careeros.enums import VerificationState
+    from careeros.resume_intake import verify
+
+    with session_scope() as session:
+        user = _require_user(session)
+        rows = (
+            session.query(EvidenceItem)
+            .filter(EvidenceItem.user_id == user.id)
+            .order_by(EvidenceItem.id)
+            .all()
+        )
+        unverified = [r for r in rows if r.verification == VerificationState.UNVERIFIED.value]
+
+        if args.list or not (args.all or args.id):
+            if not unverified:
+                print("Nothing unverified. Every evidence item is confirmed.")
+                return
+            print(f"{len(unverified)} unverified item(s):\n")
+            for row in unverified:
+                print(f"  [{row.id:>3}] {row.kind:<14} {textwrap.shorten(row.text, width=84, placeholder=' ...')}")
+            print("\nConfirm the accurate ones:")
+            print("  careeros verify-evidence --id 3 --id 4")
+            print("  careeros verify-evidence --all")
+            return
+
+        targets = [r.id for r in unverified] if args.all else [int(i) for i in args.id]
+        changed = verify(session, user, targets, verified=not args.undo)
+
+    verb = "unverified" if args.undo else "verified"
+    print(f"{changed} item(s) {verb}.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="careeros",
@@ -574,6 +684,20 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("agent-runs", help="audit trail of past agent runs")
     p.add_argument("--limit", type=int, default=10)
     p.set_defaults(func=cmd_agent_runs)
+
+    p = sub.add_parser("resume", help="read a résumé: fill the profile and propose evidence")
+    p.add_argument("path", help="a .txt, .md, .docx or .pdf résumé")
+    p.add_argument("--overwrite", action="store_true", help="replace profile fields already set")
+    p.add_argument("--dry-run", action="store_true", help="show what was read, save nothing")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_resume)
+
+    p = sub.add_parser("verify-evidence", help="confirm evidence read from a résumé")
+    p.add_argument("--id", action="append", help="evidence id to confirm (repeatable)")
+    p.add_argument("--all", action="store_true", help="confirm every unverified item")
+    p.add_argument("--list", action="store_true", help="list what is unverified")
+    p.add_argument("--undo", action="store_true", help="return items to unverified")
+    p.set_defaults(func=cmd_verify_evidence)
 
     p = sub.add_parser("sources", help="where jobs can come from, and what each needs")
     p.add_argument("--country", help="only providers covering this country, e.g. US or IN")
