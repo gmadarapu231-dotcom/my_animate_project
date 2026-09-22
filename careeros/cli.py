@@ -785,6 +785,157 @@ def cmd_autopilot(args: argparse.Namespace) -> None:
     raise SystemExit(2)
 
 
+def cmd_ats(args: argparse.Namespace) -> None:
+    """The posting's own keywords, and where your résumé stands on each."""
+    from careeros.db.models import AtsAssessment, Job, ResumeDocument
+    from careeros.engines.ats_align import AtsAligner, KeywordVerdict
+    from careeros.engines.resume import Resume, ResumeBlock, ResumeEntry, ResumeSection
+    from careeros.enums import ResumeKind
+    from careeros.services import load_evidence_records
+
+    with session_scope() as session:
+        user = _require_user(session)
+        job = session.get(Job, args.job_id)
+        if job is None:
+            print(f"No job with id {args.job_id}.", file=sys.stderr)
+            raise SystemExit(2)
+        if job.classification is None:
+            print("That job has not been classified yet. Run `careeros run-daily`.", file=sys.stderr)
+            raise SystemExit(2)
+
+        keywords = list(job.classification.ats_keywords or [])
+        rows = (
+            session.query(AtsAssessment)
+            .filter(AtsAssessment.job_id == job.id)
+            .order_by(AtsAssessment.id)
+            .all()
+        )
+        tailored = (
+            session.query(ResumeDocument)
+            .filter(
+                ResumeDocument.user_id == user.id,
+                ResumeDocument.job_id == job.id,
+                ResumeDocument.kind == ResumeKind.TAILORED.value,
+            )
+            .order_by(ResumeDocument.version.desc())
+            .first()
+        )
+        tailored_row = next((r for r in rows if tailored and r.resume_id == tailored.id), None)
+        baseline = next((r for r in rows if r is not tailored_row), None)
+
+        plan = None
+        if tailored is not None:
+            rebuilt = Resume(name=tailored.name, kind=ResumeKind.TAILORED)
+            for section in tailored.sections or []:
+                rebuilt.sections.append(
+                    ResumeSection(
+                        name=section.get("name", ""),
+                        kind=section.get("kind", ""),
+                        entries=[
+                            ResumeEntry(
+                                heading=entry.get("heading"),
+                                subheading=entry.get("subheading"),
+                                meta=entry.get("meta"),
+                                blocks=[
+                                    ResumeBlock(
+                                        text=b.get("text", ""),
+                                        evidence_ids=list(b.get("evidence_ids") or []),
+                                    )
+                                    for b in entry.get("blocks") or []
+                                ],
+                            )
+                            for entry in section.get("entries") or []
+                        ],
+                    )
+                )
+            plan = AtsAligner().align(
+                rebuilt, load_evidence_records(session, user.id), keywords, apply=False
+            )
+
+        info = {
+            "job": f"{job.title} - {job.company}",
+            "keywords": keywords,
+            "baseline": baseline,
+            "tailored_row": tailored_row,
+            "tailored": tailored,
+            "plan": plan,
+        }
+
+    if args.json:
+        print(json.dumps({
+            "job": info["job"],
+            "keywords_from_posting": keywords,
+            "baseline": {"overall": baseline.overall, "keyword_match": baseline.keyword_match} if baseline else None,
+            "tailored": {"overall": tailored_row.overall, "keyword_match": tailored_row.keyword_match} if tailored_row else None,
+            "alignment": plan.to_dict() if plan else None,
+        }, indent=2))
+        return
+
+    print(f"{info['job']}\n")
+    print(f"{len(keywords)} keyword(s) derived from this posting's own text.")
+    print("Nothing here comes from an industry list.\n")
+
+    if baseline:
+        print(f"  Master résumé    ATS {baseline.overall:>5}   keyword match {baseline.keyword_match:>5}%")
+    if tailored_row:
+        print(f"  Tailored résumé  ATS {tailored_row.overall:>5}   keyword match {tailored_row.keyword_match:>5}%")
+    if baseline and tailored_row:
+        print(f"  Lift             ATS {tailored_row.overall - baseline.overall:>+5.1f}   "
+              f"keyword match {tailored_row.keyword_match - baseline.keyword_match:>+5.1f}%")
+    if not tailored_row:
+        print("  No tailored résumé yet - run `careeros tailor {} `.".format(job.id))
+    print()
+
+    if plan is None:
+        return
+
+    print(f"Keyword coverage: {plan.coverage:g}% of {len(plan.scored)} scored term(s)\n")
+    labels = {
+        KeywordVerdict.PRESENT: ("already in your résumé", "+"),
+        KeywordVerdict.ALIGNED: ("added in the posting's wording", "~"),
+        KeywordVerdict.UNSUPPORTED: ("no evidence supports it", "-"),
+        KeywordVerdict.FRAGMENT: ("n-gram artifact, not scored", "."),
+        KeywordVerdict.NOT_A_CLAIM: ("a requirement, not a capability", "."),
+    }
+    for verdict in KeywordVerdict:
+        group = plan.by_verdict(verdict)
+        if not group:
+            continue
+        label, marker = labels[verdict]
+        if verdict in (KeywordVerdict.FRAGMENT, KeywordVerdict.NOT_A_CLAIM) and not args.verbose:
+            print(f"  {len(group):>3} {label}")
+            continue
+        if verdict is KeywordVerdict.ALIGNED:
+            # Several extracted n-grams can name one capability; the report
+            # shows the term that is actually printed, once.
+            seen: set[str] = set()
+            shown = []
+            for decision in group:
+                term = decision.presentation or decision.keyword
+                if term in seen:
+                    continue
+                seen.add(term)
+                shown.append((term, decision))
+            print(f"  {label.upper()} ({len(shown)})")
+            for term, decision in shown:
+                print(f"    {marker} {term}  evidence {decision.evidence_ids[:4]}")
+            print()
+            continue
+
+        print(f"  {label.upper()} ({len(group)})")
+        for decision in group:
+            extra = ""
+            if decision.evidence_ids:
+                extra = f"  evidence {decision.evidence_ids[:4]}"
+            elif verdict is KeywordVerdict.UNSUPPORTED:
+                extra = "  <- the fix is the experience, not the word"
+            print(f"    {marker} {decision.keyword}{extra}")
+        print()
+
+    for note in plan.notes:
+        print(f"  {textwrap.fill(note, width=92, subsequent_indent='    ')}")
+
+
 def _boolish(value: str) -> bool:
     """argparse type for an explicit yes/no flag."""
     lowered = str(value).strip().lower()
@@ -893,6 +1044,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--list", action="store_true", help="list what is unverified")
     p.add_argument("--undo", action="store_true", help="return items to unverified")
     p.set_defaults(func=cmd_verify_evidence)
+
+    p = sub.add_parser("ats", help="this posting's keywords and how your résumé scores on them")
+    p.add_argument("job_id", type=int)
+    p.add_argument("--verbose", action="store_true", help="list the skipped terms too")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_ats)
 
     p = sub.add_parser("sources", help="where jobs can come from, and what each needs")
     p.add_argument("--country", help="only providers covering this country, e.g. US or IN")

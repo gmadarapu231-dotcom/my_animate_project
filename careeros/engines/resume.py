@@ -235,12 +235,38 @@ class ResumeBuilder:
         headline: str | None,
         emphasise: Sequence[str],
     ) -> ResumeBlock:
-        """A summary built only from countable facts, never adjectives about fit."""
+        """A summary built only from countable facts, never adjectives about fit.
+
+        The emphasised skills are filtered to those the cited evidence's own
+        *words* yield. A match can be claimable on the strength of an evidence
+        row's declared skill ids, but the factuality checker re-derives
+        entities from text -- so naming a skill here that no bullet mentions
+        would fail the gate and block the résumé. Same standard, one place.
+        """
         titles = [e.role_title for e in evidence if e.role_title]
         current_title = headline or (titles[0] if titles else "Professional")
+
+        derivable = set()
+        for item in evidence:
+            derivable |= set(
+                self.scanner.scan(
+                    " ".join(
+                        filter(
+                            None,
+                            [
+                                item.text or "",
+                                " ".join(item.technologies or ()),
+                                item.role_title or "",
+                                item.project or "",
+                            ],
+                        )
+                    )
+                )
+            )
+        supported = [s for s in emphasise if s in derivable]
         top_skills = [
             self.taxonomy.skills[s].label
-            for s in emphasise
+            for s in supported
             if s in self.taxonomy.skills
         ][:4]
         employers = list(dict.fromkeys(e.employer for e in evidence if e.employer))
@@ -254,7 +280,7 @@ class ResumeBuilder:
         return ResumeBlock(
             text=text,
             evidence_ids=[e.id for e in evidence],
-            skills=list(emphasise[:6]),
+            skills=supported[:6],
             derived_numbers=[str(int(total_years)) if float(total_years).is_integer() else str(total_years),
                              str(len(employers))],
         )

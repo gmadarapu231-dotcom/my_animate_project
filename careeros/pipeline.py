@@ -37,6 +37,7 @@ from careeros.db.models import (
     User,
 )
 from careeros.engines.ats import AtsEngine, ResumeFacts
+from careeros.engines.ats_align import AtsAligner
 from careeros.engines.classifier import ClassificationResult, JobClassifier, SkillReq
 from careeros.engines.factuality import FactualityChecker
 from careeros.engines.matching import MatchResult, SkillMatcher
@@ -102,6 +103,7 @@ class Pipeline:
         self.classifier = JobClassifier(scanner=scanner, provider=self.provider)
         self.matcher = SkillMatcher(scanner=scanner)
         self.ats = AtsEngine(scanner=scanner)
+        self.aligner = AtsAligner(scanner=scanner)
         self.priority = PriorityEngine()
         self.resumes = ResumeBuilder(scanner=scanner, provider=self.provider)
         self.factuality = FactualityChecker(scanner=scanner)
@@ -395,13 +397,15 @@ class Pipeline:
         certifications: Sequence[str],
         education: Sequence[dict[str, Any]],
         stats: StageStats,
+        resume: ResumeDocument | None = None,
     ) -> AtsAssessment:
-        """Baseline ATS score for the *current* master resume.
+        """ATS score for one résumé against this posting's own keywords.
 
-        Scored before tailoring so the dashboard can show the lift tailoring
-        buys. A job-specific score is written again after a resume is tailored.
+        Called twice per job: once with the master résumé, which is the
+        baseline, and again by `tailor_for_job` with the tailored one -- so the
+        lift tailoring buys is a measured number rather than a claim.
         """
-        master = self.session.scalars(
+        master = resume or self.session.scalars(
             select(ResumeDocument).where(
                 ResumeDocument.user_id == user.id, ResumeDocument.kind == ResumeKind.MASTER.value
             ).order_by(ResumeDocument.version.desc())
@@ -526,6 +530,14 @@ class Pipeline:
             job_id=job.id,
             use_ai=use_ai,
         )
+        # ATS alignment: state the capabilities the evidence already supports
+        # in the posting's own words. It runs BEFORE the factuality gate, so
+        # anything it adds is re-derived and checked like any other claim.
+        alignment = self.aligner.align(
+            resume, evidence, classification.ats_keywords, apply=True
+        )
+        resume.notes.extend(alignment.notes)
+
         report = self.factuality.check(resume, evidence, certs, education)
         rendered = render_text(resume, load_contact(self.session, user))
 
@@ -566,6 +578,26 @@ class Pipeline:
                 summary=report.summary,
             )
         )
+
+        # Re-score against the posting now the résumé speaks its vocabulary.
+        # `_score_ats` wants certification *names*; `certs` here is the full
+        # records, which the résumé builder and factuality checker need.
+        ats_row = self._score_ats(
+            job,
+            classification,
+            user,
+            profile,
+            [c["name"] for c in certs],
+            education,
+            StageStats(),
+            resume=doc,
+        )
+        ats_row.suggestions = list(ats_row.suggestions or []) + alignment.notes
+        doc.tailoring_notes = list(doc.tailoring_notes or []) + [
+            f"ATS keyword coverage {alignment.coverage:g}% of "
+            f"{len(alignment.scored)} scored posting term(s)."
+        ]
+        self.session.flush()
         return doc, report
 
     def _storage_path(self, job: Job, track_id: int | None, version: int) -> str:

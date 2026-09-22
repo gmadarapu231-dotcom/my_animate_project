@@ -45,6 +45,7 @@ from careeros.apply.submit import Submission, submit
 from careeros.db.models import (
     Application,
     ApplicationEvent,
+    AtsAssessment,
     CoverLetter,
     EligibilityAssessment,
     EvidenceItem,
@@ -298,6 +299,9 @@ def _record(
         detail = f"Submitted via {result.tier} ({result.provider})"
         if result.reference:
             detail += f", reference {result.reference}"
+        coverage = (result.artifacts or {}).get("ats_keyword_match")
+        if coverage is not None:
+            detail += f", ATS keyword match {coverage}%"
     elif result.ok and result.dry_run:
         application.status = ApplicationStatus.APPLICATION_READY.value
         detail = f"Dry run: {result.message}"
@@ -454,6 +458,15 @@ def run_once(
                 CoverLetter.user_id == user.id, CoverLetter.job_id == job.id
             )
         ).first()
+        ats = (
+            session.scalars(
+                select(AtsAssessment).where(
+                    AtsAssessment.job_id == job.id, AtsAssessment.resume_id == resume.id
+                )
+            ).first()
+            if resume is not None
+            else None
+        )
         packet = build_packet(
             user=user,
             job=job,
@@ -461,6 +474,7 @@ def run_once(
             resume=resume,
             cover_letter=cover,
             eligibility=eligibility,
+            ats=ats,
         )
 
         try:

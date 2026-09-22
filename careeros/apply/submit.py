@@ -204,6 +204,9 @@ def submit_via_api(
         "fields": sorted(fields),
         "resume_filename": packet.resume_filename,
         "docs": spec.get("docs", ""),
+        "ats_overall": packet.ats_overall,
+        "ats_keyword_match": packet.ats_keyword_match,
+        "ats_missing": packet.ats_missing[:10],
     }
 
     if dry_run:
@@ -349,6 +352,9 @@ def submit_via_email(
         "subject": message["subject"],
         "body_characters": len(message["body"]),
         "attachment": packet.resume_filename,
+        "ats_overall": packet.ats_overall,
+        "ats_keyword_match": packet.ats_keyword_match,
+        "ats_missing": packet.ats_missing[:10],
     }
 
     if not message["to"]:
@@ -430,6 +436,9 @@ def prepare_assisted(packet: Packet) -> Submission:
             "cover_letter": bool(packet.cover_letter),
             "answers": [a.to_dict() for a in packet.answers],
             "unanswered": packet.unanswered,
+            "ats_overall": packet.ats_overall,
+            "ats_keyword_match": packet.ats_keyword_match,
+            "ats_missing": packet.ats_missing[:10],
         },
     )
 

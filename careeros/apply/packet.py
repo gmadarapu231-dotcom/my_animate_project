@@ -58,6 +58,14 @@ class Packet:
     unanswered: list[str] = field(default_factory=list)
     disclaimers: list[str] = field(default_factory=list)
 
+    #: How this résumé stands against this posting's own keywords. Recorded on
+    #: the packet so an application can be reviewed after the fact, and so a
+    #: low-coverage submission can be spotted without re-deriving anything.
+    ats_overall: float | None = None
+    ats_keyword_match: float | None = None
+    ats_matched: list[str] = field(default_factory=list)
+    ats_missing: list[str] = field(default_factory=list)
+
     @property
     def complete(self) -> bool:
         """Enough to submit without inventing anything."""
@@ -84,6 +92,12 @@ class Packet:
             "unanswered": self.unanswered,
             "disclaimers": self.disclaimers,
             "complete": self.complete,
+            "ats": {
+                "overall": self.ats_overall,
+                "keyword_match": self.ats_keyword_match,
+                "matched": self.ats_matched,
+                "missing": self.ats_missing,
+            },
         }
 
 
@@ -143,6 +157,7 @@ def build(
     resume: Any | None,
     cover_letter: Any | None = None,
     eligibility: Any | None = None,
+    ats: Any | None = None,
     extra_answers: dict[str, str] | None = None,
 ) -> Packet:
     """Everything the submission needs, and a list of what is still missing."""
@@ -206,5 +221,11 @@ def build(
         )
     if getattr(resume, "is_final", False) is False and resume is not None:
         packet.disclaimers.append("This résumé has not passed the factuality check.")
+
+    if ats is not None:
+        packet.ats_overall = getattr(ats, "overall", None)
+        packet.ats_keyword_match = getattr(ats, "keyword_match", None)
+        packet.ats_matched = list(getattr(ats, "matched_keywords", None) or [])
+        packet.ats_missing = list(getattr(ats, "missing_keywords", None) or [])
 
     return packet

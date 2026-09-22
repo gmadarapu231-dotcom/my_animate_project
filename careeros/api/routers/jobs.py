@@ -166,3 +166,106 @@ def search(
         "count": len(jobs),
         "jobs": [job_card(session, j, user.id) for j in jobs],
     }
+
+
+@router.get("/{job_id}/ats")
+def ats_report(
+    job_id: int,
+    session: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict[str, Any]:
+    """The posting's own keywords, and where the résumé stands on each.
+
+    Two scores where a tailored résumé exists: the baseline from the master
+    résumé and the tailored one, so the lift is a measured number. The keyword
+    verdicts say which terms the résumé carries, which were added in the
+    posting's wording because evidence supports them, and which are genuine
+    gaps that no amount of rewording can close.
+    """
+    from careeros.db.models import ResumeDocument
+    from careeros.engines.ats_align import AtsAligner, KeywordVerdict
+    from careeros.enums import ResumeKind
+    from careeros.services import load_evidence_records
+
+    job = session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    if job.classification is None:
+        raise HTTPException(409, "This job has not been classified yet. Run an assessment first.")
+
+    keywords = list(job.classification.ats_keywords or [])
+
+    rows = session.scalars(
+        select(AtsAssessment).where(AtsAssessment.job_id == job.id).order_by(AtsAssessment.id)
+    ).all()
+    tailored = session.scalars(
+        select(ResumeDocument)
+        .where(
+            ResumeDocument.user_id == user.id,
+            ResumeDocument.job_id == job.id,
+            ResumeDocument.kind == ResumeKind.TAILORED.value,
+        )
+        .order_by(ResumeDocument.version.desc())
+    ).first()
+
+    tailored_row = next((r for r in rows if tailored and r.resume_id == tailored.id), None)
+    baseline_row = next((r for r in rows if r is not tailored_row), None)
+
+    evidence = load_evidence_records(session, user.id)
+    plan = None
+    if tailored is not None:
+        from careeros.engines.resume import Resume, ResumeBlock, ResumeEntry, ResumeSection
+
+        # Re-decide against the stored résumé rather than re-tailoring: this is
+        # a report, and it must describe the document that would actually go out.
+        rebuilt = Resume(name=tailored.name, kind=ResumeKind.TAILORED)
+        for section in tailored.sections or []:
+            rebuilt.sections.append(
+                ResumeSection(
+                    name=section.get("name", ""),
+                    kind=section.get("kind", ""),
+                    entries=[
+                        ResumeEntry(
+                            heading=entry.get("heading"),
+                            subheading=entry.get("subheading"),
+                            meta=entry.get("meta"),
+                            blocks=[
+                                ResumeBlock(
+                                    text=block.get("text", ""),
+                                    evidence_ids=list(block.get("evidence_ids") or []),
+                                )
+                                for block in entry.get("blocks") or []
+                            ],
+                        )
+                        for entry in section.get("entries") or []
+                    ],
+                )
+            )
+        plan = AtsAligner().align(rebuilt, evidence, keywords, apply=False).to_dict()
+
+    lift = None
+    if baseline_row and tailored_row:
+        lift = {
+            "overall": round(tailored_row.overall - baseline_row.overall, 1),
+            "keyword_match": round(tailored_row.keyword_match - baseline_row.keyword_match, 1),
+        }
+
+    return {
+        "job_id": job.id,
+        "title": job.title,
+        "company": job.company,
+        "keywords_from_posting": keywords,
+        "keyword_count": len(keywords),
+        "baseline": ats_view(baseline_row),
+        "tailored": ats_view(tailored_row),
+        "lift": lift,
+        "resume_id": tailored.id if tailored else None,
+        "resume_is_final": bool(tailored.is_final) if tailored else None,
+        "alignment": plan,
+        "how_it_works": (
+            "Keywords come from this posting, not from an industry list. A term is only "
+            "added to the résumé when your own evidence already supports the capability it "
+            "names — the claim never changes, only the wording. Terms nothing supports are "
+            "reported as gaps and left off."
+        ),
+    }
