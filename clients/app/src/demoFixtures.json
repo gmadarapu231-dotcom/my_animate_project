@@ -11271,9 +11271,9 @@
   ]
  },
  "autopilotRun": {
-  "started_at": "2026-09-22T03:29:09.777142+00:00",
-  "finished_at": "2026-09-22T03:29:11.533404+00:00",
-  "duration_seconds": 1.8,
+  "started_at": "2026-09-22T03:45:29.624154+00:00",
+  "finished_at": "2026-09-22T03:45:31.947802+00:00",
+  "duration_seconds": 2.3,
   "policy": {
    "enabled": true,
    "dry_run": true,
@@ -11340,7 +11340,21 @@
        "phone"
       ],
       "resume_filename": "priya-raman-senior-network-security-engineer.txt",
-      "docs": "https://developers.greenhouse.io/job-board.html#submit-an-application"
+      "docs": "https://developers.greenhouse.io/job-board.html#submit-an-application",
+      "ats_overall": 77.0,
+      "ats_keyword_match": 42.1,
+      "ats_missing": [
+       "incident response",
+       "administration palo alto",
+       "alto or cisco",
+       "asa and cisco",
+       "bachelor s degree",
+       "deep hands-on bgp",
+       "firewall administration palo",
+       "hands-on bgp ospf",
+       "ospf and vlan",
+       "trust and microsegmentation"
+      ]
      },
      "submitted_at": null
     }
@@ -11367,7 +11381,21 @@
       "to": "careers@halden.example.com",
       "subject": "Application: Senior SAP Security Consultant — Halden Consulting",
       "body_characters": 336,
-      "attachment": "priya-raman-senior-sap-security-consultant.txt"
+      "attachment": "priya-raman-senior-sap-security-consultant.txt",
+      "ats_overall": 32.1,
+      "ats_keyword_match": 3.2,
+      "ats_missing": [
+       "sap",
+       "composite roles",
+       "sap grc access control",
+       "sap security",
+       "firefighter",
+       "segregation of duties",
+       "sap security consultant",
+       "senior sap security",
+       "access management configuration",
+       "design derived roles"
+      ]
      },
      "submitted_at": null
     }
@@ -11469,5 +11497,501 @@
    }
   ],
   "errors": []
+ },
+ "atsReport": {
+  "job": "Senior Network Security Engineer — Cobalt Bank",
+  "keyword_count": 40,
+  "keywords_from_posting": [
+   "palo alto",
+   "network security engineer",
+   "senior network security",
+   "microsegmentation",
+   "ospf",
+   "cisco",
+   "incident response",
+   "zero trust",
+   "administration palo alto",
+   "alto or cisco",
+   "asa and cisco",
+   "bachelor s degree",
+   "deep hands-on bgp",
+   "firewall administration palo",
+   "hands-on bgp ospf",
+   "ospf and vlan",
+   "trust and microsegmentation",
+   "sd-wan",
+   "siem",
+   "splunk",
+   "roadmap",
+   "soc",
+   "cisco asa",
+   "cisco ise"
+  ],
+  "baseline": {
+   "overall": 58.8,
+   "keyword_match": 28.0
+  },
+  "tailored": {
+   "overall": 77.0,
+   "keyword_match": 42.1
+  },
+  "lift": {
+   "overall": 18.2,
+   "keyword_match": 14.1
+  },
+  "alignment": {
+   "coverage": 69.6,
+   "counts": {
+    "present": 14,
+    "aligned": 2,
+    "unsupported": 7,
+    "fragment": 12,
+    "not_a_claim": 5
+   },
+   "added": [
+    "administration palo alto"
+   ],
+   "gaps": [
+    "incident response",
+    "siem",
+    "roadmap",
+    "network engineering",
+    "security focus",
+    "siem familiarity",
+    "data centre networks"
+   ],
+   "notes": [
+    "1 term(s) would be added from the posting's own wording: administration palo alto.",
+    "7 posting term(s) left off because nothing in your evidence supports them: incident response, siem, roadmap, network engineering, security focus, siem familiarity, data centre networks",
+    "5 posting term(s) are requirements rather than capabilities and are not scored against the résumé.",
+    "12 extracted phrase(s) were n-gram artifacts, not real terms, and are excluded from both the résumé and the score."
+   ],
+   "decisions": [
+    {
+     "keyword": "palo alto",
+     "verdict": "present",
+     "rank": 0,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "palo alto",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "network security engineer",
+     "verdict": "present",
+     "rank": 1,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "network security engineer",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "senior network security",
+     "verdict": "present",
+     "rank": 2,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "senior network security",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "microsegmentation",
+     "verdict": "present",
+     "rank": 3,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "microsegmentation",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "ospf",
+     "verdict": "present",
+     "rank": 4,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "ospf",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "cisco",
+     "verdict": "present",
+     "rank": 5,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "cisco",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "incident response",
+     "verdict": "unsupported",
+     "rank": 6,
+     "skill_id": "incident_response",
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "these words would claim incident_response, which your evidence does not support. Left off rather than typed in — the fix is the experience, not the word."
+    },
+    {
+     "keyword": "zero trust",
+     "verdict": "present",
+     "rank": 7,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "zero trust",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "administration palo alto",
+     "verdict": "aligned",
+     "rank": 8,
+     "skill_id": "network_security",
+     "evidence_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      13,
+      14,
+      15,
+      16
+     ],
+     "surface_in_resume": null,
+     "presentation": "administration palo alto",
+     "note": "your evidence supports network_security; adding the posting's wording (also covers: firewall administration palo)"
+    },
+    {
+     "keyword": "alto or cisco",
+     "verdict": "fragment",
+     "rank": 9,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "asa and cisco",
+     "verdict": "fragment",
+     "rank": 10,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "bachelor s degree",
+     "verdict": "not_a_claim",
+     "rank": 11,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "Education, work authorization and clearance are stated from your own records, never by matching a phrase."
+    },
+    {
+     "keyword": "deep hands-on bgp",
+     "verdict": "fragment",
+     "rank": 12,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "firewall administration palo",
+     "verdict": "aligned",
+     "rank": 13,
+     "skill_id": "network_security",
+     "evidence_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      13,
+      14,
+      15,
+      16
+     ],
+     "surface_in_resume": null,
+     "presentation": "administration palo alto",
+     "note": "your evidence supports network_security; adding the posting's wording"
+    },
+    {
+     "keyword": "hands-on bgp ospf",
+     "verdict": "fragment",
+     "rank": 14,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "ospf and vlan",
+     "verdict": "fragment",
+     "rank": 15,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "trust and microsegmentation",
+     "verdict": "fragment",
+     "rank": 16,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "sd-wan",
+     "verdict": "present",
+     "rank": 17,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "sd-wan",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "siem",
+     "verdict": "unsupported",
+     "rank": 18,
+     "skill_id": "siem",
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "these words would claim siem, which your evidence does not support. Left off rather than typed in — the fix is the experience, not the word."
+    },
+    {
+     "keyword": "splunk",
+     "verdict": "present",
+     "rank": 19,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "splunk",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "roadmap",
+     "verdict": "unsupported",
+     "rank": 20,
+     "skill_id": "product_strategy",
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "these words would claim product_strategy, which your evidence does not support. Left off rather than typed in — the fix is the experience, not the word."
+    },
+    {
+     "keyword": "soc",
+     "verdict": "present",
+     "rank": 21,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "soc",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "cisco asa",
+     "verdict": "present",
+     "rank": 22,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "cisco asa",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "cisco ise",
+     "verdict": "present",
+     "rank": 23,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "cisco ise",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "network engineering",
+     "verdict": "unsupported",
+     "rank": 24,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "no evidence supports this. It is left off rather than typed in — the fix is the experience, not the word."
+    },
+    {
+     "keyword": "security focus",
+     "verdict": "unsupported",
+     "rank": 25,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "no evidence supports this. It is left off rather than typed in — the fix is the experience, not the word."
+    },
+    {
+     "keyword": "technical field",
+     "verdict": "not_a_claim",
+     "rank": 26,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "requirement grammar, not a capability"
+    },
+    {
+     "keyword": "vlan design",
+     "verdict": "present",
+     "rank": 27,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "vlan design",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "ccnp or cissp",
+     "verdict": "fragment",
+     "rank": 28,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "sponsor and transfer",
+     "verdict": "not_a_claim",
+     "rank": 29,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "Education, work authorization and clearance are stated from your own records, never by matching a phrase."
+    },
+    {
+     "keyword": "transfer h1b visas",
+     "verdict": "not_a_claim",
+     "rank": 30,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "Education, work authorization and clearance are stated from your own records, never by matching a phrase."
+    },
+    {
+     "keyword": "visas for exceptional",
+     "verdict": "fragment",
+     "rank": 31,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "exceptional candidates.",
+     "verdict": "not_a_claim",
+     "rank": 32,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "requirement grammar, not a capability"
+    },
+    {
+     "keyword": "sd-wan migration",
+     "verdict": "present",
+     "rank": 33,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": "sd-wan migration",
+     "presentation": null,
+     "note": "already in the résumé as the posting words it"
+    },
+    {
+     "keyword": "siem familiarity",
+     "verdict": "unsupported",
+     "rank": 34,
+     "skill_id": "siem",
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "these words would claim siem, which your evidence does not support. Left off rather than typed in — the fix is the experience, not the word."
+    },
+    {
+     "keyword": "bank s zero",
+     "verdict": "fragment",
+     "rank": 35,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "branch and data",
+     "verdict": "fragment",
+     "rank": 36,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "connectivity for branch",
+     "verdict": "fragment",
+     "rank": 37,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    },
+    {
+     "keyword": "data centre networks",
+     "verdict": "unsupported",
+     "rank": 38,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "no evidence supports this. It is left off rather than typed in — the fix is the experience, not the word."
+    },
+    {
+     "keyword": "drive the bank",
+     "verdict": "fragment",
+     "rank": 39,
+     "skill_id": null,
+     "evidence_ids": [],
+     "surface_in_resume": null,
+     "presentation": null,
+     "note": "an n-gram that ran across a phrase boundary. Not scored, and never added -- it would read as gibberish to whoever opens the résumé."
+    }
+   ]
+  }
  }
 }

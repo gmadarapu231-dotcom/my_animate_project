@@ -617,9 +617,59 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
   </div>
 </section>
 
+<section class="band" id="ats">
+  <div class="wrap">
+    <p class="eyebrow dark">07 — Getting past the screen</p>
+    <h2 class="sec">Their words for your experience. Not their words for someone else's.</h2>
+    <div class="split">
+      <div>
+        <p class="body prose">ATS screening is substring matching. Two résumés describing identical
+          work score differently because one wrote <span class="inline">microsegmentation</span> and
+          the posting wrote <span class="inline">micro-segmentation</span>. Closing that gap is
+          legitimate, and it is the only thing this does.</p>
+        <p class="body prose">The keywords come from <strong>that posting's own text</strong> — there
+          is no industry list anywhere in the repository, which is why a veterinary role and a
+          quantitative trading role are both scored properly. Every term then gets one of five
+          verdicts, and only one of them results in anything being written.</p>
+        <p class="body prose">The rule is narrow and absolute: <strong>a term is added only when your
+          evidence already supports the capability it names.</strong> The claim never changes, only
+          the wording. A term nothing supports is reported as a gap and left off — the honest answer
+          to a missing keyword is to get that experience, not to type the word.</p>
+        <p class="body prose">Only the skills index gains vocabulary. Bullets are left alone: a bullet
+          is a specific claim about something you did, and rewording it risks changing what it says.</p>
+      </div>
+      <div>
+        <div class="note">
+          <h4 id="atsHead">Measured on one posting</h4>
+          <div class="tw"><table id="atsScoreTable"></table></div>
+          <p style="margin-top:12px" id="atsCoverage"></p>
+        </div>
+        <div class="note" style="margin-top:14px">
+          <h4>What happened to each term</h4>
+          <div class="tw"><table id="verdictTable"></table></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:26px">
+      <h4>The alignment runs before the factuality gate — on purpose</h4>
+      <p>Anything it adds is re-derived from the finished text and checked against evidence like any
+        other claim, so a mistake fails the résumé rather than shipping. That paid for itself twice
+        while this was being built: the gate caught the aligner trusting a skill id the checker
+        cannot re-derive from words, and then caught a subtler one — a phrase's printed words can
+        claim <em>more</em> than the phrase resolves to. “ospf troubleshooting” yields both
+        <span class="inline">network_monitoring</span> and <span class="inline">routing_switching</span>,
+        and only the first was being verified.</p>
+      <p>Both now apply exactly the gate's standard: every skill the printed words yield must be
+        supported. Which then surfaced the same class of bug one layer up, in a summary line that
+        had been emphasising skills no bullet mentions.</p>
+    </div>
+  </div>
+</section>
+
 <section class="band" id="evidence">
   <div class="wrap">
-    <p class="eyebrow dark">07 — Evidence</p>
+    <p class="eyebrow dark">08 — Evidence</p>
     <h2 class="sec">A résumé is a query over verified facts.</h2>
     <div class="split">
       <div>
@@ -648,7 +698,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="auth">
   <div class="wrap">
-    <p class="eyebrow dark">08 — Authorization</p>
+    <p class="eyebrow dark">09 — Authorization</p>
     <h2 class="sec">Silence is never read as a yes.</h2>
     <div class="split">
       <div>
@@ -680,7 +730,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="domains">
   <div class="wrap">
-    <p class="eyebrow dark">09 — Coverage</p>
+    <p class="eyebrow dark">10 — Coverage</p>
     <h2 class="sec">No job category is written into the code.</h2>
     <div class="split">
       <div>
@@ -707,7 +757,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="limits">
   <div class="wrap">
-    <p class="eyebrow dark">10 — Limits</p>
+    <p class="eyebrow dark">11 — Limits</p>
     <h2 class="sec">The safest tool is the one that does not exist.</h2>
     <p class="body prose">The agent is not restricted from these actions by a prompt or a policy check.
       The tools were never built, so there is nothing to jailbreak. Every registry build asserts the list
@@ -721,7 +771,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="run">
   <div class="wrap">
-    <p class="eyebrow dark">11 — Running it</p>
+    <p class="eyebrow dark">12 — Running it</p>
     <h2 class="sec">The demo is frozen. The system is not.</h2>
     <p class="body prose">Everything above is captured output. To run the real thing — live job sources,
       a real agent loop, Gmail drafts that wait for your approval — clone the repository and start the
@@ -888,6 +938,43 @@ cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
     `<thead><tr><th class="n">Jobs</th><th>Reason it stopped</th></tr></thead><tbody>` +
     Object.entries(run.blocked_by).map(([reason, count]) => `<tr>
       <td class="n mono">${count}</td><td class="muted">${esc(reason)}</td></tr>`).join("") + `</tbody>`;
+
+  /* --- ATS ------------------------------------------------------------- */
+  const ats = F.atsReport;
+  document.getElementById("atsHead").textContent =
+    `${ats.keyword_count} keywords from one posting`;
+  document.getElementById("atsScoreTable").innerHTML =
+    `<thead><tr><th>Résumé</th><th class="n">ATS</th><th class="n">Keyword match</th></tr></thead><tbody>` +
+    [
+      ["Master", ats.baseline],
+      ["Tailored for this posting", ats.tailored],
+    ].map(([label, row]) => `<tr><td>${esc(label)}</td>
+      <td class="n mono">${row ? row.overall : "—"}</td>
+      <td class="n mono">${row ? row.keyword_match + "%" : "—"}</td></tr>`).join("") +
+    (ats.lift ? `<tr><td><b>Lift</b></td>
+      <td class="n mono" style="color:var(--ok)">+${ats.lift.overall}</td>
+      <td class="n mono" style="color:var(--ok)">+${ats.lift.keyword_match}%</td></tr>` : "") +
+    `</tbody>`;
+  document.getElementById("atsCoverage").innerHTML =
+    `<span class="small muted">Coverage ${ats.alignment.coverage}% of the terms a real ATS would ` +
+    `match on. Added in the posting's wording: </span>` +
+    (ats.alignment.added.length
+      ? ats.alignment.added.map((t) => `<span class="chip dom">${esc(t)}</span>`).join(" ")
+      : `<span class="small muted">nothing — the draft already said it all.</span>`);
+
+  const VERDICTS = [
+    ["present", "Already in your résumé", "ok", "nothing to do"],
+    ["aligned", "Added in the posting's wording", "dom", "evidence supports it"],
+    ["unsupported", "Left off as a gap", "bad", "nothing supports it"],
+    ["fragment", "n-gram artifact", "", "not scored, never written"],
+    ["not_a_claim", "A requirement, not a capability", "", "degree, visa, boilerplate"],
+  ];
+  document.getElementById("verdictTable").innerHTML =
+    `<thead><tr><th>Verdict</th><th class="n">Terms</th><th>Meaning</th></tr></thead><tbody>` +
+    VERDICTS.map(([key, label, tone, meaning]) => `<tr>
+      <td><span class="chip ${tone}">${esc(label)}</span></td>
+      <td class="n mono">${ats.alignment.counts[key] || 0}</td>
+      <td class="muted">${esc(meaning)}</td></tr>`).join("") + `</tbody>`;
 
   document.getElementById("withheldHead").textContent =
     `Withheld capabilities — ${t.withheld_capabilities.length} of them`;
