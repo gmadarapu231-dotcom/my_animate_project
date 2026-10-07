@@ -1,0 +1,129 @@
+# How the platform earns, and the one model it must not use.
+#
+# ---------------------------------------------------------------------------
+# A PERCENTAGE OF THE REFUND IS NOT AVAILABLE. This is not a product choice.
+#
+# Treasury Circular 230, section 10.27(b)(1): a practitioner may not charge a
+# contingent fee for preparing an original tax return. Section 10.27(c)(1)
+# defines a contingent fee to include "a fee that is based on a percentage of
+# the refund reported on a return". Several states ban it outright on top of
+# that, and it is a standing enforcement priority because it gives the
+# preparer a direct financial interest in overstating the refund.
+#
+# The penalty is not a fine. It is suspension or disbarment from practice
+# before the IRS, which ends the firm, and it attaches to the individual
+# practitioner's PTIN as well as the business.
+#
+# So `refund_percentage` below is listed only to be refused, with that
+# explanation, if anyone ever tries to configure it. The engine raises.
+# ---------------------------------------------------------------------------
+#
+# What IS allowed, and what this file configures:
+#
+#   * A fee set by how much WORK the return takes -- forms, schedules, states.
+#     That is `fees.yaml`, and it is the main event.
+#   * A fee banded by INCOME. Permitted because income measures complexity and
+#     ability to pay, not the outcome of the return. Already in fees.yaml.
+#   * A flat platform fee per return, for white-labelling to other preparers.
+#   * A share of the preparation fee the preparer charges, which is a
+#     commercial arrangement between two businesses and touches no refund.
+#   * A subscription, per seat or per firm.
+#
+# Every one of these is knowable before the work starts, which is the actual
+# test a client cares about: they are told the price up front and it does not
+# move with their refund.
+as_of: "2026-01-01"
+currency: USD
+
+#: The model this deployment uses. One of the keys under `models`.
+active: per_return
+
+models:
+  per_return:
+    label: "Per return"
+    description: >-
+      A flat platform fee for each return prepared through the system, charged
+      to the firm, not to the taxpayer. The firm sets its own client price in
+      fees.yaml and keeps the difference.
+    amount: 12.00
+    # Volume breaks, so a firm doing a season's work is not paying retail.
+    volume_breaks:
+      - {from_returns: 0, amount: 12.00}
+      - {from_returns: 250, amount: 9.00}
+      - {from_returns: 1000, amount: 7.00}
+      - {from_returns: 5000, amount: 5.00}
+    billed_to: firm
+
+  revenue_share:
+    label: "Share of the preparation fee"
+    description: >-
+      A percentage of what the preparer charges their client. Touches no
+      refund: it is a share of a fee that was fixed before the return was
+      worked out. Suited to white-labelling, where the platform carries the
+      software and the firm carries the client relationship.
+    rate: 0.15
+    minimum: 8.00
+    maximum: 150.00
+    billed_to: firm
+
+  subscription:
+    label: "Subscription"
+    description: >-
+      A monthly fee per preparer seat, with returns included. Most
+      predictable for a firm with steady volume, and it removes any
+      per-return incentive entirely.
+    monthly_per_seat: 149.00
+    annual_per_seat: 1490.00
+    included_returns_per_seat: 150
+    overage_per_return: 6.00
+    billed_to: firm
+
+  refund_percentage:
+    label: "Percentage of the refund"
+    allowed: false
+    refusal: >-
+      A fee based on a percentage of the refund is a contingent fee for
+      preparing an original return, prohibited by Circular 230 section
+      10.27(b)(1), with "a percentage of the refund" named explicitly in
+      10.27(c)(1). The sanction is suspension or disbarment from practice
+      before the IRS, against the individual practitioner as well as the firm.
+      It is also banned outright by several states.
+      The reason behind the rule is the reason not to want it: being paid more
+      when the refund is larger gives the preparer an interest in a larger
+      refund, which is exactly the interest a client is trusting them not to
+      have.
+    instead: >-
+      Charge by the work the return takes -- that is what fees.yaml already
+      does, from $30 for a single W-2 to $550 for a return with a business,
+      rentals or multiple states, banded by income on top. On a $4,000 refund
+      a 15% cut would be $600; the complexity fee for the kind of return that
+      produces a $4,000 refund is usually more than that, arrives whether the
+      return refunds or not, and can be quoted before any work starts.
+
+# Taking the fee OUT of the refund is a separate question from how it is
+# calculated, and the answer is also no.
+deduct_from_refund:
+  allowed: false
+  refusal: >-
+    Deducting a preparation fee from a client's refund means the refund is
+    paid to an account the firm controls before the client gets it. That is a
+    refund transfer, it needs a bank partner and state money transmitter
+    licensing, and it is the mechanism behind most of the fee complaints the
+    IRS receives. This system never touches a refund: the IRS pays the client
+    directly, and the fee is collected separately.
+  instead: >-
+    Collect the fee before the return is filed, by Zelle or card. The client
+    keeps their whole refund and the firm is not holding anyone's money.
+
+disclosure:
+  # What a client must be able to see, and where. A price nobody can find
+  # before the work starts is not a quoted price.
+  before_work_starts:
+    - "The full fee, itemised by what drives it."
+    - "That the fee does not change with the size of the refund."
+    - "That nothing is taken out of the refund."
+    - "That the fee is due whether the return refunds or owes."
+  on_every_quote: >-
+    This price is set by the work your return takes, not by your refund. It
+    is the same whether you get money back or owe. Nothing is deducted from
+    your refund -- the IRS pays you directly.

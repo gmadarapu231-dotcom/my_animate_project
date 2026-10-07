@@ -313,6 +313,134 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_agent(args: argparse.Namespace) -> int:
+    """Run the agent against a sandbox scenario, or real files on disk."""
+    from taxvault.agent import Document, run_agent, sample_bundle
+    from taxvault.agent.sandbox import SCENARIOS, SandboxUnavailable
+
+    if args.list:
+        for scenario in SCENARIOS.values():
+            print(f"{scenario.key:<14} {scenario.label}")
+            for line in textwrap.wrap(scenario.description, 62):
+                print(f"               {line}")
+            print(f"               expect: {scenario.expect}")
+            print()
+        return 0
+
+    name = args.taxpayer
+    if args.files:
+        documents = []
+        for path in args.files:
+            blob = Path(path).read_bytes()
+            kind = "application/pdf" if blob[:5] == b"%PDF-" else "text/plain"
+            documents.append(Document(filename=Path(path).name,
+                                      content_type=kind, blob=blob))
+        status, state = args.filing_status, args.state
+        situation = {"age": args.age}
+    else:
+        try:
+            scenario, documents = sample_bundle(args.scenario, year=args.year)
+        except SandboxUnavailable as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        name = name or scenario.taxpayer_name
+        status, state = scenario.filing_status, scenario.resident_state
+        situation = dict(scenario.situation)
+        print(f"scenario: {scenario.label}")
+        print(f"expect:   {scenario.expect}")
+        print()
+
+    run = run_agent(
+        documents, tax_year=args.year, taxpayer_name=name or "",
+        filing_status=status, resident_state=state, situation=situation,
+        returns_this_period=args.returns,
+        answered={q for q in (args.answered or [])},
+        client_reviewed=args.signed, client_signed_8879=args.signed,
+        preparer_ptin=args.ptin,
+    )
+
+    print(f"{'STATE':<12} {run.state}   confidence {run.confidence:.0%}"
+          f"   {run.elapsed_ms}ms")
+    print()
+    print("steps")
+    for step in run.steps:
+        print(f"  {step.status:<8} {step.name:<10} {step.detail}")
+        if args.verbose:
+            for finding in step.findings:
+                for line in textwrap.wrap(finding, 68):
+                    print(f"                       {line}")
+    print()
+
+    print("documents")
+    for document in run.documents:
+        kinds = ", ".join(k.replace("_", "-").upper() for k in document["kinds"])
+        print(f"  {document['filename']:<28} {kinds or document.get('reason', '-')}")
+    print()
+
+    if run.estimate:
+        federal = run.estimate["federal"]
+        totals = run.estimate["totals"]
+        print("return")
+        for label, key in (("AGI", "agi"), ("deduction", "deduction_taken"),
+                           ("taxable income", "taxable_income")):
+            print(f"  {label:<20} {float(federal[key]):>14,.2f}")
+        print(f"  {'federal tax':<20} {float(federal['total_tax']):>14,.2f}")
+        print(f"  {'federal withheld':<20} {float(federal['total_payments']):>14,.2f}")
+        for row in run.estimate.get("states", []):
+            print(f"  {(row['name'] + ' tax'):<20} {float(row['tax']):>14,.2f}")
+            print(f"  {(row['code'] + ' withheld'):<20} {float(row['withheld']):>14,.2f}")
+        # Federal and state together, which is the number a client cares about
+        # and the one the headline quotes. Printing only the federal line beside
+        # a combined headline reads like an arithmetic error.
+        balance = float(totals["total_balance"])
+        print(f"  {'refund' if balance < 0 else 'TO PAY':<20} {abs(balance):>14,.2f}"
+              "   federal and state together")
+        if run.estimate.get("baseline"):
+            saving = float(run.estimate["saving_against_baseline"])
+            if saving:
+                print(f"  (planning mode: {saving:,.2f} better than filing as-is)")
+        print()
+
+    open_questions = run.open_questions
+    if open_questions:
+        print(f"questions ({len(open_questions)})")
+        for item in open_questions:
+            tag = item.severity.upper()
+            print(f"  [{tag}] {item.question}")
+            for line in textwrap.wrap(item.why, 66):
+                print(f"         {line}")
+            if item.moves:
+                print(f"         moves: {item.moves}")
+            if item.field:
+                print(f"         answer with --answered {item.field}")
+            print()
+
+    if run.client_fee:
+        print("price")
+        print(f"  client            {float(run.client_fee['total']):>14,.2f}"
+              f"   {run.client_fee['tier_label']}")
+        print(f"  platform          {float(run.platform_fee['amount']):>14,.2f}"
+              f"   {run.platform_fee['label']}")
+        print("  The fee is set by the work the return takes, not by the refund.")
+        print()
+
+    print("before this can be filed")
+    for requirement in run.gate.requirements:
+        mark = "done" if requirement["met"] else "OPEN"
+        note = "" if requirement["satisfiable_in_software"] else "   <- not software"
+        print(f"  [{mark}] {requirement['label']}{note}")
+    print()
+    if not run.gate.can_transmit:
+        blocked = [r for r in run.gate.outstanding
+                   if not r["satisfiable_in_software"]]
+        if blocked:
+            print("This return cannot be transmitted from here:")
+            for requirement in blocked:
+                for line in textwrap.wrap(requirement["detail"], 72):
+                    print(f"  {line}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="taxvault",
@@ -365,6 +493,27 @@ def main(argv: list[str] | None = None) -> int:
     read.add_argument("--dump", action="store_true",
                       help="also print every line with its position on the page")
     read.set_defaults(func=cmd_read_w2)
+
+    agent = sub.add_parser(
+        "agent", help="run the agent on a sandbox scenario or your own files")
+    agent.add_argument("scenario", nargs="?", default="investor",
+                       help="sandbox scenario (see --list)")
+    agent.add_argument("--list", action="store_true", help="list the scenarios")
+    agent.add_argument("--files", nargs="*", help="run on real files instead")
+    agent.add_argument("--year", type=int, default=None, help="tax year")
+    agent.add_argument("--taxpayer", default="", help="the registered name")
+    agent.add_argument("--filing-status", default="single")
+    agent.add_argument("--state", default="", help="resident state code")
+    agent.add_argument("--age", type=int, default=40)
+    agent.add_argument("--returns", type=int, default=0,
+                       help="returns filed this period, for volume pricing")
+    agent.add_argument("--answered", nargs="*", default=[],
+                       help="question fields the client has answered")
+    agent.add_argument("--signed", action="store_true",
+                       help="treat the client as having reviewed and signed Form 8879")
+    agent.add_argument("--ptin", default="", help="the preparer's PTIN")
+    agent.add_argument("-v", "--verbose", action="store_true")
+    agent.set_defaults(func=cmd_agent)
 
     sub.add_parser("newkey", help="generate a master encryption key").set_defaults(
         func=cmd_newkey)

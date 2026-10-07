@@ -585,7 +585,12 @@ async def add_form_file(
         )
 
     extraction = extract_text(blob, content_type, upload.filename or "")
-    body_text = pair_orphan_amounts(extraction.text or "")
+    # The raw text, NOT `pair_orphan_amounts`. That function is a W-2-only
+    # repair for extractions that came back scrambled: it returns "" for
+    # anything that does not look like a W-2, and it rewrites good text into
+    # box-numbered lines. Running it here discarded every readable 1099 and
+    # 1098 and reported them as unreadable.
+    body_text = extraction.text or ""
     if not extraction.readable or not body_text.strip():
         raise HTTPException(
             status_code=422,

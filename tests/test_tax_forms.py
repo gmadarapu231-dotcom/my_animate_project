@@ -326,3 +326,55 @@ def test_the_same_return_can_be_worked_out_on_either_year_s_law(client):
         got[year] = response.json()["federal"]["mortgage"]["mortgage_insurance_deduction"]
     assert got[2025] == "0"
     assert got[2026] == "1800.00"
+
+
+def test_a_1098_pdf_upload_is_read(client):
+    """A regression: every non-W-2 PDF came back "no text could be read".
+
+    The file route ran `pair_orphan_amounts` on the extracted text. That
+    function is a W-2-only repair for scrambled extractions -- it returns ""
+    for anything that is not a W-2 -- so a perfectly readable 1098 or 1099 PDF
+    was discarded and reported as unreadable. The text route did not call it,
+    which is why the first round of tests missed this entirely.
+    """
+    reportlab = pytest.importorskip("reportlab")
+    from tests.test_tax_journey import auth
+
+    from taxvault.agent.sandbox import f1098_pdf
+
+    token = _ready(client)
+    blob = f1098_pdf(lender="Cascade Mutual Bank", year=2026, interest=18432.55,
+                     principal=612000, origination="03/14/2016", insurance=1860)
+    response = client.post(
+        "/api/documents/form/file",
+        files={"upload": ("1098.pdf", blob, "application/pdf")},
+        data={"tax_year": "2026"},
+        headers=auth(token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["kinds"] == ["1098"]
+    payload = body["documents"][0]["payload"]
+    assert payload["mortgage_interest"] == "18432.55"
+    assert payload["best_origination"] == "2016-03-14"
+
+
+def test_a_1099r_pdf_upload_is_read(client):
+    reportlab = pytest.importorskip("reportlab")
+    from tests.test_tax_journey import auth
+
+    from taxvault.agent.sandbox import f1099r_pdf
+
+    token = _ready(client)
+    blob = f1099r_pdf(payer="Harbour Retirement", year=2026, gross=38000,
+                      taxable=38000, code="1", withheld=7600, not_determined=True)
+    response = client.post(
+        "/api/documents/form/file",
+        files={"upload": ("1099r.pdf", blob, "application/pdf")},
+        data={"tax_year": "2026"},
+        headers=auth(token),
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()["documents"][0]["payload"]
+    assert payload["gross_distribution"] == "38000.00"
+    assert payload["distribution_code"] == "1"

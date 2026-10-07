@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from taxvault.api.routers import (
+    agent,
     auth,
     billing,
     documents,
@@ -60,6 +61,7 @@ app = FastAPI(
 install_security(app)
 
 app.include_router(auth.router)
+app.include_router(agent.router)
 app.include_router(reference.router)
 app.include_router(documents.router)
 app.include_router(estimates.router)
