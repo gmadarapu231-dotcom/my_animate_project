@@ -181,6 +181,47 @@ deductions:
   car_loan_interest_cap: 10000
   car_loan_phase_out: {single: 100000, married_jointly: 200000}
 
+# Premium Tax Credit (Form 8962), reconciling a marketplace subsidy.
+#
+# 2025 is the LAST year of the enhanced subsidies from the American Rescue
+# Plan, extended by the Inflation Reduction Act through 2025. Two things make
+# this year different from 2026 and they both favour the client:
+#
+#   * The applicable percentage runs from 0% to 8.5%, so a household under
+#     150% of the poverty line contributes nothing towards the benchmark plan.
+#   * There is NO 400% cliff. Above 400% of the poverty line a household still
+#     gets a credit, capped at 8.5% of income.
+#
+# Both of those lapse for 2026. A client at 420% of the poverty line keeps a
+# credit this year and loses all of it next year, which is worth saying out
+# loud while there is still time to do something about it.
+#
+# The poverty line used is the PRIOR year's: 2024 guidelines for 2025 coverage.
+premium_tax_credit:
+  enhanced_subsidies: true
+  income_cap_fpl: 0            # 0 means no cliff
+  # Required contribution as a share of household income, by income as a
+  # percentage of the federal poverty line. Interpolated within each band.
+  applicable_percentage:
+    - {fpl_from: 0,   fpl_to: 150, rate_from: 0.0,   rate_to: 0.0}
+    - {fpl_from: 150, fpl_to: 200, rate_from: 0.0,   rate_to: 0.02}
+    - {fpl_from: 200, fpl_to: 250, rate_from: 0.02,  rate_to: 0.04}
+    - {fpl_from: 250, fpl_to: 300, rate_from: 0.04,  rate_to: 0.06}
+    - {fpl_from: 300, fpl_to: 400, rate_from: 0.06,  rate_to: 0.085}
+    - {fpl_from: 400, fpl_to: null, rate_from: 0.085, rate_to: 0.085}
+  # Federal poverty line, 2024 guidelines (used for 2025 coverage).
+  poverty_line:
+    contiguous: {first_person: 15060, each_additional: 5380}
+    alaska:     {first_person: 18810, each_additional: 6730}
+    hawaii:     {first_person: 17310, each_additional: 6190}
+  # How much of an overpaid advance credit has to be repaid. Above 400% of the
+  # poverty line there is no cap: every dollar comes back.
+  repayment_limit:
+    - {fpl_to: 200, single: 375,  other: 750}
+    - {fpl_to: 300, single: 975,  other: 1950}
+    - {fpl_to: 400, single: 1650, other: 3300}
+    - {fpl_to: null, single: null, other: null}
+
 qbi:
   rate: 0.20
   threshold: {single: 197300, married_jointly: 394600}

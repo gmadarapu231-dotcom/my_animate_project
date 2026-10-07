@@ -380,7 +380,11 @@ def cmd_agent(args: argparse.Namespace) -> int:
     if run.estimate:
         federal = run.estimate["federal"]
         totals = run.estimate["totals"]
-        print("return")
+        # The agent runs in planning mode, so these figures already have the
+        # available moves applied. Saying so matters: a client comparing this
+        # against their own arithmetic on the raw forms will not match it.
+        planned = bool(run.estimate.get("baseline"))
+        print("return (with planning applied)" if planned else "return")
         for label, key in (("AGI", "agi"), ("deduction", "deduction_taken"),
                            ("taxable income", "taxable_income")):
             print(f"  {label:<20} {float(federal[key]):>14,.2f}")
@@ -395,10 +399,14 @@ def cmd_agent(args: argparse.Namespace) -> int:
         balance = float(totals["total_balance"])
         print(f"  {'refund' if balance < 0 else 'TO PAY':<20} {abs(balance):>14,.2f}"
               "   federal and state together")
-        if run.estimate.get("baseline"):
+        baseline = run.estimate.get("baseline")
+        if baseline:
             saving = float(run.estimate["saving_against_baseline"])
+            as_is = float(baseline["totals"]["total_balance"])
+            print(f"  {'as filed today':<20} {abs(as_is):>14,.2f}"
+                  f"   {'refund' if as_is < 0 else 'to pay'}, before any planning")
             if saving:
-                print(f"  (planning mode: {saving:,.2f} better than filing as-is)")
+                print(f"  {'planning saves':<20} {saving:>14,.2f}")
         print()
 
     open_questions = run.open_questions

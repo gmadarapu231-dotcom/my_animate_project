@@ -27,6 +27,11 @@ from typing import Any
 
 from taxvault.config import FederalParams, federal
 from taxvault.engines.capital import CapitalInput, CapitalResult, compute_capital
+from taxvault.engines.health import (
+    MarketplaceCoverage,
+    PremiumTaxCreditResult,
+    compute_premium_tax_credit,
+)
 from taxvault.engines.mortgage import Loan, MortgageResult, compute_mortgage
 from taxvault.engines.retirement import (
     ContributionCheck,
@@ -46,12 +51,14 @@ from taxvault.money import ZERO, cents, marginal_rate, money, phase_out, positiv
 _NON_AMOUNTS = frozenset({
     "tax_year", "filing_status", "resident_state", "age", "spouse_age",
     "children_under_17", "other_dependents", "education_credit_kind",
+    "household_size",
 })
 
 #: Fields holding a dataclass or a list of them. `asdict` would flatten these
 #: into plain dicts and `TaxProfile(**data)` would then hand a dict to code
 #: expecting the object, so `normalised` restores them by reference instead.
-_STRUCTURED = frozenset({"capital", "distributions", "loans", "retirement_plan"})
+_STRUCTURED = frozenset({"capital", "distributions", "loans", "retirement_plan",
+                         "marketplace"})
 
 
 @dataclass
@@ -155,6 +162,14 @@ class TaxProfile:
     #: fully taxable with no early-withdrawal penalty, which is what a normal
     #: retirement distribution looks like.
     distributions: list[Distribution] = field(default_factory=list)
+    #: Form 1095-A rows. A marketplace subsidy is an ADVANCE on an estimate
+    #: of this year's income, so it has to be settled on the return: earn less
+    #: than the estimate and more comes back, earn more and some is repaid.
+    marketplace: list[MarketplaceCoverage] = field(default_factory=list)
+    #: People in the tax household, for the poverty-line comparison. Defaults
+    #: to the filer, a spouse if filing jointly, and the dependants.
+    household_size: int = 0
+
     #: Form 1098 rows. Without them, `mortgage_interest` is deducted as stated
     #: -- correct below the debt ceiling, generous above it.
     loans: list[Loan] = field(default_factory=list)
@@ -209,6 +224,7 @@ class FederalResult:
     additional_medicare_tax: Decimal = ZERO
     net_investment_income_tax: Decimal = ZERO
     early_withdrawal_penalty: Decimal = ZERO
+    premium_tax_credit_repayment: Decimal = ZERO
     nonrefundable_credits: Decimal = ZERO
     refundable_credits: Decimal = ZERO
     total_tax: Decimal = ZERO
@@ -225,6 +241,7 @@ class FederalResult:
     retirement: dict[str, Any] = field(default_factory=dict)
     mortgage: dict[str, Any] = field(default_factory=dict)
     contributions: dict[str, Any] = field(default_factory=dict)
+    premium_tax_credit: dict[str, Any] = field(default_factory=dict)
 
     @property
     def refund(self) -> Decimal:
@@ -923,6 +940,18 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
             "conversion, would put it to work."
         )
 
+    # --- 6b. premium tax credit -------------------------------------------
+    # After AGI, because household income is measured from it, and before the
+    # refundable credits, because the net credit is one of them.
+    health = _premium_tax_credit(profile, params, agi)
+    if health is not None:
+        result.premium_tax_credit = health.to_dict()
+        result.premium_tax_credit_repayment = health.repayment
+        result.notes.extend(health.notes)
+        result.warnings.extend(health.warnings)
+        for row in health.lines:
+            result.lines.append(row)
+
     # --- 7. other taxes ----------------------------------------------------
     result.self_employment_tax = se_tax
     result.additional_medicare_tax = positive(
@@ -944,11 +973,14 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
     if result.early_withdrawal_penalty:
         result.line("Additional tax on early distributions",
                     result.early_withdrawal_penalty, form="5329")
+    if result.premium_tax_credit_repayment:
+        result.line("Excess advance premium tax credit repaid",
+                    result.premium_tax_credit_repayment, form="8962")
 
     result.total_tax = cents(
         positive(tax_before_credits - applied)
         + se_tax + result.additional_medicare_tax + result.net_investment_income_tax
-        + result.early_withdrawal_penalty
+        + result.early_withdrawal_penalty + result.premium_tax_credit_repayment
     )
     result.line("Total tax", result.total_tax)
 
@@ -956,10 +988,12 @@ def compute_federal(profile: TaxProfile, *, year: int | None = None) -> FederalR
     eitc, eitc_note = _eitc(profile, params, agi)
     if eitc_note:
         result.notes.append(eitc_note)
-    result.refundable_credits = cents(eitc + actc + education_ref)
+    premium_credit = health.net_credit if health is not None else ZERO
+    result.refundable_credits = cents(eitc + actc + education_ref + premium_credit)
     for label, amount in (
         ("Earned income credit", eitc), ("Additional child tax credit", actc),
         ("Refundable education credit", education_ref),
+        ("Net premium tax credit", premium_credit),
     ):
         if amount > ZERO:
             result.credits_detail[label] = str(cents(amount))
@@ -1029,3 +1063,31 @@ def _retirement_result(profile: TaxProfile, params: FederalParams) -> Distributi
     plain = DistributionResult()
     plain.gross = plain.taxable = cents(positive(profile.retirement_distributions))
     return plain
+
+
+def _premium_tax_credit(
+    profile: TaxProfile, params: FederalParams, agi: Decimal
+) -> PremiumTaxCreditResult | None:
+    """Form 8962, when there is a 1095-A to reconcile.
+
+    Household income for this credit is MAGI, not AGI: tax-exempt interest and
+    the NON-taxable part of Social Security are added back, because a household
+    living on municipal bond interest is not a low-income household.
+    """
+    if not profile.marketplace:
+        return None
+    nontaxable_ss = positive(profile.social_security_benefits - _taxable_social_security(
+        profile, params, agi
+    ))
+    magi = cents(agi + profile.tax_exempt_interest + nontaxable_ss)
+    size = profile.household_size or (
+        1 + (1 if profile.is_married_joint else 0)
+        + profile.children_under_17 + profile.other_dependents
+    )
+    return compute_premium_tax_credit(
+        profile.marketplace, params,
+        household_income=magi,
+        household_size=size,
+        filing_status=profile.filing_status,
+        state_code=profile.resident_state,
+    )

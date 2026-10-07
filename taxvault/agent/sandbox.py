@@ -257,6 +257,82 @@ def f1098_pdf(
     return buffer.getvalue()
 
 
+def f1095a_pdf(
+    *, marketplace: str, year: int, premium: float, benchmark: float,
+    advance: float, policy: str = "POL-99214", covered: int = 2,
+) -> bytes:
+    """A 1095-A with the annual totals row the engine reads."""
+    c, buffer = _canvas()
+    y = 744
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(40, y, f"Form 1095-A  Health Insurance Marketplace Statement  {year}")
+    y -= 22
+    c.setFont("Helvetica", 8)
+    c.drawString(40, y, "Marketplace-assigned policy number")
+    y -= 12
+    c.setFont("Helvetica", 10)
+    c.drawString(40, y, policy)
+    y -= 14
+    c.setFont("Helvetica", 9)
+    c.drawString(40, y, f"{marketplace}")
+    y -= 24
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(40, y, "Part III  Coverage Information")
+    y -= 16
+    c.setFont("Helvetica", 7)
+    c.drawString(40, y, "Month")
+    c.drawRightString(300, y, "A Monthly enrollment premium")
+    c.drawRightString(430, y, "B SLCSP premium")
+    c.drawRightString(560, y, "C Advance payment of PTC")
+    y -= 13
+    months = ["January", "February", "March", "April", "May", "June", "July",
+              "August", "September", "October", "November", "December"]
+    c.setFont("Helvetica", 8)
+    for month in months:
+        c.drawString(40, y, month)
+        c.drawRightString(300, y, f"{premium / 12:,.2f}")
+        c.drawRightString(430, y, f"{benchmark / 12:,.2f}")
+        c.drawRightString(560, y, f"{advance / 12:,.2f}")
+        y -= 12
+    y -= 4
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(40, y, "Annual Totals")
+    c.drawRightString(300, y, f"{premium:,.2f}")
+    c.drawRightString(430, y, f"{benchmark:,.2f}")
+    c.drawRightString(560, y, f"{advance:,.2f}")
+    y -= 24
+    c.setFont("Helvetica", 8)
+    for i in range(covered):
+        c.drawString(40, y, f"Covered individual {i + 1}")
+        y -= 12
+    c.save()
+    return buffer.getvalue()
+
+
+def simple_form_pdf(*, title: str, payer: str, year: int,
+                    rows: list[tuple[str, float]]) -> bytes:
+    """Any of the single-box forms: 1099-NEC, 1099-K, 1099-G, 1099-INT."""
+    c, buffer = _canvas()
+    y = 744
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(40, y, f"{year} {title}")
+    y -= 24
+    c.setFont("Helvetica", 8)
+    c.drawString(40, y, "PAYER'S name")
+    y -= 12
+    c.setFont("Helvetica", 10)
+    c.drawString(40, y, payer)
+    y -= 26
+    for label, amount in rows:
+        c.setFont("Helvetica", 9)
+        c.drawString(40, y, label)
+        c.drawRightString(400, y, f"{amount:,.2f}")
+        y -= 17
+    c.save()
+    return buffer.getvalue()
+
+
 def scanned_pdf(label: str = "1099-INT") -> bytes:
     """A PDF with no text layer: a photograph of a form, as clients send.
 
@@ -357,6 +433,28 @@ def _unreadable(year: int) -> list[Document]:
     ]
 
 
+def _gig_cliff(year: int) -> list[Document]:
+    """Contract work plus a marketplace plan: income over the 2026 cliff."""
+    return [
+        Document(filename="1099nec-blue-harbor.pdf", content_type="application/pdf",
+                 blob=simple_form_pdf(
+                     title="Form 1099-NEC", payer="Blue Harbor Design LLC", year=year,
+                     rows=[("1 Nonemployee compensation", 102000.00),
+                           ("4 Federal income tax withheld", 0.00)])),
+        Document(filename="1099k-payments.pdf", content_type="application/pdf",
+                 blob=simple_form_pdf(
+                     title="Form 1099-K  Payment Card and Third Party Network Transactions",
+                     payer="Streamline Payments Inc", year=year,
+                     rows=[("1a Gross amount of payment card/third party transactions",
+                            24300.00),
+                           ("4 Federal income tax withheld", 0.00)])),
+        Document(filename="1095a-marketplace.pdf", content_type="application/pdf",
+                 blob=f1095a_pdf(marketplace="CA Marketplace", year=year,
+                                 premium=16800, benchmark=18000, advance=13200,
+                                 covered=2)),
+    ]
+
+
 SCENARIOS: dict[str, Scenario] = {
     "simple": Scenario(
         key="simple", label="One W-2, nothing else",
@@ -397,6 +495,23 @@ SCENARIOS: dict[str, Scenario] = {
         ),
         taxpayer_name="Dana Okonkwo", filing_status="single", resident_state="CA",
         situation={"age": 56}, build=_early_saver,
+    ),
+    "gig_cliff": Scenario(
+        key="gig_cliff", label="Contract work and the health subsidy cliff",
+        description=(
+            "A 1099-NEC, a 1099-K and a marketplace plan. Income lands over 400% of "
+            "the federal poverty line, which from 2026 costs the ENTIRE health "
+            "credit, and the whole advance is repaid with no cap. The most "
+            "expensive thing in this product, and the one clients never see coming."
+        ),
+        expect=(
+            "Income lands at about 448% of the poverty line, so the whole 13,200 "
+            "advance is repaid with no cap. Roughly 10,200 of deductible "
+            "contribution would bring them under 400% and save all of it -- a "
+            "return of about 130% on the money, which is why the agent asks."
+        ),
+        taxpayer_name="Jordan Vasquez", filing_status="single", resident_state="CA",
+        situation={"age": 41, "household_size": 2}, build=_gig_cliff,
     ),
     "unreadable": Scenario(
         key="unreadable", label="A photographed form",

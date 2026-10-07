@@ -379,6 +379,12 @@ def parse_1099r_text(text: str) -> tuple[F1099R, float, list[str]]:
 # Which form is this?
 # ===========================================================================
 _SIGNATURES = (
+    # 1095-A first: "Form 1095-A" also contains no other form's signature, and
+    # a marketplace statement misread as "other" silently drops the health
+    # credit, which is the most expensive thing on some returns.
+    ("1095_a", (r"1095[\s\-]*A\b", r"marketplace\s*statement",
+                r"(?:slcsp|second\s*lowest\s*cost\s*silver)",
+                r"advance\s*payment")),
     ("1099_r", (r"1099[\s\-]*R\b", r"gross\s*distribution", r"distribution\s*code")),
     ("1099_b", (r"1099[\s\-]*B\b", r"proceeds\s*from\s*broker", r"wash\s*sale")),
     ("1099_div", (r"1099[\s\-]*DIV\b", r"ordinary\s*dividends", r"capital\s*gain\s*distr")),
@@ -406,10 +412,247 @@ def detect_form_kind(text: str) -> tuple[str, float]:
 
 
 def kinds_present(text: str) -> list[str]:
-    """Every form this document appears to contain, for a consolidated 1099."""
+    """Every form this document appears to contain, for a consolidated 1099.
+
+    Includes the single-box forms, so one statement carrying a 1099-INT and a
+    1099-DIV is read as both rather than as whichever matched first.
+    """
     body = (text or "")
     out = []
     for kind, patterns in _SIGNATURES:
         if sum(1 for p in patterns if re.search(p, body, re.IGNORECASE)) >= 2:
+            out.append(kind)
+    for kind in simple_kinds_present(body):
+        if kind not in out:
+            out.append(kind)
+    return out
+
+
+# ===========================================================================
+# The single-box forms
+# ===========================================================================
+# 1099-INT, 1099-NEC, 1099-G, 1099-MISC, 1099-K, SSA-1099, 1098-E and 1098-T
+# are each one or two figures that land on one line of the return. They do not
+# need a dataclass apiece: a box map and one parser covers all of them, and a
+# new form is a row in the table below rather than a new module.
+#
+# Each entry is: the profile field the figure feeds, the box number, and the
+# wording the form prints. `negative` marks a box that reduces income.
+SIMPLE_FORMS: dict[str, dict[str, Any]] = {
+    "1099_int": {
+        "label": "1099-INT (interest)",
+        "signature": (r"1099[\s\-]*INT\b", r"interest\s*income"),
+        "boxes": [
+            ("taxable_interest", "1", r"interest\s*income"),
+            ("early_withdrawal_penalty_interest", "2", r"early\s*withdrawal\s*penalty"),
+            ("us_savings_bond_interest", "3", r"interest\s*on\s*u\.?s\.?\s*savings"),
+            ("federal_withheld", "4", r"federal\s*income\s*tax\s*withheld"),
+            ("tax_exempt_interest", "8", r"tax[\s\-]*exempt\s*interest"),
+        ],
+        "note": (
+            "Box 8, tax-exempt interest, is not taxed but it still counts towards "
+            "how much of your Social Security is taxable and towards the income "
+            "test for a marketplace health subsidy."
+        ),
+    },
+    "1099_nec": {
+        "label": "1099-NEC (contract work)",
+        "signature": (r"1099[\s\-]*NEC\b", r"nonemployee\s*compensation"),
+        "boxes": [
+            ("self_employment_income", "1", r"nonemployee\s*compensation"),
+            ("federal_withheld", "4", r"federal\s*income\s*tax\s*withheld"),
+        ],
+        "note": (
+            "This is self-employment income. Nothing was withheld for Social "
+            "Security or Medicare, so 15.3% self-employment tax is due on top of "
+            "the income tax -- and your business expenses come off it first, which "
+            "is why the gross figure here is rarely the figure that gets taxed."
+        ),
+    },
+    "1099_misc": {
+        "label": "1099-MISC (other income)",
+        "signature": (r"1099[\s\-]*MISC\b", r"miscellaneous\s*info"),
+        "boxes": [
+            ("rental_income", "1", r"rents"),
+            ("other_income", "3", r"other\s*income"),
+            ("federal_withheld", "4", r"federal\s*income\s*tax\s*withheld"),
+            ("royalties", "2", r"royalties"),
+        ],
+        "note": (
+            "Box 1 rents goes on Schedule E, box 3 other income on Schedule 1. "
+            "Which box the payer used decides the schedule and the tax, so it is "
+            "worth checking they used the right one."
+        ),
+    },
+    "1099_k": {
+        "label": "1099-K (payment card and apps)",
+        "signature": (r"1099[\s\-]*K\b", r"payment\s*card", r"third\s*party\s*network"),
+        "boxes": [
+            ("gross_payments", "1a", r"gross\s*amount\s*of\s*payment"),
+            ("federal_withheld", "4", r"federal\s*income\s*tax\s*withheld"),
+        ],
+        "note": (
+            "A 1099-K reports money that passed through a payment app, not profit "
+            "and not necessarily income at all. Selling a personal item at a loss, "
+            "or being repaid by a friend, can appear here. It needs sorting into "
+            "business income and personal transfers -- the IRS has this form "
+            "either way, so an unexplained difference draws a notice."
+        ),
+    },
+    "1099_g": {
+        "label": "1099-G (government payments)",
+        "signature": (r"1099[\s\-]*G\b", r"certain\s*government\s*payments"),
+        "boxes": [
+            ("unemployment", "1", r"unemployment\s*compensation"),
+            ("state_tax_refund", "2", r"state\s*or\s*local\s*income\s*tax\s*refund"),
+            ("federal_withheld", "4", r"federal\s*income\s*tax\s*withheld"),
+        ],
+        "note": (
+            "Unemployment compensation is fully taxable federally and most people "
+            "have little or nothing withheld from it, which is the commonest reason "
+            "a return owes unexpectedly. A state tax refund in box 2 is taxable only "
+            "if you itemised and deducted that tax last year."
+        ),
+    },
+    "ssa_1099": {
+        "label": "SSA-1099 (Social Security)",
+        "signature": (r"SSA[\s\-]*1099\b", r"social\s*security\s*benefit\s*statement"),
+        "boxes": [
+            ("social_security_benefits", "5", r"net\s*benefits"),
+            ("federal_withheld", "6", r"voluntary\s*federal\s*income\s*tax\s*withheld"),
+        ],
+        "note": (
+            "Between nothing and 85% of this is taxable, depending on your other "
+            "income. It is never 100%, and it is 0% for a household with little "
+            "else -- so the figure on the form is not the figure that gets taxed."
+        ),
+    },
+    "1098_e": {
+        "label": "1098-E (student loan interest)",
+        "signature": (r"1098[\s\-]*E\b", r"student\s*loan\s*interest"),
+        "boxes": [
+            ("student_loan_interest", "1", r"student\s*loan\s*interest\s*received"),
+        ],
+        "note": (
+            "Up to $2,500 of this comes off your income without itemising, phasing "
+            "out at higher incomes. You do not have to be the student -- you have to "
+            "be the one legally obliged to pay."
+        ),
+    },
+    "1098_t": {
+        "label": "1098-T (tuition)",
+        "signature": (r"1098[\s\-]*T\b", r"tuition\s*statement"),
+        "boxes": [
+            ("qualified_education_expenses", "1", r"payments\s*received\s*for\s*qualified"),
+            ("scholarships", "5", r"scholarships\s*or\s*grants"),
+        ],
+        "note": (
+            "Box 1 is what the school was PAID, which is not always what you paid or "
+            "when. Box 5 scholarships reduce the expenses that can earn a credit, and "
+            "the American Opportunity Credit is worth up to $2,500 with $1,000 of it "
+            "refundable -- so the arithmetic between these two boxes is worth doing "
+            "carefully rather than taking box 1 at face value."
+        ),
+    },
+}
+
+
+@dataclass
+class SimpleForm:
+    """Any of the one-or-two-box forms, read into named amounts."""
+
+    kind: str = ""
+    label: str = ""
+    payer: str = ""
+    tax_year: int = 0
+    amounts: dict[str, Decimal] = field(default_factory=dict)
+    note: str = ""
+
+    def amount(self, name: str) -> Decimal:
+        return self.amounts.get(name, ZERO)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "label": self.label,
+            "payer": self.payer,
+            "tax_year": self.tax_year,
+            "note": self.note,
+            "amounts": {k: str(cents(v)) for k, v in self.amounts.items()},
+        }
+
+    def validate(self) -> list[dict[str, str]]:
+        findings: list[dict[str, str]] = []
+        if self.note:
+            findings.append({"severity": "info", "box": "", "message": self.note})
+        if self.kind == "1099_k" and self.amount("gross_payments") > ZERO:
+            findings.append({
+                "severity": "warning", "box": "1a",
+                "message": (
+                    f"{self.amount('gross_payments'):,.2f} passed through a payment "
+                    "app. That is gross flow, not profit: it needs splitting into "
+                    "business income and personal transfers before any of it reaches "
+                    "the return."
+                ),
+            })
+        if self.kind == "1099_g" and self.amount("unemployment") > ZERO:
+            withheld = self.amount("federal_withheld")
+            if withheld <= self.amount("unemployment") * money("0.05"):
+                findings.append({
+                    "severity": "warning", "box": "4",
+                    "message": (
+                        f"Only {withheld:,.2f} was withheld from "
+                        f"{self.amount('unemployment'):,.2f} of unemployment, which is "
+                        "fully taxable. Expect this to produce a balance owing."
+                    ),
+                })
+        return findings
+
+
+def parse_simple_form(text: str, kind: str) -> tuple[SimpleForm, float, list[str]]:
+    """Read one of the single-box forms."""
+    config = SIMPLE_FORMS.get(kind)
+    if config is None:
+        raise ValueError(f"{kind!r} is not a simple form kind")
+    body = (text or "").replace(" ", " ")
+    form = SimpleForm(kind=kind, label=str(config["label"]),
+                      note=str(config.get("note", "")))
+
+    year = re.search(r"\b(20[12]\d)\b", body)
+    if year:
+        form.tax_year = int(year.group(1))
+
+    payer = re.search(r"(?:payer'?s?|lender'?s?|filer'?s?)\s*name[^\n]*\n\s*([^\n]{3,80})",
+                      body, re.IGNORECASE)
+    if payer:
+        form.payer = payer.group(1).strip()
+
+    found = 0
+    for name, box, words in config["boxes"]:
+        value = _find(body, _label(box, words))
+        if value is not None:
+            form.amounts[name] = value
+            found += 1
+
+    warnings = [f["message"] for f in form.validate() if f["severity"] == "warning"]
+    # The first box is the one that matters; the rest are usually zero.
+    primary = config["boxes"][0][0]
+    confidence = 1.0 if form.amounts.get(primary) is not None else 0.0
+    if not form.amounts:
+        confidence = 0.0
+        warnings.append(
+            f"No figures could be read from this {config['label']}. Enter them by hand."
+        )
+    return form, confidence, warnings
+
+
+def simple_kinds_present(text: str) -> list[str]:
+    """Which of the single-box forms this document looks like."""
+    body = text or ""
+    out = []
+    for kind, config in SIMPLE_FORMS.items():
+        patterns = config["signature"]
+        hits = sum(1 for p in patterns if re.search(p, body, re.IGNORECASE))
+        if hits >= min(2, len(patterns)):
             out.append(kind)
     return out

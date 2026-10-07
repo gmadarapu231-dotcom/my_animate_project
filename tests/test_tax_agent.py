@@ -349,3 +349,49 @@ def test_a_verified_client_can_run_the_agent_on_an_upload(client):
     body = response.json()
     assert body["estimate"]["federal"]["agi"] == "68000.00"
     assert body["gate"]["can_transmit"] is False
+
+
+# ---------------------------------------------------------------------------
+# the subsidy cliff scenario
+# ---------------------------------------------------------------------------
+def test_the_cliff_scenario_reads_all_three_forms():
+    _, run = _run("gig_cliff", year=2026)
+    kinds = sorted(k for d in run.documents for k in d["kinds"])
+    assert kinds == ["1095_a", "1099_k", "1099_nec"]
+
+
+def test_the_cliff_is_detected_from_the_as_filed_position_not_the_planned_one():
+    """Planning can contribute its way under the cliff.
+
+    If the question is asked of the post-planning figure it never gets asked,
+    and the client stays over the cliff unaware -- because advice they have
+    not taken yet is already baked into the number being tested.
+    """
+    _, run = _run("gig_cliff", year=2026)
+    asked = [i for i in run.review if i.field == "traditional_ira"]
+    assert asked, [i.field for i in run.review]
+    assert "over 400%" in asked[0].why
+    assert asked[0].moves == "13,200"
+
+
+def test_contract_income_is_queried_for_expenses_before_being_taxed():
+    _, run = _run("gig_cliff", year=2026)
+    asked = [i for i in run.review if i.field == "business_expenses"]
+    assert asked
+    assert asked[0].severity == "blocker"
+
+
+def test_a_1099k_is_not_treated_as_income_without_being_split():
+    """Gross flow through a payment app is not profit and may not be income."""
+    _, run = _run("gig_cliff", year=2026)
+    asked = [i for i in run.review if i.field == "self_employment_income"]
+    assert asked
+    assert asked[0].severity == "blocker"
+    assert "personal" in asked[0].question
+
+
+def test_a_1099nec_becomes_self_employment_income_with_qbi():
+    _, run = _run("gig_cliff", year=2026)
+    federal = run.estimate["federal"]
+    assert float(federal["self_employment_tax"]) > 0
+    assert float(federal["qbi_deduction"]) > 0

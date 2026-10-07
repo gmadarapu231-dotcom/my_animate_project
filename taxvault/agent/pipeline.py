@@ -54,13 +54,16 @@ from taxvault.engines.mortgage import Loan
 from taxvault.engines.retirement import Distribution
 from taxvault.enums import EstimateMethod
 from taxvault.forms.extract import extract_text, pair_orphan_amounts
+from taxvault.forms.f1095 import parse_1095a_text
 from taxvault.forms.f1098 import parse_1098_text
 from taxvault.forms.f1099 import (
+    SIMPLE_FORMS,
     detect_form_kind,
     kinds_present,
     parse_1099b_text,
     parse_1099div_text,
     parse_1099r_text,
+    parse_simple_form,
 )
 from taxvault.forms.identity_match import compare_names
 from taxvault.forms.w2 import W2, combine, parse_w2_text
@@ -285,7 +288,7 @@ def _classify_and_extract(
     """Work out what each document is and read the figures off it."""
     parsed: dict[str, Any] = {
         "w2": [], "1099_b": [], "1099_div": [], "1099_r": [], "1098": [],
-        "unreadable": [], "confidences": [],
+        "1095_a": [], "simple": [], "unreadable": [], "confidences": [],
     }
 
     with run.step("classify", "Work out what each document is") as step:
@@ -325,7 +328,10 @@ def _classify_and_extract(
             for kind in entry["kinds"]:
                 _extract_one(parsed, kind, entry, year)
         counts = {k: len(v) for k, v in parsed.items()
-                  if k in ("w2", "1099_b", "1099_div", "1099_r", "1098") and v}
+                  if k in ("w2", "1099_b", "1099_div", "1099_r", "1098", "1095_a")
+                  and v}
+        for form in parsed["simple"]:
+            counts[form.kind] = counts.get(form.kind, 0) + 1
         step.detail = ", ".join(f"{n} x {k.replace('_', '-').upper()}"
                                 for k, n in counts.items()) or "nothing read"
         low = [row for row in parsed["confidences"] if row["confidence"] < 0.75]
@@ -397,6 +403,28 @@ def _extract_one(parsed: dict[str, Any], kind: str, entry: dict[str, Any],
         if not form.tax_year:
             form.tax_year = year
         parsed["w2"].append(form)
+        parsed["confidences"].append(
+            {"kind": kind, "filename": filename, "confidence": confidence,
+             "warnings": warnings}
+        )
+        return
+
+    if kind == "1095_a":
+        form, confidence, warnings = parse_1095a_text(text)
+        if not form.tax_year:
+            form.tax_year = year
+        parsed["1095_a"].append(form)
+        parsed["confidences"].append(
+            {"kind": kind, "filename": filename, "confidence": confidence,
+             "warnings": warnings}
+        )
+        return
+
+    if kind in SIMPLE_FORMS:
+        form, confidence, warnings = parse_simple_form(text, kind)
+        if not form.tax_year:
+            form.tax_year = year
+        parsed["simple"].append(form)
         parsed["confidences"].append(
             {"kind": kind, "filename": filename, "confidence": confidence,
              "warnings": warnings}
@@ -477,13 +505,17 @@ def _reconcile(run: AgentRun, parsed: dict[str, Any], year: int) -> None:
             for finding in form.validate(year=year):
                 findings.append(f"W-2 ({form.employer_name or 'unnamed'}): "
                                 f"{finding['message']}")
-        for kind in ("1099_div", "1099_r", "1098"):
+        for kind in ("1099_div", "1099_r", "1098", "1095_a"):
             for form in parsed[kind]:
                 if hasattr(form, "validate"):
                     for finding in form.validate():
                         findings.append(
                             f"{kind.replace('_', '-').upper()}: {finding['message']}"
                         )
+        for form in parsed["simple"]:
+            for finding in form.validate():
+                if finding["severity"] != "info":
+                    findings.append(f"{form.label}: {finding['message']}")
 
         # The same employer twice is nearly always a duplicate upload, and it
         # doubles the wages without looking wrong anywhere.
@@ -558,6 +590,25 @@ def _assemble(run: AgentRun, parsed: dict[str, Any], year: int,
                 for form in parsed["1099_r"]
             ]
 
+        # Form 1095-A: the marketplace subsidy to settle up. Folded in before
+        # the loans so a cliff warning lands with the rest of the findings.
+        if parsed["1095_a"]:
+            profile.marketplace = [f.to_coverage() for f in parsed["1095_a"]]
+
+        # The single-box forms each add to one field. They ADD rather than
+        # replace, because a client can have three 1099-INTs and the return
+        # wants the total, not the last one read.
+        for form in parsed["simple"]:
+            for name, amount in form.amounts.items():
+                if name == "federal_withheld":
+                    profile.federal_withheld += amount
+                elif hasattr(profile, name):
+                    setattr(profile, name, getattr(profile, name) + amount)
+        # Contract work is qualified business income unless the client says
+        # otherwise, which is the common case for a sole trader.
+        if any(f.kind == "1099_nec" for f in parsed["simple"]):
+            profile.qbi_income = profile.qbi_income or profile.self_employment_income
+
         if parsed["1098"]:
             profile.loans = [
                 Loan(
@@ -576,6 +627,9 @@ def _assemble(run: AgentRun, parsed: dict[str, Any], year: int,
             f"{len(parsed['w2'])} W-2(s) totalling "
             f"{money(totals.get('wages', 0)):,.0f} of wages, "
             f"{len(parsed['1099_r'])} distribution(s), {len(parsed['1098'])} loan(s)"
+            + (f", {len(parsed['1095_a'])} marketplace policy(ies)"
+               if parsed["1095_a"] else "")
+            + (f", {len(parsed['simple'])} other form(s)" if parsed["simple"] else "")
         )
         step.findings = [w["message"] for w in warnings][:8]
         run.notes.extend(w["message"] for w in warnings)
@@ -618,7 +672,15 @@ def _ask_what_cannot_be_read(run: AgentRun, parsed: dict[str, Any],
     no number next to it gets skipped and a question worth $2,000 does not.
     """
     with run.step("review", "Decide what has to be asked") as step:
-        federal = (run.estimate or {}).get("federal", {})
+        estimate = run.estimate or {}
+        federal = estimate.get("federal", {})
+        # Questions about the client's POSITION come off the as-filed figures,
+        # not the planned ones. The planning engine can contribute its way
+        # under the health-subsidy cliff, and if the question is asked of the
+        # planned result it never gets asked -- leaving the client over the
+        # cliff and unaware, because the advice they have not taken yet is
+        # already baked into the number being tested.
+        as_filed = (estimate.get("baseline") or {}).get("federal", federal)
 
         for form in parsed["1099_r"]:
             code = (form.distribution_code or "").upper()
@@ -665,6 +727,64 @@ def _ask_what_cannot_be_read(run: AgentRun, parsed: dict[str, Any],
                          "the loan. The form does not state the date, and on a large "
                          "mortgage it is worth real money."),
                     field="loans[].origination", severity="ask", form="1098",
+                ))
+
+        for form in parsed["1095_a"]:
+            if form.benchmark_premium <= 0 and form.annual_premium > 0:
+                run.ask(ReviewItem(
+                    question="What is the second-lowest-cost silver plan premium "
+                             "(column B) on your 1095-A?",
+                    why=("Column B is blank, and the health credit is measured against "
+                         "it rather than against what you paid. Treating it as zero "
+                         "would wipe out the credit entirely. The marketplace's own tax "
+                         "tool gives the figure."),
+                    field="marketplace[].benchmark_premium",
+                    severity="blocker", form="1095-A",
+                ))
+        cliff = (as_filed.get("premium_tax_credit") or {})
+        if cliff.get("over_cliff"):
+            at_risk = money(cliff.get("repayment", 0))
+            over_by = positive(
+                money(cliff.get("household_income", 0))
+                - money(cliff.get("poverty_line", 0)) * 4
+            )
+            run.ask(ReviewItem(
+                question="Can any income be moved out of this year, or a deductible "
+                         f"contribution of about {over_by:,.0f} be made?",
+                why=(f"As your forms stand, household income is "
+                     f"{money(cliff.get('income_as_pct_of_fpl', 0)):,.0f}% of the "
+                     "federal poverty line -- over 400% -- so the ENTIRE health credit "
+                     f"is lost and all {at_risk:,.0f} of the advance is repaid, with no "
+                     f"cap. Getting income under the line needs about {over_by:,.0f} of "
+                     "deductible contribution, which saves the whole credit: a return "
+                     "of roughly "
+                     f"{(at_risk / over_by * 100) if over_by else 0:,.0f}% on the money. "
+                     "This is the single most valuable thing on this return."),
+                field="traditional_ira",
+                moves=f"{at_risk:,.0f}",
+                severity="confirm", form="1095-A",
+            ))
+
+        for form in parsed["simple"]:
+            if form.kind == "1099_k" and form.amount("gross_payments") > 0:
+                run.ask(ReviewItem(
+                    question="How much of the money through that payment app was "
+                             "business income, and how much was personal?",
+                    why=("A 1099-K reports gross flow, not profit. Selling a personal "
+                         "item at a loss or being repaid by a friend shows up here and "
+                         "is not income -- but the IRS has the form, so the difference "
+                         "has to be explainable."),
+                    field="self_employment_income", severity="blocker", form="1099-K",
+                ))
+            if form.kind == "1099_nec" and form.amount("self_employment_income") > 0:
+                run.ask(ReviewItem(
+                    question="What did you spend on that work -- equipment, mileage, "
+                             "software, a home office?",
+                    why=("Contract income is taxed on PROFIT, not on the gross figure "
+                         "the payer reported. Expenses come off first and they also "
+                         "reduce the 15.3% self-employment tax, so every dollar of "
+                         "genuine expense is worth about 30 cents."),
+                    field="business_expenses", severity="blocker", form="1099-NEC",
                 ))
 
         if parsed["1099_b"]:

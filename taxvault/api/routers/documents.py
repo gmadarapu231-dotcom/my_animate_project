@@ -17,6 +17,7 @@ mistyped box is caught at the point it can still be fixed cheaply.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 from typing import Any
 
@@ -32,13 +33,16 @@ from taxvault.db.models import TaxDocument, Taxpayer
 from taxvault.enums import DocumentKind, DocumentStatus
 from taxvault.forms.extract import extract_text, pair_orphan_amounts
 from taxvault.forms.identity_match import compare_names, compare_ssn
+from taxvault.forms.f1095 import parse_1095a_text
 from taxvault.forms.f1098 import parse_1098_text
 from taxvault.forms.f1099 import (
+    SIMPLE_FORMS,
     detect_form_kind,
     kinds_present,
     parse_1099b_text,
     parse_1099div_text,
     parse_1099r_text,
+    parse_simple_form,
 )
 from taxvault.forms.w2 import W2, parse_w2_text
 from taxvault.forms.w2_layout import read_w2_layout
@@ -413,12 +417,19 @@ def delete_document(
 # The other forms: 1099-B, 1099-DIV, 1099-R and 1098
 # ===========================================================================
 #: Which parser reads which form, and the field that identifies the payer.
-_PARSERS = {
+_PARSERS: dict[str, tuple[Any, str]] = {
     DocumentKind.F1099_B.value: (parse_1099b_text, "payer"),
     DocumentKind.F1099_DIV.value: (parse_1099div_text, "payer"),
     DocumentKind.F1099_R.value: (parse_1099r_text, "payer"),
     DocumentKind.F1098.value: (parse_1098_text, "lender"),
+    "1095_a": (parse_1095a_text, "marketplace"),
 }
+# The single-box forms share one parser, which takes the kind as a second
+# argument. Bound here so the dispatch table stays one shape.
+for _kind in SIMPLE_FORMS:
+    _PARSERS[_kind] = (
+        functools.partial(parse_simple_form, kind=_kind), "payer",
+    )
 
 
 class FormText(BaseModel):

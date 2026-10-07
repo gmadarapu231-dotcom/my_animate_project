@@ -147,6 +147,28 @@ deductions:
   car_loan_interest_cap: 0
   car_loan_phase_out: {single: 0, married_jointly: 0}
 
+# Premium Tax Credit (Form 8962). Enhanced subsidies in force; no 400% cliff.
+# Poverty line is the 2023 guidelines (used for 2024 coverage).
+premium_tax_credit:
+  enhanced_subsidies: true
+  income_cap_fpl: 0
+  applicable_percentage:
+    - {fpl_from: 0,   fpl_to: 150, rate_from: 0.0,   rate_to: 0.0}
+    - {fpl_from: 150, fpl_to: 200, rate_from: 0.0,   rate_to: 0.02}
+    - {fpl_from: 200, fpl_to: 250, rate_from: 0.02,  rate_to: 0.04}
+    - {fpl_from: 250, fpl_to: 300, rate_from: 0.04,  rate_to: 0.06}
+    - {fpl_from: 300, fpl_to: 400, rate_from: 0.06,  rate_to: 0.085}
+    - {fpl_from: 400, fpl_to: null, rate_from: 0.085, rate_to: 0.085}
+  poverty_line:
+    contiguous: {first_person: 14580, each_additional: 5140}
+    alaska:     {first_person: 18210, each_additional: 6430}
+    hawaii:     {first_person: 16770, each_additional: 5910}
+  repayment_limit:
+    - {fpl_to: 200, single: 375,  other: 750}
+    - {fpl_to: 300, single: 975,  other: 1950}
+    - {fpl_to: 400, single: 1650, other: 3300}
+    - {fpl_to: null, single: null, other: null}
+
 qbi:
   rate: 0.20
   threshold: {single: 191950, married_jointly: 383900}

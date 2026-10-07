@@ -197,6 +197,43 @@ deductions:
 home_loans:
   mortgage_insurance_deductible: true
 
+# Premium Tax Credit (Form 8962), reconciling a marketplace subsidy.
+#
+# 2026 is the year the enhanced subsidies END, and it is the single largest
+# change in this file. Two reversions, both against the client:
+#
+#   * The 400% CLIFF IS BACK. One dollar of income over 400% of the federal
+#     poverty line costs the ENTIRE credit -- not a tapered amount, all of it.
+#     For a family of four that can be more than $20,000 of credit lost over
+#     one dollar of income, which makes a deductible IRA or HSA contribution
+#     in December worth many times what it costs.
+#   * The applicable percentage runs from 2.10% to 9.96% instead of 0% to
+#     8.5%, so even a household well under the cliff contributes more towards
+#     the benchmark plan than it did in 2025.
+#
+# The poverty line used is the PRIOR year's: 2025 guidelines for 2026 coverage.
+premium_tax_credit:
+  enhanced_subsidies: false
+  # Over this multiple of the poverty line, no credit at all.
+  income_cap_fpl: 400
+  applicable_percentage:
+    - {fpl_from: 0,   fpl_to: 133, rate_from: 0.0210, rate_to: 0.0210}
+    - {fpl_from: 133, fpl_to: 150, rate_from: 0.0314, rate_to: 0.0419}
+    - {fpl_from: 150, fpl_to: 200, rate_from: 0.0419, rate_to: 0.0660}
+    - {fpl_from: 200, fpl_to: 250, rate_from: 0.0660, rate_to: 0.0844}
+    - {fpl_from: 250, fpl_to: 300, rate_from: 0.0844, rate_to: 0.0996}
+    - {fpl_from: 300, fpl_to: 400, rate_from: 0.0996, rate_to: 0.0996}
+  # Federal poverty line, 2025 guidelines (used for 2026 coverage).
+  poverty_line:
+    contiguous: {first_person: 15650, each_additional: 5500}
+    alaska:     {first_person: 19550, each_additional: 6880}
+    hawaii:     {first_person: 17990, each_additional: 6320}
+  repayment_limit:
+    - {fpl_to: 200, single: 375,  other: 750}
+    - {fpl_to: 300, single: 975,  other: 1950}
+    - {fpl_to: 400, single: 1650, other: 3300}
+    - {fpl_to: null, single: null, other: null}
+
 qbi:
   rate: 0.20
   threshold: {single: 201775, married_jointly: 403550}

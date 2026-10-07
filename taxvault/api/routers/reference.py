@@ -140,6 +140,7 @@ def limits(year: int | None = Query(default=None)) -> dict[str, Any]:
         "contribution_limits": params.get("contribution_limits", default={}),
         "salt_cap": str(params.amount("deductions", "salt_cap")),
         "child_tax_credit": str(params.amount("credits", "child_tax_credit", "amount")),
+        "premium_tax_credit": params.get("premium_tax_credit", default={}),
         "capital_gains": params.get("capital_gains", default={}),
         "capital_losses": params.get("capital_losses", default={}),
         "home_loans": params.get("home_loans", default={}),
