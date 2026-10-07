@@ -79,6 +79,21 @@ def master_key() -> bytes:
     if path.exists():
         return base64.urlsafe_b64decode(path.read_text(encoding="utf-8").strip())
 
+    # Generating a key is right on a laptop and catastrophic on a server. A
+    # container's disk does not survive a restart, so a generated key is gone
+    # with it -- and every SSN and bank account sealed under it is then
+    # undecryptable, with no recovery, because the key existed nowhere else.
+    from taxvault.settings import is_real_deployment
+
+    if is_real_deployment():
+        raise CryptoError(
+            f"{_MASTER_ENV} is not set and this is a real deployment. Refusing to "
+            "generate a key on local disk: if this disk is replaced, every stored "
+            "Social Security number and bank account becomes permanently "
+            "unreadable. Generate a key with `taxvault newkey`, store it in your "
+            f"secret manager, and set {_MASTER_ENV}."
+        )
+
     generated = secrets.token_bytes(_KEY_BYTES)
     path.parent.mkdir(parents=True, exist_ok=True)
     # 0600 from creation, not chmod afterwards: no window where it is readable.

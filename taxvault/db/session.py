@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Iterator
 
 from sqlalchemy import create_engine, event
+from sqlalchemy import text as text_clause
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -44,6 +45,15 @@ def get_engine() -> Engine:
         kwargs: dict = {"future": True}
         if url.startswith("sqlite"):
             kwargs["connect_args"] = {"check_same_thread": False}
+        else:
+            # Managed PostgreSQL drops idle connections, and a pooled
+            # connection that died quietly surfaces as a 500 on whatever
+            # request happened to pick it up. pre_ping costs one round trip
+            # and removes the whole class of failure.
+            kwargs["pool_pre_ping"] = True
+            kwargs["pool_size"] = int(os.getenv("TAXVAULT_DB_POOL_SIZE", "5"))
+            kwargs["max_overflow"] = int(os.getenv("TAXVAULT_DB_MAX_OVERFLOW", "5"))
+            kwargs["pool_recycle"] = int(os.getenv("TAXVAULT_DB_POOL_RECYCLE", "1800"))
         _engine = create_engine(url, **kwargs)
         if url.startswith("sqlite"):
             @event.listens_for(_engine, "connect")
@@ -75,7 +85,29 @@ def new_session() -> Session:
 
 
 def init_db() -> None:
+    """Create any missing tables.
+
+    This creates tables; it does NOT alter existing ones. A column added to a
+    model after go-live will not appear, and SQLAlchemy will not say so -- it
+    will fail on the first query that selects it. Schema changes go through
+    Alembic (`alembic upgrade head`); see `migrations/README.md`.
+    """
     Base.metadata.create_all(get_engine())
+
+
+def ping() -> tuple[bool, str]:
+    """Can we actually reach the database? Returns (ok, detail).
+
+    A health check that does not touch the database reports "ok" while the
+    database is unreachable, which is worse than no health check: the load
+    balancer keeps sending traffic to a process that cannot serve it.
+    """
+    try:
+        with get_engine().connect() as connection:
+            connection.execute(text_clause("SELECT 1"))
+        return True, "reachable"
+    except Exception as exc:  # pragma: no cover - needs a broken database
+        return False, f"{type(exc).__name__}: {exc}"
 
 
 @contextmanager

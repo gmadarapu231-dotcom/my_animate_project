@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import logging
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI
@@ -19,17 +20,28 @@ from taxvault.api.routers import (
     payments,
     reference,
 )
-from taxvault.api.security import install_security
+from taxvault.api.security import configure_logging, install_security
 from taxvault.auth import development_mode
 from taxvault.config import latest_year, states, supported_years
-from taxvault.db.session import database_url, init_db
+from taxvault.db.session import database_url, init_db, ping
+from taxvault.settings import environment, enforce, readiness
+
+logger = logging.getLogger("taxvault")
 
 WEBAPP_DIR = Path(__file__).resolve().parent.parent / "webapp"
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Refuse to serve a single request if this process is not configured
+    # safely for the environment it claims to be. A deploy that fails loudly
+    # here is cheap; one that succeeds and cannot decrypt an SSN in January
+    # is not.
+    enforce()
+    configure_logging()
     init_db()
+    logger.info("TaxVault starting: env=%s database=%s years=%s",
+                environment(), database_url().split("://", 1)[0], supported_years())
     yield
 
 
@@ -58,10 +70,20 @@ app.include_router(billing.router)
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
+    """Liveness and a description of what this build can do.
+
+    Always 200 while the process is alive. Orchestrators restart on a failing
+    liveness probe, and restarting will not fix an unreachable database --
+    that is what `/api/ready` is for.
+    """
     jurisdictions = states()
+    reachable, detail = ping()
     return {
         "status": "ok",
         "database": database_url().split("://", 1)[0],
+        "database_reachable": reachable,
+        "database_detail": detail if not reachable else "",
+        "environment": environment(),
         "tax_years": supported_years(),
         "current_year": latest_year(),
         "jurisdictions": len(jurisdictions.codes()),
@@ -73,6 +95,25 @@ def health() -> dict[str, Any]:
             "Modernized e-File connection, which this server does not have."
         ),
     }
+
+
+@app.get("/api/ready")
+def ready() -> JSONResponse:
+    """Readiness: should this process be sent traffic right now?
+
+    503 while the database is unreachable or a required setting is missing, so
+    a load balancer takes the process out of rotation instead of serving
+    errors to clients. Separate from `/api/health` because the two answer
+    different questions and a restart only helps one of them.
+    """
+    report = readiness()
+    reachable, detail = ping()
+    body = {
+        "ready": report.ok and reachable,
+        "database": {"reachable": reachable, "detail": detail},
+        **report.to_dict(),
+    }
+    return JSONResponse(body, status_code=200 if body["ready"] else 503)
 
 
 # --- the client -------------------------------------------------------------

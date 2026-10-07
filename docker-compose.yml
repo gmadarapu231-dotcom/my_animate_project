@@ -1,0 +1,69 @@
+# A local stand-in for the production shape: app, PostgreSQL, Redis.
+#
+# This is NOT a production deployment. The secrets below are placeholders and
+# the database has no backup. It exists so the production code path --
+# PostgreSQL, migrations, shared rate limiting, real settings enforcement --
+# can be exercised before it meets a real client.
+#
+#   cp .env.example .env    # then put real values in .env
+#   docker compose up --build
+#
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: taxvault
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: taxvault
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taxvault"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      TAXVAULT_DATABASE_URL: postgresql+psycopg://taxvault:${POSTGRES_PASSWORD}@db:5432/taxvault
+      TAXVAULT_ENV: staging
+      TAXVAULT_MASTER_KEY: ${TAXVAULT_MASTER_KEY:?run `taxvault newkey` and put it in .env}
+      TAXVAULT_SESSION_SECRET: ${TAXVAULT_SESSION_SECRET:?set a 32+ character secret in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      TAXVAULT_ENV: staging
+      TAXVAULT_DATABASE_URL: postgresql+psycopg://taxvault:${POSTGRES_PASSWORD}@db:5432/taxvault
+      TAXVAULT_REDIS_URL: redis://redis:6379/0
+      TAXVAULT_MASTER_KEY: ${TAXVAULT_MASTER_KEY}
+      TAXVAULT_SESSION_SECRET: ${TAXVAULT_SESSION_SECRET}
+      TAXVAULT_TRUSTED_PROXIES: "*"
+      TAXVAULT_SMTP_HOST: ${TAXVAULT_SMTP_HOST:-}
+      TAXVAULT_SMTP_FROM: ${TAXVAULT_SMTP_FROM:-}
+      TAXVAULT_SMS_ACCOUNT_SID: ${TAXVAULT_SMS_ACCOUNT_SID:-}
+      TAXVAULT_SMS_AUTH_TOKEN: ${TAXVAULT_SMS_AUTH_TOKEN:-}
+      TAXVAULT_SMS_FROM: ${TAXVAULT_SMS_FROM:-}
+      WEB_CONCURRENCY: "2"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

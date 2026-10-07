@@ -25,6 +25,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# What a real deployment needs on top of the base install. Kept separate so a
+# laptop run stays a two-second install, and named so a Dockerfile asks for
+# exactly this set rather than a hand-maintained list that drifts.
+deploy = [
+    "alembic>=1.13",          # schema changes after go-live
+    "psycopg[binary]>=3.1",   # PostgreSQL driver
+    "gunicorn>=21.2",         # supervises uvicorn workers
+]
 # The AI layer is optional by design: every engine has a deterministic path.
 ai = ["anthropic>=1.0"]
 gmail = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]

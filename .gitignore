@@ -28,3 +28,4 @@ clients/app/web-build/
 # --- taxvault local state ---
 .taxvault/
 taxvault_master_key
+.env

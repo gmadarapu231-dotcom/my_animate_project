@@ -8,6 +8,7 @@ debugging a client's return and wants the figures without the UI in the way.
 from __future__ import annotations
 
 import argparse
+import textwrap
 import json
 import sys
 from pathlib import Path
@@ -261,6 +262,57 @@ def cmd_payment(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_newkey(args: argparse.Namespace) -> int:
+    """Print a fresh master key. The one value you cannot lose."""
+    import base64
+    import secrets
+
+    key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii")
+    print(key)
+    print(file=sys.stderr)
+    print("Set this as TAXVAULT_MASTER_KEY.", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Store it in a secret manager with versioning. Everything sealed with", file=sys.stderr)
+    print("it -- every Social Security number, every bank account -- is", file=sys.stderr)
+    print("permanently unreadable without it. There is no recovery path and no", file=sys.stderr)
+    print("way to re-derive it: it is random. Losing it loses the data.", file=sys.stderr)
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Is this environment configured to serve real clients?"""
+    from taxvault.db.session import ping
+    from taxvault.settings import readiness
+
+    report = readiness()
+    reachable, detail = ping()
+    width = max(len(c.name) for c in report.checks) + 2
+
+    print(f"environment: {report.environment}")
+    print()
+    for check in report.checks:
+        mark = "ok  " if check.ok else ("WARN" if check.severity == "warning" else "FAIL")
+        print(f"  [{mark}] {check.name.ljust(width)} {check.detail}")
+        if not check.ok and check.remedy and args.verbose:
+            for line in textwrap.wrap(check.remedy, 72):
+                print(f"         {line}")
+            print()
+    mark = "ok  " if reachable else "FAIL"
+    print(f"  [{mark}] {'database'.ljust(width)} {detail}")
+    print()
+
+    if report.errors or not reachable:
+        print(f"NOT READY: {len(report.errors)} blocking problem(s).")
+        if not args.verbose:
+            print("Run with --verbose for what to do about each one.")
+        return 1
+    if report.warnings:
+        print(f"Ready, with {len(report.warnings)} warning(s).")
+        return 0
+    print("Ready.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="taxvault",
@@ -313,6 +365,15 @@ def main(argv: list[str] | None = None) -> int:
     read.add_argument("--dump", action="store_true",
                       help="also print every line with its position on the page")
     read.set_defaults(func=cmd_read_w2)
+
+    sub.add_parser("newkey", help="generate a master encryption key").set_defaults(
+        func=cmd_newkey)
+
+    check = sub.add_parser(
+        "check", help="is this environment safe to serve real clients?")
+    check.add_argument("-v", "--verbose", action="store_true",
+                       help="print what to do about each problem")
+    check.set_defaults(func=cmd_check)
 
     pay = sub.add_parser("payment", help="price the ways to settle a balance")
     pay.add_argument("balance", type=float, help="positive to pay, negative for a refund")

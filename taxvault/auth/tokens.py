@@ -47,6 +47,18 @@ def session_secret() -> bytes:
         value = path.read_text(encoding="utf-8").strip()
         if value:
             return value.encode("utf-8")
+    # Same hazard as the master key, with a smaller blast radius: a generated
+    # secret differs per replica, so one replica rejects another's tokens, and
+    # every deploy signs every client out mid-return.
+    from taxvault.settings import is_real_deployment
+
+    if is_real_deployment():
+        raise TokenError(
+            f"{_SECRET_ENV} is not set and this is a real deployment. Refusing to "
+            "generate one on local disk: replicas would sign tokens the others "
+            "reject. Set the same 32+ character secret on every replica."
+        )
+
     generated = secrets.token_urlsafe(48)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
