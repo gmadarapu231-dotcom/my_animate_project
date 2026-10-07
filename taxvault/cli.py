@@ -449,6 +449,14 @@ def cmd_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_walkthrough(args: argparse.Namespace) -> int:
+    """One client start to finish, including the money reaching the practice."""
+    from taxvault.agent.walkthrough import run
+
+    return run(tax_year=args.year, scenario=args.scenario,
+               practice=args.practice, zelle_address=args.zelle)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="taxvault",
@@ -501,6 +509,15 @@ def main(argv: list[str] | None = None) -> int:
     read.add_argument("--dump", action="store_true",
                       help="also print every line with its position on the page")
     read.set_defaults(func=cmd_read_w2)
+
+    walk = sub.add_parser(
+        "walkthrough",
+        help="one client end to end, including the fee reaching your account")
+    walk.add_argument("--year", type=int, default=2026)
+    walk.add_argument("--scenario", default="investor")
+    walk.add_argument("--practice", default="Madarapu Tax Associates")
+    walk.add_argument("--zelle", default="billing@madarapu-tax.example")
+    walk.set_defaults(func=cmd_walkthrough)
 
     agent = sub.add_parser(
         "agent", help="run the agent on a sandbox scenario or your own files")

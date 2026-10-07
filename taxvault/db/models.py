@@ -450,3 +450,59 @@ class AuditEvent(Base):
     subject: Mapped[Optional[str]] = mapped_column(String(128))
     ip_address: Mapped[Optional[str]] = mapped_column(String(64))
     detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class PaymentDeclaration(Base, TimestampMixin):
+    """A client saying they have sent money. NOT money received.
+
+    This table exists because of what Zelle is. There is no API by which a
+    third-party application can learn that a Zelle transfer arrived: the money
+    lands in the practice's bank account and the bank is the only witness. So
+    the client's "I've paid" and the practice's "yes, it is here" are two
+    different facts, days apart, and conflating them is how a practice books
+    revenue it never received and files a return it was never paid for.
+
+    A declaration is a claim. It counts for nothing until a preparer confirms
+    it against the bank, at which point -- and only then -- a `TrustEntry` is
+    written and the money is real. The ledger stays a record of money that
+    actually moved.
+
+    `reference` is the string the client is asked to put in the payment memo.
+    It is what makes reconciliation possible at all: without it, a bank
+    statement line reading "ZELLE FROM J SMITH 450.00" cannot be matched to
+    one of three clients named Smith who each owe something.
+    """
+
+    __tablename__ = "payment_declaration"
+    __table_args__ = (
+        Index("ix_declaration_status_time", "status", "at"),
+        Index("ix_declaration_reference", "reference"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    taxpayer_id: Mapped[int] = mapped_column(
+        ForeignKey("taxpayer.id", ondelete="CASCADE"), index=True
+    )
+    fee_quote_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("fee_quote.id", ondelete="SET NULL")
+    )
+    #: `fee` is the practice's revenue; `tax` is the client's money passing
+    #: through. The same distinction the trust ledger enforces.
+    bucket: Mapped[str] = mapped_column(String(8), default="fee")
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    tax_year: Mapped[Optional[int]] = mapped_column(Integer)
+    method: Mapped[str] = mapped_column(String(32), default="zelle")
+    #: The memo string the client was told to use. Unique per declaration.
+    reference: Mapped[str] = mapped_column(String(64), index=True)
+    #: declared -> confirmed, or declared -> rejected.
+    status: Mapped[str] = mapped_column(String(16), default="declared")
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    #: Which preparer confirmed it. "The system" is not an answer to that.
+    confirmed_by: Mapped[Optional[str]] = mapped_column(String(320))
+    #: The bank's own line for the matching credit, kept for the audit.
+    bank_reference: Mapped[Optional[str]] = mapped_column(String(128))
+    trust_entry_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trust_entry.id", ondelete="SET NULL")
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text)

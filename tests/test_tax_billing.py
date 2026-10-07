@@ -85,19 +85,18 @@ def _client(client, email="dana@example.com", ssn="123-45-6789", mobile="4155550
     return verify_identity(client, sign_in(client, email), ssn=ssn, email=email, mobile=mobile)
 
 
-def test_fee_money_and_tax_money_are_separate_ledgers(client):
+def test_fee_money_and_tax_money_are_separate_ledgers(client, tax_db):
     """The single most important property in this module."""
+    firm = _preparer(client, tax_db)
     token = _client(client)
     priced = client.post("/api/billing/quote", headers=auth(token),
                          json={"tax_year": 2025}).json()
 
-    client.post("/api/billing/fee/paid", headers=auth(token), json={
-        "quote_id": priced["quote_id"], "method": "zelle",
-        "amount": float(priced["total"]) or 30.0, "reference": "ZL-8841",
-    })
-    client.post("/api/billing/funds", headers=auth(token), json={
-        "amount": 3261.14, "tax_year": 2025, "method": "zelle", "reference": "ZL-8842",
-    })
+    _record_fee(client, tax_db, firm, email="dana@example.com",
+                quote_id=priced["quote_id"],
+                amount=float(priced["total"]) or 30.0, reference="ZL-8841")
+    _record_funds(client, tax_db, firm, email="dana@example.com",
+                  amount=3261.14, reference="ZL-8842")
 
     ledger = client.get("/api/billing/ledger", headers=auth(token)).json()
     assert float(ledger["held_for_tax"]) == 3261.14
@@ -108,20 +107,21 @@ def test_fee_money_and_tax_money_are_separate_ledgers(client):
     assert buckets == {"tax", "fee"}
 
 
-def test_the_ledger_shows_a_running_balance(client):
+def test_the_ledger_shows_a_running_balance(client, tax_db):
+    firm = _preparer(client, tax_db)
     token = _client(client)
     for amount in (1000, 500, 761.14):
-        client.post("/api/billing/funds", headers=auth(token),
-                    json={"amount": amount, "tax_year": 2025})
+        _record_funds(client, tax_db, firm, email="dana@example.com", amount=amount)
     ledger = client.get("/api/billing/ledger", headers=auth(token)).json()
     assert float(ledger["held_for_tax"]) == 2261.14
     newest = ledger["entries"][0]
     assert float(newest["balance_after"]) == 2261.14
 
 
-def test_a_zero_payment_is_refused(client):
-    token = _client(client)
-    response = client.post("/api/billing/funds", headers=auth(token), json={"amount": 0})
+def test_a_zero_payment_is_refused(client, tax_db):
+    firm = _preparer(client, tax_db)
+    _client(client)
+    response = _record_funds(client, tax_db, firm, email="dana@example.com", amount=0)
     assert response.status_code == 400
 
 
@@ -149,10 +149,10 @@ def test_the_authorisation_keeps_what_the_client_agreed_to(client):
     assert "withdraw this instruction" in body["statement"]
 
 
-def test_an_unfunded_authorisation_says_what_is_missing(client):
+def test_an_unfunded_authorisation_says_what_is_missing(client, tax_db):
+    firm = _preparer(client, tax_db)
     token = _client(client)
-    client.post("/api/billing/funds", headers=auth(token),
-                json={"amount": 1000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="dana@example.com", amount=1000)
     body = client.post("/api/billing/authorize", headers=auth(token), json={
         "amount": 3261.14, "tax_year": 2025, "agreed": True,
     }).json()
@@ -201,6 +201,43 @@ def test_one_client_cannot_withdraw_anothers_instruction(client):
     assert response.status_code == 404
 
 
+def _taxpayer_id(tax_db, email: str) -> int:
+    """The taxpayer record behind a client's email."""
+    from sqlalchemy import select
+
+    from taxvault.db.models import Account, Taxpayer
+
+    account = tax_db.scalars(select(Account).where(Account.email == email)).first()
+    assert account is not None, f"no account for {email}"
+    taxpayer = tax_db.scalars(
+        select(Taxpayer).where(Taxpayer.account_id == account.id)
+    ).first()
+    assert taxpayer is not None, f"no taxpayer for {email}"
+    return taxpayer.id
+
+
+def _record_funds(client, tax_db, firm_token, *, email, amount, tax_year=2025,
+                  method="zelle", reference=""):
+    """Record tax money for a client, the way it actually happens.
+
+    Recording money is a preparer's act for a NAMED client: the client is not
+    a witness to their own payment arriving in the practice's bank, and this
+    figure is what the remittance batch pays the IRS from.
+    """
+    return client.post("/api/billing/funds", headers=auth(firm_token), json={
+        "amount": amount, "tax_year": tax_year, "method": method,
+        "reference": reference, "taxpayer_id": _taxpayer_id(tax_db, email),
+    })
+
+
+def _record_fee(client, tax_db, firm_token, *, email, quote_id, amount,
+                method="zelle", reference=""):
+    return client.post("/api/billing/fee/paid", headers=auth(firm_token), json={
+        "quote_id": quote_id, "amount": amount, "method": method,
+        "reference": reference, "taxpayer_id": _taxpayer_id(tax_db, email),
+    })
+
+
 # ---------------------------------------------------------------------------
 # the practice's side
 # ---------------------------------------------------------------------------
@@ -227,8 +264,8 @@ def test_a_client_cannot_see_the_practice_wide_queue(client):
 def test_the_queue_shows_who_is_funded_and_who_is_not(client, tax_db):
     firm = _preparer(client, tax_db)
     funded = _client(client, "a@example.com", "111-22-3333", "4155550122")
-    client.post("/api/billing/funds", headers=auth(funded),
-                json={"amount": 2000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="a@example.com",
+                          amount=2000, tax_year=2025)
     client.post("/api/billing/authorize", headers=auth(funded),
                 json={"amount": 2000, "tax_year": 2025, "agreed": True})
 
@@ -249,8 +286,8 @@ def test_an_unfunded_client_is_skipped_rather_than_fronted(client, tax_db):
     """The practice never lends a client their own tax payment."""
     firm = _preparer(client, tax_db)
     funded = _client(client, "a@example.com", "111-22-3333", "4155550122")
-    client.post("/api/billing/funds", headers=auth(funded),
-                json={"amount": 2000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="a@example.com",
+                          amount=2000, tax_year=2025)
     client.post("/api/billing/authorize", headers=auth(funded),
                 json={"amount": 2000, "tax_year": 2025, "agreed": True})
 
@@ -269,8 +306,8 @@ def test_an_unfunded_client_is_skipped_rather_than_fronted(client, tax_db):
 def test_remitting_empties_the_clients_trust_balance(client, tax_db):
     firm = _preparer(client, tax_db)
     funded = _client(client, "a@example.com", "111-22-3333", "4155550122")
-    client.post("/api/billing/funds", headers=auth(funded),
-                json={"amount": 2000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="a@example.com",
+                          amount=2000, tax_year=2025)
     client.post("/api/billing/authorize", headers=auth(funded),
                 json={"amount": 2000, "tax_year": 2025, "agreed": True})
 
@@ -283,8 +320,8 @@ def test_remitting_empties_the_clients_trust_balance(client, tax_db):
 def test_the_batch_file_carries_no_full_social_security_numbers(client, tax_db):
     firm = _preparer(client, tax_db)
     funded = _client(client, "a@example.com", "111-22-3333", "4155550122")
-    client.post("/api/billing/funds", headers=auth(funded),
-                json={"amount": 2000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="a@example.com",
+                          amount=2000, tax_year=2025)
     client.post("/api/billing/authorize", headers=auth(funded),
                 json={"amount": 2000, "tax_year": 2025, "agreed": True})
     batch = client.post("/api/billing/remittance/batch?tax_year=2025",
@@ -308,8 +345,8 @@ def test_a_batched_payment_can_no_longer_be_withdrawn(client, tax_db):
     """Once the money is in a batch, recovering it is the IRS's business."""
     firm = _preparer(client, tax_db)
     funded = _client(client, "a@example.com", "111-22-3333", "4155550122")
-    client.post("/api/billing/funds", headers=auth(funded),
-                json={"amount": 2000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="a@example.com",
+                          amount=2000, tax_year=2025)
     created = client.post("/api/billing/authorize", headers=auth(funded),
                           json={"amount": 2000, "tax_year": 2025, "agreed": True}).json()
     client.post("/api/billing/remittance/batch?tax_year=2025", headers=auth(firm))
@@ -324,8 +361,8 @@ def test_a_batched_payment_can_no_longer_be_withdrawn(client, tax_db):
 def test_a_batch_records_its_confirmations(client, tax_db):
     firm = _preparer(client, tax_db)
     funded = _client(client, "a@example.com", "111-22-3333", "4155550122")
-    client.post("/api/billing/funds", headers=auth(funded),
-                json={"amount": 2000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="a@example.com",
+                          amount=2000, tax_year=2025)
     created = client.post("/api/billing/authorize", headers=auth(funded),
                           json={"amount": 2000, "tax_year": 2025, "agreed": True}).json()
     batch = client.post("/api/billing/remittance/batch?tax_year=2025",
@@ -347,8 +384,8 @@ def test_a_batch_records_its_confirmations(client, tax_db):
 def test_a_batch_cannot_be_submitted_twice(client, tax_db):
     firm = _preparer(client, tax_db)
     funded = _client(client, "a@example.com", "111-22-3333", "4155550122")
-    client.post("/api/billing/funds", headers=auth(funded),
-                json={"amount": 500, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="a@example.com",
+                          amount=500, tax_year=2025)
     client.post("/api/billing/authorize", headers=auth(funded),
                 json={"amount": 500, "tax_year": 2025, "agreed": True})
     batch = client.post("/api/billing/remittance/batch?tax_year=2025",
@@ -373,9 +410,10 @@ def test_every_money_movement_is_audited(client, tax_db):
 
     from taxvault.db.models import AuditEvent
 
+    firm = _preparer(client, tax_db)
     token = _client(client)
-    client.post("/api/billing/funds", headers=auth(token),
-                json={"amount": 1000, "tax_year": 2025})
+    _record_funds(client, tax_db, firm, email="dana@example.com",
+                  amount=1000, tax_year=2025)
     client.post("/api/billing/authorize", headers=auth(token),
                 json={"amount": 1000, "tax_year": 2025, "agreed": True})
 

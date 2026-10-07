@@ -16,7 +16,9 @@ act across clients, are restricted to a preparer.
 
 from __future__ import annotations
 
-from datetime import date
+import os
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -36,6 +38,16 @@ from taxvault.db.models import (
     Taxpayer,
 )
 from taxvault.engines import fees as fee_engine
+from taxvault.engines.revenue import (
+    BankRow,
+    confirm_payment,
+    declare_payment,
+    firm_account,
+    outstanding_requests,
+    reconcile_bank_rows,
+    reject_payment,
+    request_fee_payment,
+)
 from taxvault.engines.remittance import (
     BUCKET_FEE,
     BUCKET_TAX,
@@ -64,6 +76,25 @@ def preparer(account: Account = Depends(verified_account)) -> Account:
             detail="Only a preparer can work across client accounts.",
         )
     return account
+
+
+def _target_taxpayer(
+    session: Session, account: Account, taxpayer_id: int | None
+) -> Taxpayer:
+    """The client a preparer is acting for.
+
+    Recording money is something a preparer does ON BEHALF OF a client, so the
+    client has to be named. Without an id it falls back to the acting account's
+    own taxpayer record, which is the single-user case; with one, a preparer may
+    reach any client, because that is the job. A non-preparer never arrives
+    here -- the routes that use this are gated on `preparer`.
+    """
+    if taxpayer_id is None:
+        return current_taxpayer(account=account, session=session)
+    taxpayer = session.get(Taxpayer, taxpayer_id)
+    if taxpayer is None:
+        raise HTTPException(status_code=404, detail="No such client.")
+    return taxpayer
 
 
 # ---------------------------------------------------------------------------
@@ -174,16 +205,29 @@ class FeePaid(BaseModel):
     method: str = Field(default="zelle", description="zelle, ach_debit or card")
     amount: float
     reference: str = Field(default="", description="The Zelle or bank reference.")
+    taxpayer_id: int | None = Field(
+        default=None,
+        description="Whose fee this is. Omit for the acting account's own record.",
+    )
 
 
 @router.post("/fee/paid")
 def fee_paid(
     body: FeePaid, request: Request,
-    account=Depends(verified_account),
-    taxpayer: Taxpayer = Depends(current_taxpayer),
+    account=Depends(preparer),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Record a preparation fee received. The practice's own money."""
+    """Record a preparation fee received, against the bank. Preparer only.
+
+    Gated on the preparer because this writes to the trust ledger, and the
+    client is not a witness to their own payment arriving. It was reachable by
+    the signed-in client, which meant anyone could mark their own fee paid and
+    the practice's revenue figure was whatever clients said it was.
+
+    The client's side of this is `/payments/declare`, which records a claim and
+    moves no money.
+    """
+    taxpayer = _target_taxpayer(session, account, body.taxpayer_id)
     row = session.get(FeeQuoteRecord, body.quote_id)
     if row is None or row.taxpayer_id != taxpayer.id:
         raise HTTPException(status_code=404, detail="No such quote on this account.")
@@ -220,6 +264,10 @@ class TaxFundsReceived(BaseModel):
     tax_year: int | None = None
     method: str = "zelle"
     reference: str = Field(default="", description="The Zelle or bank reference.")
+    taxpayer_id: int | None = Field(
+        default=None,
+        description="Whose money this is. Omit for the acting account's own record.",
+    )
 
 
 @router.get("/ledger")
@@ -235,11 +283,16 @@ def ledger(
 @router.post("/funds")
 def funds_received(
     body: TaxFundsReceived, request: Request,
-    account=Depends(verified_account),
-    taxpayer: Taxpayer = Depends(current_taxpayer),
+    account=Depends(preparer),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Record tax money received from a client, held in trust for them."""
+    """Record tax money received from a client, held in trust for them.
+
+    Preparer only, and for a named client. This figure is what
+    `ready_to_remit` pays the IRS from, so a client able to write it could
+    have the practice disburse money that never arrived.
+    """
+    taxpayer = _target_taxpayer(session, account, body.taxpayer_id)
     try:
         entry = record_funds(
             session, taxpayer, amount=body.amount, bucket=BUCKET_TAX,
@@ -503,3 +556,232 @@ def checklist(_preparer=Depends(preparer)) -> dict[str, Any]:
             "after taking client money discovers them expensively."
         ),
     }
+
+
+# ===========================================================================
+# Getting paid: request, declare, confirm
+# ===========================================================================
+# Three separate acts, deliberately. The practice asks, the client says they
+# have sent it, and a preparer confirms it against the bank. Only the third
+# one moves money, because Zelle gives an application no way to witness a
+# transfer arriving -- the bank is the only witness, and it answers to the
+# practice, not to this software.
+
+
+class PaymentRequestBody(BaseModel):
+    quote_id: int
+    method: str = Field(default="zelle", description="zelle, card, ach or check")
+    pay_to: str = Field(default="", description="The practice's Zelle address")
+
+
+class DeclareBody(BaseModel):
+    declaration_id: int
+    amount: float | None = None
+    note: str = ""
+
+
+class ConfirmBody(BaseModel):
+    declaration_id: int
+    amount: float | None = None
+    bank_reference: str = Field(
+        default="", description="The bank's own line for the matching credit"
+    )
+
+
+class RejectBody(BaseModel):
+    declaration_id: int
+    reason: str = ""
+
+
+class BankRowBody(BaseModel):
+    description: str
+    amount: float
+    bank_reference: str = ""
+
+
+class ReconcileBody(BaseModel):
+    rows: list[BankRowBody]
+    auto_confirm: bool = Field(
+        default=False,
+        description=(
+            "Leave false. True books money on a string match, which will one day "
+            "book a client's tax payment as practice revenue."
+        ),
+    )
+
+
+@router.post("/payments/request")
+def request_payment(
+    body: PaymentRequestBody, request: Request,
+    account=Depends(verified_account),
+    taxpayer: Taxpayer = Depends(current_taxpayer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Ask the client for the fee, before the return is filed.
+
+    Returns the exact instructions and the reference to put in the payment
+    memo. That reference is what makes the payment findable in a bank
+    statement later -- without it, a line reading "ZELLE FROM J SMITH" cannot
+    be matched to one of three clients named Smith.
+    """
+    quote = session.get(FeeQuoteRecord, body.quote_id)
+    if quote is None or quote.taxpayer_id != taxpayer.id:
+        raise HTTPException(status_code=404, detail="No such quote on this account.")
+    try:
+        instruction = request_fee_payment(
+            session, taxpayer, quote=quote, method=body.method,
+            pay_to=body.pay_to or os.getenv("TAXVAULT_ZELLE_ADDRESS", ""),
+            practice=os.getenv("TAXVAULT_PRACTICE_NAME", ""),
+        )
+    except RemittanceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(session, "fee_payment_requested", account_id=account.id,
+          actor=account.email, subject=f"fee_quote:{quote.id}",
+          ip_address=client_ip(request), amount=str(instruction.amount),
+          reference=instruction.reference)
+    return instruction.to_dict()
+
+
+@router.post("/payments/declare")
+def declare(
+    body: DeclareBody, request: Request,
+    account=Depends(verified_account),
+    taxpayer: Taxpayer = Depends(current_taxpayer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The client telling us they have sent it. Moves no money."""
+    try:
+        declaration = declare_payment(
+            session, taxpayer, declaration_id=body.declaration_id,
+            amount=body.amount, note=body.note,
+        )
+    except RemittanceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(session, "payment_declared", account_id=account.id, actor=account.email,
+          subject=f"declaration:{declaration.id}", ip_address=client_ip(request),
+          amount=str(declaration.amount), reference=declaration.reference)
+    return {
+        "declaration_id": declaration.id,
+        "status": declaration.status,
+        "amount": str(money(declaration.amount)),
+        "reference": declaration.reference,
+        "note": (
+            "Thank you. We check this against our bank before it counts as paid, "
+            "so it may show as pending for a day."
+        ),
+    }
+
+
+@router.post("/payments/confirm")
+def confirm(
+    body: ConfirmBody, request: Request,
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """A preparer confirming the money is in the bank. Now it is revenue."""
+    try:
+        declaration, entry = confirm_payment(
+            session, declaration_id=body.declaration_id,
+            confirmed_by=account.email, bank_reference=body.bank_reference,
+            amount=body.amount,
+        )
+    except RemittanceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(session, "payment_confirmed", account_id=account.id, actor=account.email,
+          subject=f"declaration:{declaration.id}", ip_address=client_ip(request),
+          amount=str(entry.amount), bucket=declaration.bucket,
+          reference=declaration.reference)
+    return {
+        "confirmed": True,
+        "declaration_id": declaration.id,
+        "amount": str(money(entry.amount)),
+        "bucket": declaration.bucket,
+        "confirmed_by": declaration.confirmed_by,
+        "balance_after": str(money(entry.balance_after)),
+        "trust_entry_id": entry.id,
+    }
+
+
+@router.post("/payments/reject")
+def reject(
+    body: RejectBody, request: Request,
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """No matching credit in the bank. The claim is closed, not deleted."""
+    try:
+        declaration = reject_payment(
+            session, declaration_id=body.declaration_id,
+            rejected_by=account.email, reason=body.reason,
+        )
+    except RemittanceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(session, "payment_rejected", account_id=account.id, actor=account.email,
+          subject=f"declaration:{declaration.id}", ip_address=client_ip(request),
+          reason=body.reason)
+    return {"declaration_id": declaration.id, "status": declaration.status,
+            "note": declaration.note}
+
+
+@router.get("/payments/pending")
+def pending_payments(
+    _preparer=Depends(preparer),
+    bucket: str = Query(default="fee"),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The confirmation queue: who says they have paid, and how much."""
+    rows = outstanding_requests(session, bucket=bucket)
+    return {
+        "pending": rows,
+        "count": len(rows),
+        "total": str(sum((money(r["amount"]) for r in rows), money(0))),
+        "note": (
+            "None of this is revenue yet. Check each one against the bank statement "
+            "and confirm it, or reject it if there is no matching credit."
+        ),
+    }
+
+
+@router.post("/payments/reconcile")
+def reconcile(
+    body: ReconcileBody, request: Request,
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Match a bank export against the open payment requests.
+
+    Proposes matches by default rather than booking them. A short payment is
+    reported as mismatched, not part-confirmed: that is a conversation with
+    the client, not an arithmetic adjustment.
+    """
+    rows = [
+        BankRow(description=row.description, amount=Decimal(str(row.amount)),
+                bank_reference=row.bank_reference)
+        for row in body.rows
+    ]
+    result = reconcile_bank_rows(
+        session, rows, confirmed_by=account.email, auto_confirm=body.auto_confirm,
+    )
+    audit(session, "payments_reconciled", account_id=account.id, actor=account.email,
+          subject="bank_export", ip_address=client_ip(request),
+          rows=len(rows), matched=len(result.matched),
+          auto_confirm=body.auto_confirm)
+    return result.to_dict()
+
+
+@router.get("/firm/account")
+def firm_statement(
+    _preparer=Depends(preparer),
+    days: int = Query(default=365, ge=1, le=3650),
+    platform_model: str = Query(default=""),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The practice's own account: what came in, what it keeps, what it holds.
+
+    Fee money and tax money are reported separately and never summed. The
+    first is revenue; the second is the client's, passing through, and mixing
+    them is what ends practices.
+    """
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    account = firm_account(session, since=since, platform_model=platform_model)
+    return account.to_dict()

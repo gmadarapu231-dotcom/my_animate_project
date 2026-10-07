@@ -92,7 +92,7 @@ def _tier_for(*, has_business: bool, has_rental: bool, state_count: int,
 
 def quote(
     *,
-    agi: Decimal | float | str = 0,
+    agi: Decimal | float | str | None = None,
     itemised: bool = False,
     w2_count: int = 1,
     state_count: int = 1,
@@ -114,7 +114,13 @@ def quote(
     config = fee_config()
     result = FeeQuote()
 
-    income = positive(money(agi))
+    # `None` means the income is not known yet, which is NOT the same as zero.
+    # The pro-bono discount below is means-tested, and a means test that passes
+    # on absent evidence gives the work away: a quote taken before the return
+    # was computed priced a $199,680 return at nothing, because no AGI had been
+    # supplied and the engine read that as low income.
+    income_known = agi is not None
+    income = positive(money(agi)) if income_known else ZERO
     se = positive(money(self_employment_income))
     rental = positive(money(rental_income))
     gains = positive(money(capital_gains))
@@ -138,12 +144,17 @@ def quote(
     # --- income band, applied to the base only ---------------------------
     multiplier = Decimal("1")
     band_label = ""
-    for band in config.get("income_bands", []):
-        ceiling = band.get("up_to")
-        if ceiling is None or income <= money(ceiling):
-            multiplier = money(band["multiplier"])
-            band_label = band.get("label", "")
-            break
+    if income_known:
+        for band in config.get("income_bands", []):
+            ceiling = band.get("up_to")
+            if ceiling is None or income <= money(ceiling):
+                multiplier = money(band["multiplier"])
+                band_label = band.get("label", "")
+                break
+    else:
+        # No income to band on. A multiplier of 1 is the neutral choice --
+        # taking the lowest band would be the same mistake as above.
+        band_label = "income not yet known"
     result.multiplier = multiplier
     result.income_band = band_label
 
@@ -195,7 +206,8 @@ def quote(
     discounts = config.get("discounts", {})
     free = discounts.get("refund_only_simple", {})
     threshold = money(free.get("applies_when_agi_under", 0))
-    if threshold > ZERO and income < threshold and tier_key in ("simple", "standard"):
+    if (income_known and threshold > ZERO and income < threshold
+            and tier_key in ("simple", "standard")):
         result.discount = subtotal
         result.line(free.get("label", "Free"), -subtotal, kind="discount",
                     note=free.get("note", ""))
@@ -242,6 +254,13 @@ def _finish(result: FeeQuote, config: dict[str, Any]) -> FeeQuote:
         "This is the whole price. It is paid to the practice, separately from your "
         "tax, and it is never deducted from your refund."
     )
+    if result.income_band == "income not yet known":
+        result.notes.append(
+            "This is an indicative price: your income is not known yet, so no "
+            "income band and no means-tested discount has been applied. It is "
+            "re-quoted once the return is computed, and that quote is the one "
+            "you are asked to pay."
+        )
     return result
 
 
