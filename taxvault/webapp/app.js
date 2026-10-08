@@ -2309,7 +2309,6 @@ async function downloadEstimate(estimateId, format, button) {
       throw new Error(detail);
     }
     const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
     // The server names the file; fall back to something sensible if a proxy
     // stripped the header.
     const header = response.headers.get('content-disposition') || '';
@@ -2317,22 +2316,103 @@ async function downloadEstimate(estimateId, format, button) {
     const name = match ? match[1] : `estimate.${wants}`;
 
     if (wants === 'html') {
-      window.open(url, '_blank', 'noopener');
+      await showDocument(blob, name);
     } else {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      await saveFile(blob, name);
     }
-    // Give the browser time to start the download before the URL is revoked.
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    toast(wants === 'html' ? 'Opened in a new tab.' : `Saved ${name}.`);
   } catch (error) {
-    toast(error.message, 'bad');
+    if (error && error.code === 'declined') return;   // the viewer said no
+    toast((error && error.message) || 'The document could not be built.', 'bad');
   } finally {
     if (button) { button.disabled = false; button.textContent = label; }
+  }
+}
+
+/**
+ * Hand a file to whoever is looking at this page.
+ *
+ * Two hosts, two mechanisms. In the running app an anchor with `download`
+ * is the whole story. Inside a published artifact the frame is not allowed
+ * to start a download at all, and an anchor there fails silently — a button
+ * that looks like it worked and did nothing. The artifact runtime mediates
+ * it instead, asking the viewer first, so that path is tried when it exists.
+ */
+async function saveFile(blob, name) {
+  const downloads = await artifactCapability('downloads');
+  if (downloads) {
+    await downloads.save({ filename: name, data: blob });
+    toast(`Saved ${name}.`);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Give the browser time to start the download before the URL is revoked.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  toast(`Saved ${name}.`);
+}
+
+/**
+ * Show the document. A new tab where one can be opened, and an overlay where
+ * it cannot — a published artifact runs in a frame that blocks both, and
+ * "nothing happened" is the worst outcome for a button.
+ */
+async function showDocument(blob, name) {
+  const markup = await blob.text();
+  const url = URL.createObjectURL(blob);
+  const tab = window.open(url, '_blank', 'noopener');
+  if (tab) {
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast('Opened in a new tab.');
+    return;
+  }
+  URL.revokeObjectURL(url);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'docview';
+  overlay.innerHTML = `
+    <div class="docview-bar">
+      <strong>${esc(name)}</strong>
+      <span class="grow"></span>
+      <button class="btn slim ghost" data-doc-print>Print or save as PDF</button>
+      <button class="btn slim ghost" data-doc-close>Close</button>
+    </div>
+    <iframe title="Your estimate" sandbox="allow-same-origin allow-modals"></iframe>`;
+  document.body.appendChild(overlay);
+  const frame = overlay.querySelector('iframe');
+  frame.srcdoc = markup;
+  const shut = () => overlay.remove();
+  overlay.querySelector('[data-doc-close]').addEventListener('click', shut);
+  overlay.querySelector('[data-doc-print]').addEventListener('click', () => {
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch {
+      toast('Your browser would not open the print dialog here.', 'bad');
+    }
+  });
+  document.addEventListener('keydown', function escape(event) {
+    if (event.key === 'Escape') { shut(); document.removeEventListener('keydown', escape); }
+  });
+}
+
+/**
+ * A runtime capability, when this page is running as a published artifact.
+ *
+ * Resolves null everywhere else, including the real app, which is the point:
+ * the caller takes the ordinary browser path and nothing has to know which
+ * host it is in.
+ */
+async function artifactCapability(name) {
+  try {
+    if (!window.claude || typeof window.claude.use !== 'function') return null;
+    return await window.claude.use(name);
+  } catch {
+    return null;
   }
 }
 

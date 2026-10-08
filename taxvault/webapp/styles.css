@@ -440,3 +440,22 @@ a { color: var(--accent); }
 .frame p { margin: 7px 0 0; font-size: 13px; color: var(--muted); }
 .frame code { font-family: var(--mono); font-size: 13px; background: var(--panel);
               border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; }
+
+/* The estimate document, shown in place.
+ *
+ * A published artifact runs in a frame that will not open a new tab, so the
+ * document is shown here instead of nowhere. The iframe is sandboxed without
+ * `allow-scripts`: the document is static by design and nothing in it needs
+ * to run. */
+.docview {
+  position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column;
+  background: var(--bg);
+}
+.docview-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px max(12px, env(safe-area-inset-left));
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--panel); border-bottom: 1px solid var(--line); font-size: 14px;
+}
+.docview-bar .grow { flex: 1; }
+.docview iframe { flex: 1; width: 100%; border: 0; background: #fff; }
