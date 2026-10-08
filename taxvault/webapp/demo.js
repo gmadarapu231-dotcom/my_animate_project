@@ -337,6 +337,46 @@
 
   const realFetch = window.fetch ? window.fetch.bind(window) : null;
 
+  /** The captured estimate document, as the endpoint would have served it. */
+  function estimateDocumentResponse(query) {
+    const doc = F.estimate_document || {};
+    const wants = query.get('format') === 'html' ? 'html' : 'pdf';
+    const disposition = query.get('disposition') === 'inline' ? 'inline' : 'attachment';
+    const name = doc.filename || 'estimate.pdf';
+
+    if (wants === 'html') {
+      if (!doc.html) {
+        return json({ detail: 'This demo does not carry the HTML document.' }, 404);
+      }
+      return new Response(doc.html, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Disposition':
+            `${disposition}; filename="${name.replace(/\.pdf$/, '.html')}"`,
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
+    if (!doc.pdf_base64) {
+      return json({ detail: 'This demo does not carry the PDF.' }, 404);
+    }
+    // base64 -> bytes. The PDF travels as text inside a single HTML file and
+    // has to become a real binary blob before a browser will save it.
+    const binary = atob(doc.pdf_base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `${disposition}; filename="${name}"`,
+        'Cache-Control': 'private, no-store',
+      },
+    });
+  }
+
   window.fetch = function demoFetch(input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     const full = url.replace(/^https?:\/\/[^/]+/, '');
@@ -363,6 +403,14 @@
         state.documents = [document];
         return json(document, 200);
       });
+    }
+
+    // The estimate document is the one response that is not JSON. It is
+    // served from the real bytes the renderer produced at build time, so the
+    // download button hands over the same PDF the running app would.
+    const wantsDocument = /^\/api\/estimates\/\d+\/document$/.test(path);
+    if (method === 'GET' && wantsDocument) {
+      return Promise.resolve(estimateDocumentResponse(query));
     }
 
     for (const [verb, pattern, handler] of ROUTES) {

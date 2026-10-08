@@ -22,6 +22,9 @@ dependencies = [
     # Pulls the text out of a payroll-portal W-2 PDF so an upload produces
     # figures rather than homework.
     "pypdf>=4.0",
+    # Draws the estimate a client takes away. Not optional: a practice that
+    # cannot hand someone their estimate has no deliverable.
+    "reportlab>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -36,7 +39,7 @@ deploy = [
 # The AI layer is optional by design: every engine has a deterministic path.
 ai = ["anthropic>=1.0"]
 gmail = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
-dev = ["pytest>=8.0", "httpx>=0.27", "reportlab>=4.0"]
+dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [project.scripts]
 careeros = "careeros.cli:main"

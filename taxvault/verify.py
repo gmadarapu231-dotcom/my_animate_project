@@ -112,6 +112,7 @@ def run(*, verbose: bool = False, trace: bool = False) -> int:
     _encryption(runner)
     _forms(runner)
     _agent(runner)
+    _documents(runner)
     _money(runner)
     _automation(runner)
     _environment(runner)
@@ -397,7 +398,7 @@ def _forms(r: _Runner) -> None:
     r.section("Reading forms")
 
     @r.check("A W-2 PDF is read box by box",
-             "Needs reportlab to build the sample: `pip install -e '.[dev]'`.")
+             "Needs reportlab: `pip install reportlab`.")
     def _() -> str:
         from taxvault.forms.extract import extract_text
 
@@ -444,7 +445,7 @@ def _agent(r: _Runner) -> None:
     r.section("The agent")
 
     @r.check("Every sandbox scenario runs end to end",
-             "Needs reportlab: `pip install -e '.[dev]'`.")
+             "Needs reportlab: `pip install reportlab`.")
     def _() -> str:
         from taxvault.agent import run_agent, sample_bundle
         from taxvault.agent.pipeline import FAILED
@@ -502,7 +503,96 @@ def _agent(r: _Runner) -> None:
         return "flagged as blocking before anything else happens"
 
 
-# -------------------------------------------------------------- 7. money
+# ------------------------------------------------------ 7. what they keep
+def _documents(r: _Runner) -> None:
+    """The estimate as something the client can hold.
+
+    An installation that computes a perfect return and cannot hand it to
+    anybody has no deliverable, so this is an acceptance check and not a
+    nicety.
+    """
+    r.section("What the client takes away")
+
+    @r.check("The estimate comes out as a document",
+             "Drawing the PDF needs reportlab: `pip install reportlab`.")
+    def _() -> str:
+        from taxvault.reports.estimate import (
+            PdfUnavailable,
+            build_estimate_document,
+            render_html,
+            render_pdf,
+        )
+
+        document = build_estimate_document(
+            _SAMPLE_ESTIMATE, client_name="Verify Sample", ssn_last4="6789",
+            estimate_id=1,
+        )
+        page = render_html(document)
+        assert "Estimated tax summary" in page
+        assert "$1,292.64" in page, "the headline figure is missing from the page"
+        try:
+            pdf = render_pdf(document)
+        except PdfUnavailable as exc:
+            raise _Skip(str(exc)) from exc
+        assert pdf.startswith(b"%PDF-"), "that is not a PDF"
+        return f"{len(pdf):,} bytes of PDF and {len(page):,} of HTML, same figures"
+
+    @r.check("Every page says it is not a filed return",
+             "A client who files this away believing it was sent does not pay.")
+    def _() -> str:
+        import io
+
+        from taxvault.reports.estimate import (
+            PdfUnavailable,
+            build_estimate_document,
+            render_pdf,
+        )
+
+        document = build_estimate_document(_SAMPLE_ESTIMATE, client_name="Verify Sample")
+        try:
+            blob = render_pdf(document)
+        except PdfUnavailable as exc:
+            raise _Skip(str(exc)) from exc
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:  # pragma: no cover
+            raise _Skip("pypdf is needed to read the page back") from exc
+        pages = PdfReader(io.BytesIO(blob)).pages
+        for number, page in enumerate(pages, 1):
+            assert "not a filed tax return" in page.extract_text(), (
+                f"page {number} does not say what this document is"
+            )
+        return f"all {len(pages)} page(s) carry the disclaimer"
+
+
+#: Enough of a real payload to render a document from, with figures checked by
+#: hand: 93,500 of wages, the 2025 single standard deduction, 12,019 of tax
+#: against 11,200 withheld, and California taking 4,573.64 against 4,100.
+_SAMPLE_ESTIMATE = {
+    "tax_year": 2025, "method": "regular", "filing_status": "single",
+    "resident_state": "CA",
+    "federal": {
+        "lines": [{"form": "1040", "label": "Wages, salaries, tips (Box 1)",
+                   "amount": "93500.00"},
+                  {"form": "1040", "label": "Total income", "amount": "93500.00"}],
+        "total_income": "93500.00", "agi": "93500.00", "adjustments": "0.00",
+        "deduction_kind": "standard", "deduction_taken": "15750.00",
+        "standard_deduction": "15750.00", "itemised_deduction": "0.00",
+        "taxable_income": "77750.00", "ordinary_tax": "12019.00",
+        "total_tax": "12019.00", "total_payments": "11200.00",
+        "effective_rate": 0.1285, "marginal_rate": 0.22,
+        "notes": [], "warnings": [],
+    },
+    "states": [{"code": "CA", "name": "California", "total_tax": "4573.64",
+                "withheld": "4100.00", "balance": "473.64", "lines": [], "notes": []}],
+    "totals": {"federal_tax": "12019.00", "state_tax": "4573.64",
+               "federal_balance": "819.00", "state_balance": "473.64",
+               "total_balance": "1292.64"},
+    "strategies": [], "applied": [],
+}
+
+
+# -------------------------------------------------------------- 8. money
 def _money(r: _Runner) -> None:
     r.section("Getting paid")
 
@@ -568,6 +658,7 @@ def _money(r: _Runner) -> None:
         return _receipt_check()
 
 
+# --------------------------------------------------------- 9. automation
 def _automation(r: _Runner) -> None:
     r.section("Automation")
 
@@ -591,7 +682,7 @@ def _automation(r: _Runner) -> None:
         return "the reconciliation job proposes matches and books none"
 
 
-# -------------------------------------------------------- 8. environment
+# -------------------------------------------------------- 10. environment
 def _environment(r: _Runner) -> None:
     r.section("This environment")
 

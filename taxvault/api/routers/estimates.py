@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,6 +32,12 @@ from taxvault.engines.retirement import (
     penalty_exceptions,
 )
 from taxvault.forms.w2 import W2
+from taxvault.reports.estimate import (
+    PdfUnavailable,
+    build_estimate_document,
+    render_html,
+    render_pdf,
+)
 
 router = APIRouter(prefix="/api/estimates", tags=["estimates"])
 
@@ -494,7 +500,14 @@ def _has_income(profile: Any, situation: dict[str, Any]) -> bool:
     return any(situation.get(name) for name in scalars)
 
 
-def _persist(session: Session, taxpayer: Taxpayer, result: EstimateResult) -> Estimate:
+def _persist(session: Session, taxpayer: Taxpayer, result: EstimateResult,
+             payload: dict[str, Any] | None = None) -> Estimate:
+    """Keep the run.
+
+    `payload` is the full response. It is stored alongside the summary columns
+    because the downloadable document must show what the client was told on the
+    day, not what the same inputs would produce after they change.
+    """
     row = Estimate(
         taxpayer_id=taxpayer.id,
         tax_year=result.tax_year,
@@ -514,7 +527,8 @@ def _persist(session: Session, taxpayer: Taxpayer, result: EstimateResult) -> Es
         marginal_rate=result.federal.marginal_rate,
         inputs={"headline": result.headline()},
         breakdown={"federal_lines": result.federal.lines,
-                   "states": [s.to_dict() for s in result.states]},
+                   "states": [s.to_dict() for s in result.states],
+                   "payload": payload if payload is not None else result.to_dict()},
         options=[s.to_dict() for s in result.strategies],
         selected_options=result.applied,
         params_version=f"federal:{result.tax_year}",
@@ -549,7 +563,7 @@ def create_estimate(
 
     payload = result.to_dict()
     if body.save:
-        row = _persist(session, taxpayer, result)
+        row = _persist(session, taxpayer, result, payload)
         payload["estimate_id"] = row.id
         audit(session, "estimate_run", account_id=account.id, actor=account.email,
               subject=f"estimate:{row.id}", ip_address=client_ip(request),
@@ -623,3 +637,103 @@ def get_estimate(
         "headline": (row.inputs or {}).get("headline", ""),
         "run_at": row.created_at.isoformat() if row.created_at else None,
     }
+
+
+@router.get("/{estimate_id}/document")
+def estimate_document(
+    estimate_id: int,
+    request: Request,
+    format: str = Query(default="pdf", pattern="^(pdf|html)$"),
+    disposition: str = Query(default="attachment", pattern="^(attachment|inline)$"),
+    account=Depends(verified_account),
+    taxpayer: Taxpayer = Depends(current_taxpayer),
+    session: Session = Depends(get_db),
+):
+    """The estimate as a document the client can keep.
+
+    A figure on a screen is not a deliverable. This is the thing a client reads
+    on the sofa, shows a spouse, takes to a lender and files with their
+    records -- and the thing the practice can point at a year later to say
+    exactly what it told them and when.
+
+    It renders the payload stored with the estimate, so re-downloading it after
+    the client's situation changes produces the same paper rather than a
+    quietly different one. An estimate saved before payloads were stored falls
+    back to the summary that was kept, and the document says on its face that
+    it is showing less.
+
+    `format=html` is not a lesser option: a browser prints it to a perfectly
+    good PDF, and it is what the endpoint serves when reportlab is not
+    installed rather than failing the download.
+    """
+    row = session.get(Estimate, estimate_id)
+    if row is None or row.taxpayer_id != taxpayer.id:
+        raise HTTPException(status_code=404, detail="No such estimate.")
+
+    breakdown = row.breakdown or {}
+    payload = breakdown.get("payload")
+    partial = payload is None
+    if partial:
+        # Written before the full payload was kept. Reconstruct what can be
+        # reconstructed rather than refusing to produce a document at all.
+        payload = {
+            "tax_year": row.tax_year,
+            "method": row.method,
+            "filing_status": row.filing_status,
+            "resident_state": row.resident_state,
+            "headline": (row.inputs or {}).get("headline", ""),
+            "federal": {
+                "lines": breakdown.get("federal_lines") or [],
+                "agi": str(row.federal_agi or 0),
+                "taxable_income": str(row.federal_taxable_income or 0),
+                "total_tax": str(row.federal_tax or 0),
+                "total_payments": str(row.federal_withheld or 0),
+                "effective_rate": float(row.effective_rate or 0),
+                "marginal_rate": float(row.marginal_rate or 0),
+            },
+            "states": breakdown.get("states") or [],
+            "totals": {
+                "federal_tax": str(row.federal_tax or 0),
+                "state_tax": str(row.state_tax or 0),
+                "federal_balance": str(row.federal_balance or 0),
+                "state_balance": str(row.state_balance or 0),
+                "total_balance": str(row.total_balance or 0),
+            },
+            "strategies": row.options or [],
+            "applied": row.selected_options or [],
+        }
+
+    document = build_estimate_document(
+        payload,
+        client_name=" ".join(filter(None, [taxpayer.first_name, taxpayer.last_name])),
+        ssn_last4=taxpayer.ssn_last4 or "",
+        estimate_id=row.id,
+        prepared_on=(row.created_at.date() if row.created_at else None),
+        partial=partial,
+    )
+
+    audit(session, "estimate_document_downloaded", account_id=account.id,
+          actor=account.email, subject=f"estimate:{row.id}",
+          ip_address=client_ip(request), format=format)
+
+    if format == "pdf":
+        try:
+            body, media = render_pdf(document), "application/pdf"
+            name = document.filename()
+        except PdfUnavailable:
+            # Still hand over a document. A practice waiting on a pip install
+            # is not a reason for a client to leave without their estimate.
+            body, media = render_html(document).encode("utf-8"), "text/html; charset=utf-8"
+            name = document.filename().replace(".pdf", ".html")
+    else:
+        body, media = render_html(document).encode("utf-8"), "text/html; charset=utf-8"
+        name = document.filename().replace(".pdf", ".html")
+
+    return Response(
+        content=body, media_type=media,
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{name}"',
+            # A tax document has no business in a shared cache.
+            "Cache-Control": "private, no-store",
+        },
+    )

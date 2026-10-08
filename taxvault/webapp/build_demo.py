@@ -20,6 +20,7 @@ import sys
 import tempfile
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 HERE = Path(__file__).resolve().parent
 
@@ -243,6 +244,10 @@ def capture() -> dict:
             # client gets once their money is booked. Captured after the
             # money flow, because what the jobs find depends on it.
             "automation": _capture_automation(client, auth),
+            # The downloadable estimate, drawn by the real renderer. Carried
+            # whole so the demo's download button hands over the actual PDF
+            # rather than a picture of one.
+            "estimate_document": _capture_estimate_document(client, auth, regular),
             "pricing": client.get("/api/agent/pricing").json(),
             "retirement_reference": client.get("/api/reference/retirement").json(),
             "home_loans_reference": client.get("/api/reference/home-loans").json(),
@@ -436,6 +441,34 @@ def _capture_automation(client, auth) -> dict:
              "why": automation.HUMAN_EFILE},
         ],
     }
+
+
+def _capture_estimate_document(client, auth, estimate) -> dict:
+    """The estimate document, both ways, exactly as the endpoint serves it.
+
+    A demo that shows a download button and then cannot produce the file is
+    worse than one that hides it, so the real bytes travel inside the page.
+    The PDF is a few kilobytes; base64 makes it a third larger again, which is
+    a fair price for a button that actually works offline.
+    """
+    estimate_id = estimate.get("estimate_id")
+    if not estimate_id:
+        return {}
+    out: dict[str, Any] = {"estimate_id": estimate_id}
+    pdf = client.get(f"/api/estimates/{estimate_id}/document?format=pdf", headers=auth)
+    if pdf.status_code == 200 and pdf.headers.get("content-type") == "application/pdf":
+        out["pdf_base64"] = base64.b64encode(pdf.content).decode("ascii")
+        out["filename"] = _filename_from(pdf.headers.get("content-disposition", ""))
+    page = client.get(
+        f"/api/estimates/{estimate_id}/document?format=html", headers=auth)
+    if page.status_code == 200:
+        out["html"] = page.text
+    return out
+
+
+def _filename_from(disposition: str) -> str:
+    match = re.search(r'filename="([^"]+)"', disposition or "")
+    return match.group(1) if match else "estimate.pdf"
 
 
 def inline_svg(name: str) -> str:

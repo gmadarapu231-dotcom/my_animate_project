@@ -1433,6 +1433,46 @@ function numField(id, label, value) {
   </div>`;
 }
 
+/**
+ * The estimate as something the client can keep.
+ *
+ * Until this existed the estimate was a screen and nothing else: nothing to
+ * email, nothing to show a lender, nothing to put in a folder, and nothing
+ * for the practice to point at a year later. The button is deliberately next
+ * to the headline figure rather than at the foot of the page, because the
+ * moment somebody wants the document is the moment they see the number.
+ *
+ * It only appears once the estimate has been saved, because a document needs
+ * an estimate to be a record OF. An unsaved run has nothing to reference.
+ */
+function downloadCard(result) {
+  if (!result || !result.estimate_id) {
+    return `<p class="note info">
+      This run was not saved, so there is no document to download yet. Run the
+      estimate again with saving on and the download appears here.
+    </p>`;
+  }
+  return `
+  <div class="card">
+    <h2>Take it with you</h2>
+    <p class="sub">Every figure above, with the form each one came off, as a
+       document you can keep, print or send on.</p>
+    <div class="actions">
+      <button class="btn" data-download-estimate="${result.estimate_id}" data-format="pdf">
+        Download the PDF
+      </button>
+      <button class="btn ghost" data-download-estimate="${result.estimate_id}" data-format="html">
+        Open it in a tab
+      </button>
+    </div>
+    <p class="note info">
+      It says on every page that this is an estimate and not a filed return.
+      That wording is not decoration: a client who files it away believing it
+      has been sent is a client who does not pay what they owe.
+    </p>
+  </div>`;
+}
+
 function estimateResult(result) {
   const totals = result.totals;
   const balance = Number(totals.total_balance);
@@ -1445,6 +1485,8 @@ function estimateResult(result) {
     <div class="amount ${refund ? 'good' : 'bad'}">${money2(Math.abs(balance))}</div>
     <div class="note">${esc(result.headline)} · ${result.tax_year} · ${esc(result.method)} method</div>
   </div>
+
+  ${downloadCard(result)}
 
   ${result.baseline ? `
     <div class="note good">
@@ -2244,12 +2286,66 @@ function wire() {
   wireSteps();
 }
 
+/**
+ * Fetch the document and hand it to the browser.
+ *
+ * A plain <a href> cannot be used: the endpoint is authenticated and a link
+ * carries no Authorization header. So the file is fetched as a blob and
+ * handed over through an object URL, which also means a failure arrives as a
+ * readable message instead of a blank tab.
+ */
+async function downloadEstimate(estimateId, format, button) {
+  const label = button ? button.textContent : '';
+  if (button) { button.disabled = true; button.textContent = 'Preparing…'; }
+  try {
+    const wants = format === 'html' ? 'html' : 'pdf';
+    const response = await fetch(
+      `${API}/api/estimates/${estimateId}/document?format=${wants}`
+      + (wants === 'html' ? '&disposition=inline' : ''),
+      { headers: state.token ? { Authorization: `Bearer ${state.token}` } : {} });
+    if (!response.ok) {
+      let detail = `The document could not be built (${response.status}).`;
+      try { detail = (await response.json()).detail || detail; } catch { /* not JSON */ }
+      throw new Error(detail);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    // The server names the file; fall back to something sensible if a proxy
+    // stripped the header.
+    const header = response.headers.get('content-disposition') || '';
+    const match = /filename="([^"]+)"/.exec(header);
+    const name = match ? match[1] : `estimate.${wants}`;
+
+    if (wants === 'html') {
+      window.open(url, '_blank', 'noopener');
+    } else {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    // Give the browser time to start the download before the URL is revoked.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast(wants === 'html' ? 'Opened in a new tab.' : `Saved ${name}.`);
+  } catch (error) {
+    toast(error.message, 'bad');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = label; }
+  }
+}
+
 function wireSteps() {
   document.querySelectorAll('[data-agent-scenario]').forEach((button) =>
     button.addEventListener('click', () => {
       state.agentScenario = button.dataset.agentScenario;
       render();
     }));
+
+  document.querySelectorAll('[data-download-estimate]').forEach((button) =>
+    button.addEventListener('click', () => downloadEstimate(
+      button.dataset.downloadEstimate, button.dataset.format, button)));
 
   document.querySelectorAll('[data-irs-group]').forEach((button) =>
     button.addEventListener('click', () => {
