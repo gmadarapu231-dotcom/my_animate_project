@@ -481,6 +481,76 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return run(verbose=args.verbose, trace=args.trace)
 
 
+def cmd_worker(args: argparse.Namespace) -> int:
+    """Run the automation jobs. Put this on a schedule.
+
+    Once a day is enough for most of it; hourly during filing season if you
+    want bank matches surfaced the same day. Running it more often is safe --
+    a proposal already waiting is not queued twice.
+    """
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    from taxvault.agent.automation import pending, run_all
+    from taxvault.db.session import session_scope
+
+    try:
+        with session_scope() as session:
+            summary = run_all(session)
+    except (OperationalError, ProgrammingError) as exc:
+        # A table the code expects and the database does not have. That is
+        # always the same cause and always the same fix, so say it rather
+        # than printing a stack trace at somebody at 7am.
+        message = str(exc)
+        if "no such table" in message or "does not exist" in message:
+            print("The database is missing a table this version needs.",
+                  file=sys.stderr)
+            print(file=sys.stderr)
+            print("  Run the migrations first:", file=sys.stderr)
+            print("    alembic upgrade head", file=sys.stderr)
+            print(file=sys.stderr)
+            print("  `init_db()` creates missing TABLES at startup but cannot",
+                  file=sys.stderr)
+            print("  alter existing ones, so a schema change needs alembic.",
+                  file=sys.stderr)
+            return 2
+        raise
+
+    print(f"ran at {summary['ran_at']}")
+    if summary["expired"]:
+        print(f"  closed {summary['expired']} stale proposal(s)")
+    for job in summary["jobs"]:
+        line = f"  {job['name'].ljust(28)} looked at {job['looked_at']:>4}"
+        if job["queued"]:
+            line += f", queued {job['queued']}"
+        print(line)
+        for note in job["notes"]:
+            for wrapped in textwrap.wrap(note, 66):
+                print(f"      {wrapped}")
+    print()
+    print(f"  {summary['queued']} new, {summary['open_tasks']} open in the queue")
+
+    if args.show_queue:
+        with session_scope() as session:
+            rows = pending(session, limit=args.limit)
+        if not rows:
+            print()
+            print("  Nothing waiting.")
+            return 0
+        print()
+        print("  the queue, most urgent first")
+        for row in rows:
+            print()
+            print(f"  #{row['id']}  [{row['kind']}]  priority {row['priority']}")
+            print(f"      {row['title']}")
+            for wrapped in textwrap.wrap(row["proposal"], 66):
+                print(f"      {wrapped}")
+            if row["requires_human"]:
+                print(f"      NEEDS A PERSON: {row['requires_human'][:60]}...")
+            if row["evidence"].get("moves"):
+                print(f"      worth {row['evidence']['moves']} on the return")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="taxvault",
@@ -533,6 +603,13 @@ def main(argv: list[str] | None = None) -> int:
     read.add_argument("--dump", action="store_true",
                       help="also print every line with its position on the page")
     read.set_defaults(func=cmd_read_w2)
+
+    work = sub.add_parser(
+        "worker", help="run the automation jobs (put this on a schedule)")
+    work.add_argument("--show-queue", action="store_true",
+                      help="print the queue afterwards")
+    work.add_argument("--limit", type=int, default=20)
+    work.set_defaults(func=cmd_worker)
 
     ver = sub.add_parser(
         "verify", help="prove this installation works end to end")

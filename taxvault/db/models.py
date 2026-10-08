@@ -505,4 +505,69 @@ class PaymentDeclaration(Base, TimestampMixin):
     trust_entry_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("trust_entry.id", ondelete="SET NULL")
     )
+    #: When the client was told the money arrived, and how. Recorded so a
+    #: receipt is sent once: telling somebody twice that their 379.00 was
+    #: received reads like it was taken twice.
+    receipt_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    receipt_channels: Mapped[Optional[str]] = mapped_column(String(64))
     note: Mapped[Optional[str]] = mapped_column(Text)
+
+
+class AgentTask(Base, TimestampMixin):
+    """One thing the agent did unprompted, waiting for a person to approve it.
+
+    The automation's whole shape is in this table. An agent that acts on its
+    own judgement across a tax practice will, eventually, email the wrong
+    client, book a payment that never arrived, or file a return nobody read.
+    An agent that does the WORK and queues the DECISION is the same saving in
+    hours with none of that: by the time a person looks, the documents are
+    read, the return is computed, the figures are checked and the draft is
+    written, and what is left is one click.
+
+    So every row here is a proposal with its evidence attached. `proposal` is
+    what the agent wants to do, `evidence` is what it based that on, and
+    `confidence` is how sure it is. Nothing in this table has happened yet.
+
+    Three kinds never leave this table automatically, whatever the confidence,
+    and `requires_human` records which:
+
+      * confirming money against a bank statement
+      * a client's review and their Form 8879 signature
+      * transmitting anything to the IRS
+    """
+
+    __tablename__ = "agent_task"
+    __table_args__ = (
+        Index("ix_agent_task_queue", "status", "priority", "at"),
+        Index("ix_agent_task_subject", "taxpayer_id", "kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    #: estimate_ready | question_outstanding | fee_unpaid | payment_match
+    #: | deadline | document_unreadable | review_ready
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    taxpayer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("taxpayer.id", ondelete="CASCADE"), index=True
+    )
+    tax_year: Mapped[Optional[int]] = mapped_column(Integer)
+    #: open | approved | dismissed | expired | done
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    #: 1 is most urgent. Sorts the queue so a filing deadline beats a nudge.
+    priority: Mapped[int] = mapped_column(Integer, default=5)
+    title: Mapped[str] = mapped_column(String(200))
+    #: What the agent proposes doing, in a sentence a client could read.
+    proposal: Mapped[Optional[str]] = mapped_column(Text)
+    #: What it based that on. A proposal with no evidence is a guess.
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    confidence: Mapped[float] = mapped_column(Numeric(4, 3), default=0)
+    #: Why a person has to be the one to do this, where that is true.
+    requires_human: Mapped[Optional[str]] = mapped_column(String(200))
+    #: After this, the proposal is stale: a figure from three weeks ago is not
+    #: a figure.
+    stale_after: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    acted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    acted_by: Mapped[Optional[str]] = mapped_column(String(320))
+    outcome: Mapped[Optional[str]] = mapped_column(Text)
+    #: Stops the same proposal being queued twice by consecutive runs.
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True, default="")

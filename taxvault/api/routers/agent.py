@@ -14,14 +14,18 @@ Two surfaces:
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from taxvault.agent import Document, run_agent, sample_bundle, scenarios
+from taxvault.agent.automation import act, pending, reconcile, run_all, run_for_client
 from taxvault.agent.sandbox import SandboxUnavailable
 from taxvault.api.deps import client_ip, current_taxpayer, get_db, verified_account
+from taxvault.api.routers.billing import preparer
 from taxvault.api.routers.documents import ALLOWED_CONTENT, MAX_UPLOAD_BYTES
 from taxvault.auth import audit
 from taxvault.config import UnsupportedTaxYear, federal, latest_year
@@ -200,3 +204,193 @@ def captured(year: int | None = None) -> dict[str, Any]:
         except SandboxUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"scenarios": scenarios(), "runs": runs, "tax_year": target}
+
+
+# ===========================================================================
+# The automation: the queue, and the jobs that fill it
+# ===========================================================================
+class ActBody(BaseModel):
+    action: str = Field(description="approve or dismiss")
+    note: str = ""
+
+
+class ReconcileRow(BaseModel):
+    description: str
+    amount: float
+    bank_reference: str = ""
+
+
+class ReconcileProposal(BaseModel):
+    rows: list[ReconcileRow]
+
+
+@router.get("/queue")
+def work_queue(
+    _preparer=Depends(preparer),
+    kind: str = "",
+    limit: int = 100,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """What the agent has done unprompted and wants a person to approve.
+
+    Most urgent first. Every row carries the figures it was based on, so the
+    decision does not need the work redoing to check it.
+    """
+    rows = pending(session, limit=limit, kind=kind)
+    needs_human = [r for r in rows if r["requires_human"]]
+    return {
+        "tasks": rows,
+        "count": len(rows),
+        "needs_a_person": len(needs_human),
+        "note": (
+            "Nothing in this queue has happened. Approving a payment match "
+            "books it; approving anything else carries out the proposal. "
+            "Confirming money, a client's signature and transmitting to the "
+            "IRS are never automatic, whatever the confidence."
+        ),
+    }
+
+
+@router.post("/queue/{task_id}")
+def act_on_task(
+    task_id: int, body: ActBody, request: Request,
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Approve or dismiss one proposal."""
+    try:
+        result = act(session, task_id=task_id, action=body.action,
+                     actor=account.email, note=body.note)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit(session, f"agent_task_{body.action}d", account_id=account.id,
+          actor=account.email, subject=f"agent_task:{task_id}",
+          ip_address=client_ip(request), kind=result["kind"])
+    return result
+
+
+@router.post("/automation/run")
+def run_automation(
+    request: Request,
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Run every job now. Normally a scheduled worker does this.
+
+    Safe to run as often as you like: a proposal already waiting is not
+    queued twice, and stale ones are closed rather than piling up.
+    """
+    summary = run_all(session)
+    audit(session, "automation_run", account_id=account.id, actor=account.email,
+          subject="automation", ip_address=client_ip(request),
+          queued=summary["queued"])
+    return summary
+
+
+@router.post("/automation/reconcile")
+def propose_matches(
+    body: ReconcileProposal, request: Request,
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Match a bank export and queue the matches. Books nothing.
+
+    The agent finds them; a person books them. That one click is the whole
+    difference between automation and an accident.
+    """
+    from taxvault.engines.revenue import BankRow
+
+    rows = [
+        BankRow(description=row.description, amount=Decimal(str(row.amount)),
+                bank_reference=row.bank_reference)
+        for row in body.rows
+    ]
+    result = reconcile(session, rows, proposed_by=account.email)
+    audit(session, "automation_reconcile", account_id=account.id,
+          actor=account.email, subject="bank_export",
+          ip_address=client_ip(request), rows=len(rows),
+          queued=result["queued"])
+    return result
+
+
+@router.post("/automation/client/{taxpayer_id}")
+def rerun_for_client(
+    taxpayer_id: int, request: Request,
+    tax_year: int | None = None,
+    filing_status: str = "single",
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Re-read every stored document for one client and recompute."""
+    taxpayer = session.get(Taxpayer, taxpayer_id)
+    if taxpayer is None:
+        raise HTTPException(status_code=404, detail="No such client.")
+    summary = run_for_client(
+        session, taxpayer, tax_year=tax_year, filing_status=filing_status,
+    )
+    audit(session, "automation_client_run", account_id=account.id,
+          actor=account.email, subject=f"taxpayer:{taxpayer_id}",
+          ip_address=client_ip(request), ran=summary.get("ran"),
+          state=summary.get("state"))
+    return summary
+
+
+@router.get("/receipts/pending")
+def receipts_pending(
+    _preparer=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Confirmed payments the client has not been told about yet."""
+    from taxvault.agent.notify import awaiting_receipt
+
+    rows = awaiting_receipt(session)
+    return {"pending": rows, "count": len(rows)}
+
+
+@router.get("/receipts/{declaration_id}/preview")
+def preview_receipt(
+    declaration_id: int,
+    _preparer=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Exactly what the client will be sent, before it goes.
+
+    A receipt names a figure and goes to somebody's inbox, so being able to
+    read it first is not a nicety.
+    """
+    from taxvault.agent.notify import build_receipt
+    from taxvault.db.models import PaymentDeclaration
+
+    declaration = session.get(PaymentDeclaration, declaration_id)
+    if declaration is None:
+        raise HTTPException(status_code=404, detail="No such payment.")
+    if declaration.status != "confirmed":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "That payment is not confirmed yet, so there is nothing to "
+                "confirm receipt of. Check it against the bank first."
+            ),
+        )
+    return build_receipt(session, declaration).to_dict()
+
+
+@router.post("/receipts/send")
+def send_receipts(
+    request: Request,
+    dry_run: bool = False,
+    account=Depends(preparer),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Send every outstanding receipt. `dry_run` previews without sending."""
+    from taxvault.agent.notify import send_pending_receipts
+
+    summary = send_pending_receipts(session, dry_run=dry_run)
+    if not dry_run:
+        audit(session, "receipts_sent", account_id=account.id,
+              actor=account.email, subject="receipts",
+              ip_address=client_ip(request), sent=summary["sent"],
+              failed=summary["failed"])
+    return summary

@@ -505,13 +505,21 @@ def _reconcile(run: AgentRun, parsed: dict[str, Any], year: int) -> None:
             for finding in form.validate(year=year):
                 findings.append(f"W-2 ({form.employer_name or 'unnamed'}): "
                                 f"{finding['message']}")
+        # Only things that need attention. A form's `validate` also returns
+        # `info` notes -- "mortgage insurance is not deductible until 2026" --
+        # which are worth showing the client but are not findings against the
+        # return, and counting them made a clean form warn.
+        notes: list[str] = []
         for kind in ("1099_div", "1099_r", "1098", "1095_a"):
             for form in parsed[kind]:
-                if hasattr(form, "validate"):
-                    for finding in form.validate():
-                        findings.append(
-                            f"{kind.replace('_', '-').upper()}: {finding['message']}"
-                        )
+                if not hasattr(form, "validate"):
+                    continue
+                for finding in form.validate():
+                    label = f"{kind.replace('_', '-').upper()}: {finding['message']}"
+                    if finding.get("severity") == "info":
+                        notes.append(label)
+                    else:
+                        findings.append(label)
         for form in parsed["simple"]:
             for finding in form.validate():
                 if finding["severity"] != "info":
@@ -531,8 +539,12 @@ def _reconcile(run: AgentRun, parsed: dict[str, Any], year: int) -> None:
                 severity="blocker", form="W-2",
             ))
 
-        step.detail = f"{len(findings)} cross-check finding(s)"
+        step.detail = (
+            f"{len(findings)} cross-check finding(s)"
+            + (f", {len(notes)} note(s)" if notes else "")
+        )
         step.findings = findings[:12]
+        run.notes.extend(notes)
         if findings:
             step.status = WARN
 
@@ -843,7 +855,12 @@ def _ask_what_cannot_be_read(run: AgentRun, parsed: dict[str, Any],
             f"{asks} question(s), {confirms} to confirm, {blockers} blocking"
             + (f", {answered_count} already answered" if answered_count else "")
         )
-        step.status = BLOCKED if blockers else (WARN if asks or confirms else OK)
+        # Having questions is the NORMAL output of this step, not a warning:
+        # a W-2 does not say whether the client was married on 31 December,
+        # and asking is the correct behaviour. Only a blocker is a problem.
+        # Flagging the ordinary case as a warning teaches people to ignore
+        # the warnings, which is worse than not having any.
+        step.status = BLOCKED if blockers else OK
 
 
 # --------------------------------------------------------------- 8. price
@@ -922,12 +939,19 @@ def _gate(run: AgentRun, parsed: dict[str, Any], client_reviewed: bool,
             satisfiable_in_software=False,
         )
         outstanding = gate.outstanding
+        # These four are outstanding on every correctly-prepared return until
+        # a person acts, so they are the expected state rather than a fault.
+        # The other two -- an unreadable document, an unanswered blocker --
+        # mean something is actually wrong.
+        expected = {"client_reviewed", "form_8879", "preparer_ptin",
+                    "efin_transmitter"}
+        unexpected = [r for r in outstanding if r["key"] not in expected]
         step.detail = (
             "ready to transmit" if gate.can_transmit
             else f"{len(outstanding)} requirement(s) outstanding: "
                  + ", ".join(r["key"] for r in outstanding)
         )
-        step.status = OK if gate.can_transmit else WARN
+        step.status = WARN if unexpected else OK
         step.findings = [r["label"] + " -- " + r["detail"] for r in outstanding]
 
 

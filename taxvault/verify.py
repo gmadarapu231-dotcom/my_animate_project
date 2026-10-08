@@ -113,6 +113,7 @@ def run(*, verbose: bool = False, trace: bool = False) -> int:
     _forms(runner)
     _agent(runner)
     _money(runner)
+    _automation(runner)
     _environment(runner)
     return _print(runner.report, verbose=verbose, trace=trace)
 
@@ -562,6 +563,33 @@ def _money(r: _Runner) -> None:
     def _() -> str:
         return _money_round_trip()
 
+    @r.check("A receipt tells the client, once, and says what matters")
+    def _() -> str:
+        return _receipt_check()
+
+
+def _automation(r: _Runner) -> None:
+    r.section("Automation")
+
+    @r.check("The jobs run, and running twice does not duplicate")
+    def _() -> str:
+        return _automation_check()
+
+    @r.check("Confirming money is never automatic",
+             "If this stops failing, something has been allowed to book "
+             "money on a string match.")
+    def _() -> str:
+        import inspect
+
+        from taxvault.agent import automation
+
+        source = inspect.getsource(automation.reconcile)
+        assert "auto_confirm=False" in source, (
+            "the reconciliation job no longer forces auto_confirm off"
+        )
+        assert "auto_confirm=True" not in source
+        return "the reconciliation job proposes matches and books none"
+
 
 # -------------------------------------------------------- 8. environment
 def _environment(r: _Runner) -> None:
@@ -798,3 +826,131 @@ def _print(report: Report, *, verbose: bool, trace: bool) -> int:
     print("  until these pass.")
     print()
     return 1
+
+
+def _receipt_now():
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _in_throwaway_database(work: Any) -> Any:
+    """Run `work(session)` against a fresh database, then put the world back.
+
+    Several checks need a database they can write to without touching the
+    one this installation actually uses, and each was doing the same
+    save-environment, swap, restore dance. Doing it in one place means a
+    check that raises cannot leave the process pointed at a temporary file.
+    """
+    import os
+    import tempfile
+
+    from taxvault.db.session import init_db, new_session, reset_engine
+
+    keys = ("TAXVAULT_HOME", "TAXVAULT_DATABASE_URL", "TAXVAULT_ENV")
+    previous = {key: os.environ.get(key) for key in keys}
+    workspace = tempfile.mkdtemp(prefix="taxvault-verify-")
+    try:
+        os.environ.update(
+            TAXVAULT_HOME=workspace,
+            TAXVAULT_DATABASE_URL=f"sqlite:///{workspace}/verify.db",
+        )
+        os.environ.pop("TAXVAULT_ENV", None)
+        reset_engine()
+        init_db()
+        session = new_session()
+        try:
+            outcome = work(session)
+            session.commit()
+            return outcome
+        finally:
+            session.close()
+    finally:
+        reset_engine()
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        reset_engine()
+
+
+def _a_client_with_a_quote(session, *, total=None):
+    """A taxpayer and an accepted quote, which most money checks need."""
+    from taxvault.db.models import Account, FeeQuoteRecord, Taxpayer
+
+    amount = D(215) if total is None else total
+    account = Account(email="verify@example.com", role="client")
+    session.add(account)
+    session.flush()
+    taxpayer = Taxpayer(account_id=account.id, first_name="Verify",
+                        last_name="Client", ssn_index="verify-index",
+                        resident_state="CA")
+    session.add(taxpayer)
+    session.flush()
+    quote = FeeQuoteRecord(taxpayer_id=taxpayer.id, tax_year=2026,
+                           tier="standard", base=amount, add_ons=D(0),
+                           discount=D(0), total=amount)
+    session.add(quote)
+    session.flush()
+    return taxpayer, quote
+
+
+def _receipt_check() -> str:
+    """A receipt is composed correctly, says what matters, and goes once."""
+    def work(session) -> str:
+        from taxvault.agent.notify import build_receipt, send_pending_receipts
+        from taxvault.engines.revenue import confirm_payment, request_fee_payment
+
+        taxpayer, quote = _a_client_with_a_quote(session)
+        instruction = request_fee_payment(session, taxpayer, quote=quote)
+        declaration, _ = confirm_payment(
+            session, declaration_id=instruction.declaration_id,
+            confirmed_by="verify@practice.example",
+        )
+        receipt = build_receipt(session, declaration)
+
+        assert "215.00" in receipt.body, "the amount is not in the receipt"
+        assert declaration.reference in receipt.body, "no reference to quote back"
+        # The thing clients actually worry about.
+        assert "deducted from your refund" in receipt.body, (
+            "the receipt does not say nothing comes out of the refund"
+        )
+        # A receipt is a phishing template, so it says what it will never ask.
+        assert "never ask you for your Social Security number" in receipt.body
+        assert receipt.subject.isascii(), (
+            "the subject needs MIME encoding, which some filters score"
+        )
+
+        # Once only: being told twice reads like being charged twice.
+        declaration.receipt_sent_at = _receipt_now()
+        session.flush()
+        again = send_pending_receipts(session)
+        assert again["looked_at"] == 0, "a receipt already sent was queued again"
+        return "composed, warns about phishing, sent once"
+
+    return _in_throwaway_database(work)
+
+
+def _automation_check() -> str:
+    """The jobs run against a real database and do not queue duplicates."""
+    def work(session) -> str:
+        from datetime import timedelta
+
+        from taxvault.agent.automation import pending, run_all
+
+        _, quote = _a_client_with_a_quote(session)
+        # Aged, so the unpaid-fee job has something to find.
+        quote.created_at = _receipt_now() - timedelta(days=10)
+        session.flush()
+
+        first = run_all(session)
+        assert first["queued"] >= 1, "the jobs found nothing to do at all"
+        second = run_all(session)
+        assert second["queued"] == 0, (
+            f"a second run queued {second['queued']} duplicate(s)"
+        )
+        return (f"{len(first['jobs'])} jobs, {first['queued']} queued, "
+                f"{len(pending(session, limit=100))} open, no duplicates")
+
+    return _in_throwaway_database(work)

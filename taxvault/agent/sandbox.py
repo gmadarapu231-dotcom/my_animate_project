@@ -63,7 +63,33 @@ def w2_pdf(
 ) -> bytes:
     """A W-2 drawn with the boxes where the real form puts them."""
     c, buffer = _canvas()
-    ss_wages = wages if ss_wages is None else ss_wages
+    # The three wage boxes are three different numbers on a real W-2, and
+    # getting that wrong builds a form the engine's own cross-checks reject:
+    #
+    #   box 1 (`wages`)  pay AFTER a pre-tax 401(k) deferral
+    #   box 3 (SS)       pay BEFORE the deferral, CAPPED at the wage base
+    #   box 5 (Medicare) pay BEFORE the deferral, with NO cap
+    #
+    # A 401(k) deferral escapes income tax but not FICA, which is why 3 and 5
+    # are higher than 1. Medicare has no wage base, which is why 5 is higher
+    # than 3 for anyone over it.
+    fica_wages = wages + deferral
+    medicare_wages = fica_wages
+    if ss_wages is None:
+        try:
+            from taxvault.config import federal
+
+            base = float(federal(year).amount("payroll", "social_security_wage_base"))
+        except Exception:
+            base = 0.0
+        ss_wages = min(fica_wages, base) if base else fica_wages
+    # Box 6 is 1.45% of box 5 PLUS the 0.9% Additional Medicare Tax on pay
+    # over 200,000. An employer withholds that at 200,000 whatever the
+    # employee's filing status, and leaving it out makes box 6 disagree with
+    # box 5 on any high earner.
+    medicare_withheld = medicare_wages * 0.0145 + max(
+        0.0, medicare_wages - 200000.0
+    ) * 0.009
     state_wages = wages if state_wages is None else state_wages
 
     def box(x, y, w, h, label, value, size=7):
@@ -99,8 +125,8 @@ def w2_pdf(
         (476, 690, "2  Federal income tax withheld", f"{withheld:,.2f}"),
         (340, 646, "3  Social security wages", f"{ss_wages:,.2f}"),
         (476, 646, "4  Social security tax withheld", f"{ss_wages * 0.062:,.2f}"),
-        (340, 602, "5  Medicare wages and tips", f"{ss_wages:,.2f}"),
-        (476, 602, "6  Medicare tax withheld", f"{ss_wages * 0.0145:,.2f}"),
+        (340, 602, "5  Medicare wages and tips", f"{medicare_wages:,.2f}"),
+        (476, 602, "6  Medicare tax withheld", f"{medicare_withheld:,.2f}"),
         (340, 558, "7  Social security tips", ""),
         (476, 558, "8  Allocated tips", ""),
         (340, 514, "10  Dependent care benefits", ""),
