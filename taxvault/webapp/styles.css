@@ -120,7 +120,7 @@ main { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; padding: var(--gu
 
 nav.tabs {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
-  display: grid; grid-template-columns: repeat(6, 1fr);
+  display: grid; grid-template-columns: repeat(7, 1fr);
   background: var(--panel); border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -131,6 +131,11 @@ nav.tabs button {
   border-top: 2px solid transparent; min-height: 52px;
 }
 nav.tabs button .glyph { font-size: 17px; line-height: 1; }
+@media (max-width: 420px) {
+  /* Seven tabs on a small phone: shrink the label rather than let it wrap,
+     which would make the bar two rows tall and cover the content. */
+  nav.tabs button { font-size: 9.5px; padding-left: 0; padding-right: 0; }
+}
 nav.tabs button[aria-current="page"] { color: var(--accent); border-top-color: var(--accent); }
 nav.tabs button[disabled] { opacity: .38; cursor: not-allowed; }
 
@@ -384,3 +389,54 @@ a { color: var(--accent); }
 .reslink .name { font-weight: 600; font-size: 14.5px; color: var(--accent); }
 .reslink .name::after { content: " \2197"; font-size: 12px; }
 .reslink .note { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+
+/* ---------------------------------------------------------- the agent view */
+.pipeline { display: grid; gap: 0; margin: 4px 0 14px; }
+.pipeline .step {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.pipeline .step:first-child { border-top: 0; }
+.pipeline .step .dot {
+  width: 20px; height: 20px; flex: none; border-radius: 99px; margin-top: 1px;
+  display: grid; place-items: center; font-size: 11px; font-weight: 700;
+  background: var(--good-bg); color: var(--good);
+}
+.pipeline .step.warn .dot { background: var(--warn-bg); color: var(--warn); }
+.pipeline .step.blocked .dot { background: var(--bad-bg); color: var(--bad); }
+.pipeline .step .grow { flex: 1; min-width: 0; }
+.pipeline .step .what { font-size: 14px; font-weight: 550; }
+.pipeline .step .detail { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.pipeline .step .ms { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+.question { border-left: 3px solid var(--gold); padding: 10px 0 10px 12px; margin-bottom: 12px; }
+.question.blocker { border-left-color: var(--bad); }
+.question .ask { font-size: 14px; font-weight: 550; }
+.question .why { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.question .worth { font-size: 12.5px; font-family: var(--mono); color: var(--gold);
+                   font-weight: 650; margin-top: 5px; }
+.question.blocker .worth { color: var(--bad); }
+
+.gate { display: grid; gap: 7px; }
+.gate .req { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; }
+.gate .req .mark { font-family: var(--mono); font-size: 11px; font-weight: 700;
+                   padding: 1px 6px; border-radius: 5px; flex: none; margin-top: 1px; }
+.gate .req.met .mark { background: var(--good-bg); color: var(--good); }
+.gate .req.open .mark { background: var(--warn-bg); color: var(--warn); }
+.gate .req.hard .mark { background: var(--bad-bg); color: var(--bad); }
+.gate .req .detail { color: var(--muted); font-size: 12.5px; }
+
+/* The money flow, as frames. The third one is the point of the whole thing. */
+.frame { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px;
+         margin-bottom: 10px; background: var(--panel-2); }
+.frame.spotlight { border-color: var(--gold); border-width: 2px; }
+.frame .n { font-family: var(--mono); font-size: 11px; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .07em; }
+.frame h4 { margin: 3px 0 8px; font-size: 15px; font-weight: 620; }
+.frame .big { font-family: var(--mono); font-size: 24px; font-weight: 700; }
+.frame .big.zero { color: var(--muted); }
+.frame .big.good { color: var(--good); }
+.frame p { margin: 7px 0 0; font-size: 13px; color: var(--muted); }
+.frame code { font-family: var(--mono); font-size: 13px; background: var(--panel);
+              border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; }

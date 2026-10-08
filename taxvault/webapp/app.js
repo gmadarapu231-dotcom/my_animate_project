@@ -34,6 +34,10 @@ const state = {
   irsGroup: 'money',
   justSaved: '',
   taxYear: null,
+  agent: null,
+  agentScenario: 'investor',
+  money: null,
+  pricing: null,
   situation: loadSituation(),
   pendingMobile: '',     // the number verified this session; the input is gone after re-render
   busy: false,
@@ -139,6 +143,7 @@ function render() {
     estimate: viewEstimate,
     filings: viewFilings,
     payment: viewPayment,
+    agent: viewAgent,
     irs: viewIrs,
   };
   main.innerHTML = (views[state.view] || viewAccount)() + stepNav(state.view);
@@ -184,6 +189,7 @@ function go(view) {
     refreshBilling();
   }
   if (view === 'irs' && !state.irs) refreshIrs();
+  if (view === 'agent' && !state.agent) refreshAgent();
 }
 
 function steps(current) {
@@ -191,6 +197,322 @@ function steps(current) {
   const index = order.indexOf(current);
   return `<div class="steps">${order.map((label, i) =>
     `<span class="${i < index ? 'done' : i === index ? 'now' : ''}">${label}</span>`).join('')}</div>`;
+}
+
+/* ============================================================ 6. THE AGENT
+ *
+ * What the agent does to a pile of documents, and what happens to the money
+ * afterwards. Every figure on this screen came out of the real engine when
+ * this file was built -- the pipeline trace, the return, the questions, the
+ * fee and the practice's account are all captured output, not prose.
+ *
+ * The screen is two halves because the product is two halves: the agent does
+ * the work, and then somebody has to get paid for it.
+ */
+function viewAgent() {
+  const data = state.agent;
+  if (!data) {
+    return `${steps('Estimate')}
+      <div class="card"><div class="empty">
+        <span class="glyph">✦</span>Loading the agent run…
+      </div></div>`;
+  }
+  const key = state.agentScenario || 'investor';
+  const bundle = data.runs[key];
+  const scenario = data.scenarios.find((s) => s.key === key) || {};
+  if (!bundle) {
+    return `<div class="card"><div class="empty">
+      <span class="glyph">✦</span>No captured run for ${esc(key)}.
+    </div></div>`;
+  }
+  const run = bundle.run;
+  const answered = bundle.after_answers;
+
+  return `
+  <div class="card">
+    <h2>What the agent does</h2>
+    <p class="sub">Nine steps. Eight are automatic. The ninth is the one that
+       cannot be.</p>
+    <div class="tabstrip">
+      ${data.scenarios.map((s) => `
+        <button data-agent-scenario="${esc(s.key)}" aria-selected="${s.key === key}">
+          ${esc(s.label)}
+        </button>`).join('')}
+    </div>
+    <p class="note info"><strong>${esc(scenario.label || '')}.</strong>
+       ${esc(scenario.description || '')}</p>
+  </div>
+
+  <div class="card">
+    <h2>The run</h2>
+    <p class="sub">${esc(run.documents.length)} file(s) in,
+       ${run.elapsed_ms}ms, read at ${Math.round(run.confidence * 100)}%
+       confidence.</p>
+    <div class="pipeline">
+      ${run.steps.map((step) => `
+        <div class="step ${esc(step.status)}">
+          <span class="dot">${step.status === 'ok' ? '✓'
+            : step.status === 'blocked' ? '!' : '•'}</span>
+          <div class="grow">
+            <div class="what">${esc(step.label)}</div>
+            <div class="detail">${esc(step.detail)}</div>
+          </div>
+          <span class="ms">${step.duration_ms}ms</span>
+        </div>`).join('')}
+    </div>
+    <h3>What it read</h3>
+    ${run.documents.map((doc) => `
+      <div class="docrow">
+        <div class="grow">
+          <div class="name">${esc(doc.filename)}</div>
+          <div class="meta">${doc.kinds.length
+            ? doc.kinds.map((k) => esc(k.replace(/_/g, '-').toUpperCase())).join(' · ')
+            : esc(doc.reason || 'nothing could be read')}</div>
+        </div>
+      </div>`).join('')}
+  </div>
+
+  ${run.estimate ? agentReturnCard(run.estimate) : ''}
+
+  ${run.review.length ? `
+  <div class="card">
+    <h2>What it asks instead of assuming</h2>
+    <p class="sub">A 1099-R does not say whether you left your job at 55. A 1098
+       does not say whether the loan bought a kitchen or a car. Each question
+       carries the figure it would move.</p>
+    ${run.review.map((item) => `
+      <div class="question ${item.severity === 'blocker' ? 'blocker' : ''}">
+        <div class="ask">${esc(item.question)}</div>
+        <div class="why">${esc(item.why)}</div>
+        ${item.moves ? `<div class="worth">worth ${esc(item.moves)} on this return</div>` : ''}
+        ${item.severity === 'blocker'
+          ? '<div class="worth">blocking — the return cannot go out until this is answered</div>' : ''}
+      </div>`).join('')}
+  </div>` : ''}
+
+  <div class="card">
+    <h2>Before this can be filed</h2>
+    <p class="sub">With every question answered, the client's review done and
+       Form 8879 signed, this is what is left.</p>
+    <div class="gate">
+      ${answered.gate.requirements.map((req) => {
+        const hard = !req.satisfiable_in_software;
+        const cls = req.met ? 'met' : hard ? 'hard' : 'open';
+        return `
+        <div class="req ${cls}">
+          <span class="mark">${req.met ? 'done' : 'OPEN'}</span>
+          <div class="grow">
+            ${esc(req.label)}
+            ${!req.met ? `<div class="detail">${esc(req.detail)}</div>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="note ${answered.gate.can_transmit ? 'good' : 'warn'}" style="margin-top:12px">
+      <strong>State: ${esc(answered.state.replace(/_/g, ' '))}.</strong>
+      There is no <em>filed</em> state in this system. Transmitting a return
+      needs an EFIN from IRS e-Services, acceptance testing against the
+      Modernized e-File system, and a Form 8879 signed by the taxpayer. Those
+      are authorisations your firm holds, not features software can grant
+      itself — so the agent stops at ready-to-sign, and a test asserts no code
+      path can go further.
+    </div>
+  </div>
+
+  ${moneyCard()}`;
+}
+
+function agentReturnCard(estimate) {
+  const f = estimate.federal;
+  const balance = Number(estimate.totals.total_balance);
+  const refund = balance < 0;
+  return `
+  <div class="card">
+    <h2>The return it worked out</h2>
+    <p class="sub">${esc(estimate.headline)}</p>
+    <dl class="kv">
+      <dt>Adjusted gross income</dt><dd>${money(f.agi)}</dd>
+      <dt>${esc(f.deduction_kind === 'itemised' ? 'Itemised' : 'Standard')} deduction</dt>
+      <dd>−${money(f.deduction_taken)}</dd>
+      <dt>Taxable income</dt><dd>${money(f.taxable_income)}</dd>
+      <dt>Federal tax</dt><dd>${money(f.total_tax)}</dd>
+      <dt>Withheld and paid</dt><dd>${money(f.total_payments)}</dd>
+      ${(estimate.states || []).map((s) => `
+        <dt>${esc(s.name)} tax</dt><dd>${money(s.tax)}</dd>`).join('')}
+      <dt><strong>${refund ? 'Refund' : 'To pay'}</strong></dt>
+      <dd><strong>${money(Math.abs(balance))}</strong></dd>
+    </dl>
+    ${Number(f.capital && f.capital.preferential_component || 0) ? `
+      <div class="note info">
+        <strong>Schedule D.</strong> Short-term netted to
+        ${money2(f.capital.short_term_net)} and long-term to
+        ${money2(f.capital.long_term_net)}; the survivor keeps
+        <strong>long-term</strong> treatment at 0/15/20%, which is the part
+        clients and spreadsheets get wrong.
+      </div>` : ''}
+    ${Number(f.mortgage && f.mortgage.total_interest || 0) ? `
+      <div class="note info">
+        <strong>Form 1098.</strong> You paid ${money(f.mortgage.total_interest)}
+        of interest; ${money(f.mortgage.deductible_interest)} is deductible,
+        because ${money(f.mortgage.allowed_debt)} of your
+        ${money(f.mortgage.qualifying_debt)} balance is inside the ceiling. The
+        interest is prorated, not lost.
+      </div>` : ''}
+    ${cliffNote(estimate)}
+  </div>`;
+}
+
+/* ------------------------------------------------- how the money reaches you */
+/**
+ * The health-subsidy cliff, read from the AS-FILED position.
+ *
+ * The same trap the agent's own question fell into: the planning engine can
+ * contribute its way under the cliff, so testing the post-planning figure
+ * reports no cliff and the client never learns they are over one. What is
+ * true until they act is the baseline, so that is what this reads -- and
+ * where planning fixes it, that is the most valuable thing on the return and
+ * worth saying out loud.
+ */
+function cliffNote(estimate) {
+  const planned = (estimate.federal.premium_tax_credit) || {};
+  const asFiled = ((estimate.baseline || {}).federal || {}).premium_tax_credit || planned;
+  if (!asFiled.over_cliff) return '';
+  const rescued = planned.over_cliff === false;
+  return `
+    <div class="note bad">
+      <strong>Health subsidy cliff — the most expensive thing here.</strong>
+      As your forms stand, household income is
+      ${esc(asFiled.income_as_pct_of_fpl)}% of the federal poverty line. Over
+      400% the <em>entire</em> credit goes and all
+      ${money2(asFiled.repayment)} of the advance is repaid, with no cap. From
+      2026 that cliff is back.
+      ${rescued ? `<br><br><strong>The planning moves fix it:</strong> they
+        bring income to ${esc(planned.income_as_pct_of_fpl)}% of the poverty
+        line, under the limit, which saves the whole
+        ${money2(asFiled.repayment)}. A deductible contribution here returns
+        far more than it costs.` : ''}
+    </div>`;
+}
+
+function moneyCard() {
+  const m = state.money;
+  if (!m) return '';
+  const ref = m.requested.reference;
+  return `
+  <div class="card">
+    <h2>How the fee reaches your account</h2>
+    <p class="sub">Three separate acts, and only the third one moves money.</p>
+
+    <div class="frame">
+      <div class="n">step 1 — you ask</div>
+      <h4>The fee, quoted before anything is filed</h4>
+      <div class="big">${money2(m.quote.total)}</div>
+      <p>${esc(m.quote.tier_label)}. Set by the work the return takes, not by
+         the refund — the same price whether it refunds or owes. A fee based on
+         a percentage of the refund is a contingent fee, prohibited by
+         Circular 230 §10.27.</p>
+      <p style="margin-top:10px">The client is told to send it to your Zelle
+         address with <code>${esc(ref)}</code> in the memo.</p>
+    </div>
+
+    <div class="frame">
+      <div class="n">step 2 — the client says they sent it</div>
+      <h4>A claim, not a credit</h4>
+      <p>${esc(m.declared.note)}</p>
+    </div>
+
+    <div class="frame spotlight">
+      <div class="n">step 3 — your account, before you check the bank</div>
+      <h4>Revenue is still zero</h4>
+      <div class="big zero">${money2(m.before.fees_collected)}</div>
+      <p><strong>${money2(m.before.fees_declared_awaiting_confirmation)}</strong>
+         is sitting in the confirmation queue. This is the whole point of the
+         design: Zelle gives software no way to witness a transfer arriving.
+         Your bank is the only witness and it answers to you, not to this
+         application. So a client saying “I paid” does not move your revenue.</p>
+    </div>
+
+    <div class="frame">
+      <div class="n">step 4 — you reconcile the bank export</div>
+      <h4>Matched by reference</h4>
+      ${m.bank_rows.map((row) => `
+        <div class="docrow">
+          <div class="grow">
+            <div class="name">${money2(row.amount)}</div>
+            <div class="meta">${esc(row.description)}</div>
+          </div>
+          <span class="pill ${row.matched ? 'ok' : 'attention'}">
+            ${row.matched ? 'matched' : 'no reference'}</span>
+        </div>`).join('')}
+      <p>Matches are <em>proposed</em>, not booked. A rule that books money on a
+         string match will one day book a client's tax payment as your revenue.
+         A short payment is flagged as a mismatch, not quietly part-paid.</p>
+    </div>
+
+    <div class="frame">
+      <div class="n">step 5 — you confirm it</div>
+      <h4>Now it is revenue</h4>
+      <div class="big good">${money2(m.confirmed.amount)}</div>
+      <p>Ledger entry #${esc(m.confirmed.trust_entry_id)}, bucket
+         “${esc(m.confirmed.bucket)}”, confirmed by
+         ${esc(m.confirmed.confirmed_by)} against
+         ${esc(m.confirmed.bank_reference)}. The ledger records who checked —
+         “the system confirmed it” is not an answer to that question.</p>
+    </div>
+
+    <div class="frame">
+      <div class="n">step 6 — your account</div>
+      <h4>What you keep</h4>
+      <dl class="kv">
+        <dt>Fees confirmed (revenue)</dt><dd>${money2(m.after.fees_collected)}</dd>
+        <dt>Returns paid</dt><dd>${esc(m.after.returns_paid)}</dd>
+        <dt>Client money held in trust</dt>
+        <dd>${money(m.after.tax_held_in_trust)}</dd>
+        <dt><strong>Net to the practice</strong></dt>
+        <dd><strong>${money2(m.after.net_to_practice)}</strong></dd>
+      </dl>
+      <p>Client tax money is reported separately and never summed with revenue.
+         Mixing the two is what ends practices.</p>
+    </div>
+
+    <details>
+      <summary style="cursor:pointer;color:var(--accent);font-weight:550;margin:8px 0">
+        If you white-label this to other preparers
+      </summary>
+      <dl class="kv" style="margin-top:8px">
+        <dt>Fees confirmed</dt><dd>${money2(m.platform.fees_collected)}</dd>
+        <dt>Platform fee (${esc(m.platform.platform_model)})</dt>
+        <dd>−${money2(m.platform.platform_cost)}</dd>
+        <dt><strong>Net to the practice</strong></dt>
+        <dd><strong>${money2(m.platform.net_to_practice)}</strong></dd>
+      </dl>
+      <p class="note info">Running your own install, the platform cost is zero
+         and you keep all of it.</p>
+    </details>
+
+    ${pricingCard()}
+  </div>`;
+}
+
+function pricingCard() {
+  const p = state.pricing;
+  if (!p) return '';
+  const refused = p.models.filter((m) => !m.allowed);
+  return `
+    <h3>What you may and may not charge</h3>
+    ${p.models.filter((m) => m.allowed).map((m) => `
+      <div class="docrow">
+        <div class="grow">
+          <div class="name">${esc(m.label)}${m.active ? ' — in use' : ''}</div>
+          <div class="meta">${esc(m.description)}</div>
+        </div>
+      </div>`).join('')}
+    ${refused.map((m) => `
+      <div class="note bad">
+        <strong>${esc(m.label)}: not available.</strong> ${esc(m.refusal)}
+        <br><br><strong>Instead:</strong> ${esc(m.instead)}
+      </div>`).join('')}
+    <div class="note info">${esc(p.disclosure.on_every_quote)}</div>`;
 }
 
 /* =========================================================== 1. ACCOUNT */
@@ -1797,6 +2119,12 @@ function wire() {
 }
 
 function wireSteps() {
+  document.querySelectorAll('[data-agent-scenario]').forEach((button) =>
+    button.addEventListener('click', () => {
+      state.agentScenario = button.dataset.agentScenario;
+      render();
+    }));
+
   document.querySelectorAll('[data-irs-group]').forEach((button) =>
     button.addEventListener('click', () => {
       state.irsGroup = button.dataset.irsGroup;
@@ -2500,6 +2828,25 @@ async function refreshDocuments() {
   } catch (error) {
     if (error.status !== 403) toast(error.message, 'bad');
   }
+}
+
+async function refreshAgent() {
+  // One request for the whole captured set: the agent runs, the money flow
+  // and the pricing models. The demo answers it from the fixtures the build
+  // captured from the real engine; the running app answers it live.
+  try {
+    const [agent, money, pricing] = await Promise.all([
+      api('/api/agent/captured'),
+      api('/api/agent/money').catch(() => null),
+      api('/api/agent/pricing').catch(() => null),
+    ]);
+    state.agent = agent;
+    state.money = money;
+    state.pricing = pricing;
+  } catch (error) {
+    toast(error.message, 'bad');
+  }
+  render();
 }
 
 async function refreshIrs() {

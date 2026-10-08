@@ -50,6 +50,11 @@
     ['GET', /^\/api\/auth\/session$/, () => session()],
     ['GET', /^\/api\/reference\/irs/, () => F.irs],
     ['GET', /^\/api\/reference\/retirement$/, () => F.retirement_reference],
+    // The agent screen. Captured from the real engine when this file was
+    // built, which is why the figures reconcile with the rest of the demo.
+    ['GET', /^\/api\/agent\/captured$/, () => F.agent],
+    ['GET', /^\/api\/agent\/money$/, () => F.money],
+    ['GET', /^\/api\/agent\/pricing$/, () => F.pricing],
     ['GET', /^\/api\/reference\/home-loans$/, () => F.home_loans_reference],
     // The RMD depends on the birth year, so answer from the fixture only for
     // the one it was captured with, and say so otherwise rather than showing

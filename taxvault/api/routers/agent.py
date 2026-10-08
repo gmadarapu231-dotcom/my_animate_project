@@ -169,3 +169,34 @@ async def run_for_client(
           tax_year=year, documents=len(documents), state=run.state,
           confidence=run.confidence)
     return run.to_dict()
+
+
+@router.get("/captured")
+def captured(year: int | None = None) -> dict[str, Any]:
+    """Every sandbox scenario, run twice, for the Agent screen.
+
+    Twice because the gap is the product: the first pass collects the
+    questions, the second has them answered and reaches
+    `ready_for_signature`. Unauthenticated and safe to leave on -- the
+    documents are synthetic, nothing is stored, and every synthetic SSN is
+    from the 900-999 range the Social Security Administration has never
+    issued.
+
+    The offline demo answers this from figures captured at build time; a
+    running server computes it on the spot. Either way it is real engine
+    output, which is why the screen can be trusted as a demonstration.
+    """
+    from taxvault.agent.sandbox import SCENARIOS, SandboxUnavailable
+
+    target = year or latest_year()
+    runs: dict[str, Any] = {}
+    for key in SCENARIOS:
+        try:
+            runs[key] = run_sandbox(key, year=target, answer_everything=True)
+        except HTTPException as exc:
+            if exc.status_code == 503:  # reportlab absent
+                raise
+            continue
+        except SandboxUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"scenarios": scenarios(), "runs": runs, "tax_year": target}

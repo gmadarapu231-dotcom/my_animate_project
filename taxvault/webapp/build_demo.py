@@ -233,6 +233,12 @@ def capture() -> dict:
                 "amount": 3261.14, "tax_year": 2025,
                 "jurisdiction": "federal", "method": "irs_direct_pay",
             }).json(),
+            # The agent, run for real against synthetic documents, plus the
+            # money flow from quote to confirmed revenue. Captured here rather
+            # than written by hand so the demo cannot drift from the engine.
+            "agent": _capture_agent(client),
+            "money": _capture_money(client, auth),
+            "pricing": client.get("/api/agent/pricing").json(),
             "retirement_reference": client.get("/api/reference/retirement").json(),
             "home_loans_reference": client.get("/api/reference/home-loans").json(),
             # One worked RMD, so the demo's button has something real to show.
@@ -250,6 +256,98 @@ def capture() -> dict:
     fixtures["identity"].pop("token", None)
     return fixtures
 
+
+def _capture_agent(client) -> dict:
+    """Run the agent on every sandbox scenario and keep the whole trace.
+
+    `answer_everything=true` runs each one twice: once to collect the
+    questions, then again with them answered, which is how a return reaches
+    ready_for_signature. The demo shows both, because the gap between them is
+    the product.
+    """
+    from taxvault.agent.sandbox import SCENARIOS
+
+    runs = {}
+    for key in SCENARIOS:
+        response = client.post(
+            f"/api/agent/sandbox/{key}?year=2026&answer_everything=true"
+        )
+        if response.status_code == 200:
+            runs[key] = response.json()
+    return {
+        "scenarios": client.get("/api/agent/scenarios").json()["scenarios"],
+        "runs": runs,
+    }
+
+
+def _capture_money(client, auth) -> dict:
+    """Quote, request, declare, confirm -- and the firm account either side.
+
+    The interesting frame is the third one: the client has said they paid and
+    the practice's revenue is still zero, because Zelle gives software no way
+    to witness a transfer and the bank is the only witness.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from taxvault.db.models import Account
+    from taxvault.db.session import new_session
+    from taxvault.engines.revenue import confirm_payment, firm_account
+
+    estimate = client.post("/api/estimates", headers=auth, json={
+        "tax_year": 2025, "method": "planning", "situation": SAMPLE_SITUATION,
+    }).json()
+    quote = client.post("/api/billing/quote", headers=auth, json={
+        "estimate_id": estimate.get("estimate_id"), "tax_year": 2025,
+        "w2_count": 1, "planning_session": True,
+    }).json()
+    requested = client.post("/api/billing/payments/request", headers=auth, json={
+        "quote_id": quote["quote_id"], "method": "zelle",
+        "pay_to": "billing@your-practice.example",
+    }).json()
+    declared = client.post("/api/billing/payments/declare", headers=auth, json={
+        "declaration_id": requested["declaration_id"],
+    }).json()
+
+    session = new_session()
+    try:
+        since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=365)
+        before = firm_account(session, since=since).to_dict()
+        staff = Account(email="preparer@your-practice.example", role="preparer")
+        session.add(staff)
+        session.flush()
+        declaration, entry = confirm_payment(
+            session, declaration_id=requested["declaration_id"],
+            confirmed_by="preparer@your-practice.example",
+            bank_reference="ZELLE CONF 88213",
+        )
+        confirmed = {
+            "amount": str(entry.amount), "confirmed_by": declaration.confirmed_by,
+            "bucket": declaration.bucket, "trust_entry_id": entry.id,
+            "bank_reference": declaration.bank_reference,
+        }
+        after = firm_account(session, since=since).to_dict()
+        platform = firm_account(session, since=since,
+                                platform_model="per_return").to_dict()
+        session.commit()
+    finally:
+        session.close()
+
+    return {
+        "quote": quote,
+        "requested": requested,
+        "declared": declared,
+        "confirmed": confirmed,
+        "before": before,
+        "after": after,
+        "platform": platform,
+        "bank_rows": [
+            {"description": f"ZELLE FROM DANA REED ON 10/08 MEMO "
+                            f"{requested['reference']} CONF 88213",
+             "amount": requested["amount"], "matched": True},
+            {"description": "ZELLE FROM ANOTHER CLIENT MEMO NONE GIVEN",
+             "amount": "150.00", "matched": False},
+        ],
+    }
 
 def inline_svg(name: str) -> str:
     """A data: URI, so the single file has no sibling assets to lose."""
