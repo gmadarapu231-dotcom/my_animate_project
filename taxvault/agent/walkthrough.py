@@ -56,6 +56,18 @@ def run(*, tax_year: int = 2026, scenario: str = "investor",
     )
     os.environ.pop("TAXVAULT_ENV", None)
 
+    # A walkthrough is read by people who are not engineers, and a library
+    # deprecation notice above the output reads exactly like a failure. The
+    # warning is real but it is about fastapi's test client, not about
+    # anything here, so it is silenced for this command only.
+    import logging
+    import warnings
+
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", message=r".*starlette\.testclient.*")
+    logging.getLogger("taxvault").setLevel(logging.WARNING)
+    os.environ.setdefault("TAXVAULT_LOG_LEVEL", "WARNING")
+
     from fastapi.testclient import TestClient
 
     from taxvault.agent import sample_bundle

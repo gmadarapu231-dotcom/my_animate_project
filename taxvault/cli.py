@@ -302,8 +302,22 @@ def cmd_check(args: argparse.Namespace) -> int:
     print()
 
     if report.errors or not reachable:
-        print(f"NOT READY: {len(report.errors)} blocking problem(s).")
-        if not args.verbose:
+        # Count the database too. Printing "0 blocking problems" above a
+        # NOT READY line reads like the tool is broken, and it was: the
+        # count only looked at the settings.
+        blocking = len(report.errors) + (0 if reachable else 1)
+        print(f"NOT READY: {blocking} blocking problem(s).")
+        if not reachable:
+            print()
+            print("The database could not be reached:")
+            print(f"  {detail}")
+            if "No module named" in detail:
+                print()
+                print("  That is a missing driver, not a missing database.")
+                print("  PostgreSQL needs the deploy extra:")
+                print("    pip install -e '.[deploy]'")
+                print("  The Docker image installs it already.")
+        if not args.verbose and report.errors:
             print("Run with --verbose for what to do about each one.")
         return 1
     if report.warnings:
@@ -457,6 +471,16 @@ def cmd_walkthrough(args: argparse.Namespace) -> int:
                practice=args.practice, zelle_address=args.zelle)
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Prove this installation works, on this machine, with this config."""
+    import warnings
+
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    from taxvault.verify import run
+
+    return run(verbose=args.verbose, trace=args.trace)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="taxvault",
@@ -509,6 +533,13 @@ def main(argv: list[str] | None = None) -> int:
     read.add_argument("--dump", action="store_true",
                       help="also print every line with its position on the page")
     read.set_defaults(func=cmd_read_w2)
+
+    ver = sub.add_parser(
+        "verify", help="prove this installation works end to end")
+    ver.add_argument("-v", "--verbose", action="store_true")
+    ver.add_argument("--trace", action="store_true",
+                     help="show the full error for a failing check")
+    ver.set_defaults(func=cmd_verify)
 
     walk = sub.add_parser(
         "walkthrough",
