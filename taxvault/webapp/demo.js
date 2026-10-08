@@ -55,6 +55,7 @@
     ['GET', /^\/api\/agent\/captured$/, () => F.agent],
     ['GET', /^\/api\/agent\/money$/, () => F.money],
     ['GET', /^\/api\/agent\/pricing$/, () => F.pricing],
+    ['GET', /^\/api\/agent\/automation$/, () => F.automation],
     ['GET', /^\/api\/reference\/home-loans$/, () => F.home_loans_reference],
     // The RMD depends on the birth year, so answer from the fixture only for
     // the one it was captured with, and say so otherwise rather than showing

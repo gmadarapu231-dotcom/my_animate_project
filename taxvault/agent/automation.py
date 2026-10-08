@@ -281,7 +281,7 @@ def tell_clients_their_money_arrived(session: Session) -> JobResult:
             if queue(session, Proposal(
                 kind="receipt_failed", taxpayer_id=None,
                 priority=3,
-                title=f"Could not tell the client about {receipt['amount']}",
+                title=f"Could not tell the client about ${receipt['amount']}",
                 proposal=(
                     f"The payment on reference {receipt['reference']} is "
                     "confirmed and booked, but the receipt could not be "
@@ -538,9 +538,9 @@ def chase_unpaid_fees(session: Session, *, as_of: date) -> JobResult:
         if queue(session, Proposal(
             kind="fee_unpaid", taxpayer_id=quote.taxpayer_id,
             tax_year=quote.tax_year, priority=3 if age > 14 else 5,
-            title=f"{total:,.2f} quoted {age} day(s) ago and unpaid",
+            title=f"${total:,.2f} quoted {age} day(s) ago and unpaid",
             proposal=(
-                f"The {quote.tax_year} fee of {total:,.2f} was quoted {age} "
+                f"The {quote.tax_year} fee of ${total:,.2f} was quoted {age} "
                 "day(s) ago and no payment has been confirmed. Fees are "
                 "collected before a return is filed, so this is work that "
                 "should not go out yet. Approve to send the client their "
@@ -567,10 +567,10 @@ def flag_awaiting_confirmation(session: Session) -> JobResult:
             kind="payment_match", taxpayer_id=declaration.taxpayer_id,
             tax_year=declaration.tax_year,
             priority=2 if age >= 2 else 4,
-            title=(f"{money(declaration.amount):,.2f} declared, "
+            title=(f"${money(declaration.amount):,.2f} declared, "
                    f"{'waiting ' + str(age) + ' day(s)' if age else 'today'}"),
             proposal=(
-                f"The client says they sent {money(declaration.amount):,.2f} by "
+                f"The client says they sent ${money(declaration.amount):,.2f} by "
                 f"{declaration.method} with reference {declaration.reference}. "
                 "Check it against the bank and confirm it. Until then it is not "
                 "revenue and the return should not go out."
@@ -608,9 +608,9 @@ def reconcile(session: Session, rows: list[Any], *, proposed_by: str) -> dict[st
             priority=2,
             title=f"Bank credit matches {match['reference']}",
             proposal=(
-                f"A credit of {money(match['amount']):,.2f} in the bank carries "
+                f"A credit of ${money(match['amount']):,.2f} in the bank carries "
                 f"reference {match['reference']}, which matches an open request "
-                f"for {money(match['expected']):,.2f}. Approve to book it as "
+                f"for ${money(match['expected']):,.2f}. Approve to book it as "
                 "revenue."
             ),
             evidence=match,

@@ -35,6 +35,7 @@ const state = {
   justSaved: '',
   taxYear: null,
   agent: null,
+  automation: null,
   agentScenario: 'investor',
   money: null,
   pricing: null,
@@ -319,7 +320,9 @@ function viewAgent() {
     </div>
   </div>
 
-  ${moneyCard()}`;
+  ${moneyCard()}
+
+  ${automationCard()}`;
 }
 
 function agentReturnCard(estimate) {
@@ -513,6 +516,129 @@ function pricingCard() {
         <br><br><strong>Instead:</strong> ${esc(m.instead)}
       </div>`).join('')}
     <div class="note info">${esc(p.disclosure.on_every_quote)}</div>`;
+}
+
+/* ------------------------------------------- the jobs nobody has to remember
+ *
+ * A practice does not lose money on hard arithmetic. It loses money on the
+ * work nobody does: the document that arrived in February and was noticed in
+ * April, the question answered three weeks late, the fee that was never
+ * chased, the client who paid on Tuesday and phoned on Friday to ask whether
+ * it arrived. These jobs run on a schedule and do the mechanical part. What
+ * they leave behind is a decision with the figures already worked out.
+ */
+const JOB_LABELS = {
+  watch_deadlines: 'Dates that cost money',
+  review_new_documents: 'Documents that arrived',
+  chase_questions: 'Questions a client never answered',
+  chase_unpaid_fees: 'Fees still unpaid',
+  flag_awaiting_confirmation: 'Payments claimed but unchecked',
+  send_receipts: 'Clients not yet told their money arrived',
+};
+
+function automationCard() {
+  const a = state.automation;
+  if (!a) return '';
+  const receipt = (a.receipts && a.receipts.receipts && a.receipts.receipts[0]) || null;
+  const bank = a.bank || {};
+  const counts = bank.counts || {};
+  return `
+  <div class="card">
+    <h2>What the agent does when nobody asks</h2>
+    <p class="sub">Six jobs across the whole book of clients, on a schedule.
+       Five are below; the sixth is the receipt further down. Running them
+       twice does not chase the same client twice — a proposal is identified
+       by its subject, not by its figures.</p>
+
+    ${(a.jobs || []).map((job) => `
+      <div class="docrow">
+        <div class="grow">
+          <div class="name">${esc(JOB_LABELS[job.name] || job.name)}</div>
+          <div class="meta">looked at ${esc(job.looked_at)}${job.notes && job.notes.length
+            ? ' · ' + job.notes.map(esc).join(' · ') : ''}</div>
+        </div>
+        <span class="pill ${job.queued ? 'attention' : 'ok'}">
+          ${job.queued ? `${job.queued} for you` : 'nothing to do'}</span>
+      </div>`).join('')}
+
+    ${(a.queue || []).length ? `
+      <h3>The queue it left</h3>
+      <p class="sub">Each row is a decision, not a task. The reading, the
+         arithmetic and the draft are already done.</p>
+      ${a.queue.slice(0, 6).map((task) => `
+        <div class="question ${task.requires_human ? 'blocker' : ''}">
+          <div class="ask">${esc(task.title)}</div>
+          <div class="why">${esc(task.proposal)}</div>
+          ${task.requires_human
+            ? `<div class="worth">a person must do this — ${esc(task.requires_human)}</div>`
+            : ''}
+        </div>`).join('')}` : ''}
+
+    <h3>The bank export, run through the matcher</h3>
+    <p class="sub">${esc(counts.matched || 0)} matched,
+       ${esc(counts.mismatched || 0)} short, ${esc(counts.unmatched || 0)} with
+       no reference — and <strong>nothing booked</strong>.</p>
+    ${(bank.matched || []).map((row) => `
+      <div class="docrow">
+        <div class="grow">
+          <div class="name">${money2(row.amount)} — ${esc(row.reference)}</div>
+          <div class="meta">matches an open request for ${money2(row.expected)}</div>
+        </div>
+        <span class="pill attention">proposed</span>
+      </div>`).join('')}
+    ${(bank.mismatched || []).map((row) => `
+      <div class="docrow">
+        <div class="grow">
+          <div class="name">${money2(row.amount)} — ${esc(row.reference || 'no reference')}</div>
+          <div class="meta">${esc(row.reason || 'the amounts differ')}</div>
+        </div>
+        <span class="pill attention">mismatch</span>
+      </div>`).join('')}
+    ${(bank.unmatched || []).map((row) => `
+      <div class="docrow">
+        <div class="grow">
+          <div class="name">${money2(row.amount)}</div>
+          <div class="meta">${esc(row.reason || 'no reference')}</div>
+        </div>
+        <span class="pill">ignored</span>
+      </div>`).join('')}
+    <div class="note warn">
+      <strong>Auto-confirmed: ${a.bank && a.bank.auto_confirmed ? 'yes' : 'none'}.</strong>
+      The matcher <em>can</em> book money and this job never asks it to. A rule
+      that books on a string match will one day turn a client's tax payment
+      into your revenue, because they copied the memo from an earlier transfer.
+      One click is cheaper than that.
+    </div>
+
+    ${receipt ? `
+      <h3>What the client is told, once the money is yours</h3>
+      <p class="sub">Composed from the confirmed payment, sent on every channel
+         they have verified, and never sent twice.</p>
+      <div class="frame">
+        <div class="n">to ${esc(receipt.to_email || 'no email on file')}${
+          receipt.to_mobile ? ' and ' + esc(receipt.to_mobile) : ''}</div>
+        <h4>${esc(receipt.subject)}</h4>
+        <pre style="white-space:pre-wrap;font:13px/1.55 var(--mono);margin:0;color:var(--ink)">${esc(receipt.body)}</pre>
+      </div>
+      ${receipt.sms ? `
+        <div class="frame">
+          <div class="n">and by text</div>
+          <pre style="white-space:pre-wrap;font:13px/1.55 var(--mono);margin:0;color:var(--ink)">${esc(receipt.sms)}</pre>
+        </div>` : ''}
+      <div class="note info">
+        Telling a client is safe to automate: the money is already confirmed
+        and the ledger entry already exists, so the client is being
+        <em>informed</em>, not charged. ${a.receipts.dry_run
+          ? 'This file has no mail server, so the message above was composed and not sent.' : ''}
+      </div>` : ''}
+
+    <h3>Three things this will never do on its own</h3>
+    ${(a.never_automated || []).map((item) => `
+      <div class="question blocker">
+        <div class="ask">${esc(item.what)}</div>
+        <div class="why">${esc(item.why)}</div>
+      </div>`).join('')}
+  </div>`;
 }
 
 /* =========================================================== 1. ACCOUNT */
@@ -2835,14 +2961,16 @@ async function refreshAgent() {
   // and the pricing models. The demo answers it from the fixtures the build
   // captured from the real engine; the running app answers it live.
   try {
-    const [agent, money, pricing] = await Promise.all([
+    const [agent, money, pricing, automation] = await Promise.all([
       api('/api/agent/captured'),
       api('/api/agent/money').catch(() => null),
       api('/api/agent/pricing').catch(() => null),
+      api('/api/agent/automation').catch(() => null),
     ]);
     state.agent = agent;
     state.money = money;
     state.pricing = pricing;
+    state.automation = automation;
   } catch (error) {
     toast(error.message, 'bad');
   }

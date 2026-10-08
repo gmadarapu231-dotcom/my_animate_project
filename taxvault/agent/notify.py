@@ -115,7 +115,7 @@ def build_receipt(
     # ASCII only in the subject. An em dash forces RFC-2047 encoding,
     # which renders fine but shows as =?utf-8?b?...?= in anything that
     # does not decode it, and some filters score it.
-    receipt.subject = f"Received: {amount:,.2f} - {practice}"
+    receipt.subject = f"Received: ${amount:,.2f} - {practice}"
 
     # The body says what was received, what for, and what happens next, in
     # that order, because that is the order the client wants it. It also says
@@ -126,7 +126,7 @@ def build_receipt(
         "",
         f"We have received your {kind}{year}.",
         "",
-        f"  Amount received   {amount:,.2f}",
+        f"  Amount received   ${amount:,.2f}",
         f"  Paid by           {declaration.method}",
         f"  Reference         {declaration.reference}",
         f"  Confirmed         {(declaration.confirmed_at or _now()):%d %B %Y}",
@@ -165,7 +165,7 @@ def build_receipt(
     # SMS is tight, so it carries the figure, the reference and nothing else
     # that cannot be checked at a glance.
     receipt.sms = (
-        f"{practice}: we have received your {amount:,.2f} "
+        f"{practice}: we have received your ${amount:,.2f} "
         f"(ref {declaration.reference}). Nothing is taken from your refund. "
         "We will send your return to you to sign before filing."
     )

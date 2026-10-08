@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -238,6 +239,10 @@ def capture() -> dict:
             # than written by hand so the demo cannot drift from the engine.
             "agent": _capture_agent(client),
             "money": _capture_money(client, auth),
+            # The jobs that run without anyone asking, and the receipt a
+            # client gets once their money is booked. Captured after the
+            # money flow, because what the jobs find depends on it.
+            "automation": _capture_automation(client, auth),
             "pricing": client.get("/api/agent/pricing").json(),
             "retirement_reference": client.get("/api/reference/retirement").json(),
             "home_loans_reference": client.get("/api/reference/home-loans").json(),
@@ -348,6 +353,90 @@ def _capture_money(client, auth) -> dict:
              "amount": "150.00", "matched": False},
         ],
     }
+
+def _capture_automation(client, auth) -> dict:
+    """The unprompted jobs, the work queue they fill, and a real receipt.
+
+    Three things are shown and all three are captured, not written:
+
+      * a second fee, requested and declared but NOT confirmed, so
+        `flag_awaiting_confirmation` has something true to find;
+      * a bank export run through `reconcile`, which queues the match and
+        books nothing, because the bank is the only witness to a transfer;
+      * the receipt itself, composed from the confirmed payment.
+
+    The receipt is composed in dry-run. A demo file has no mail server and
+    the honest thing is to show the client exactly what would be sent rather
+    than invent a delivery that did not happen.
+    """
+    from datetime import date
+
+    from taxvault.agent import automation
+    from taxvault.agent.notify import send_pending_receipts
+    from taxvault.db.session import new_session
+    from taxvault.engines.revenue import BankRow
+
+    # A fee the client says they have paid and nobody has checked yet. This
+    # is the state a practice actually loses money in, so the demo shows the
+    # job that catches it.
+    # 2026, because the 2025 fee was confirmed a moment ago and the engine
+    # correctly refuses to ask for a fee that is already paid.
+    second = client.post("/api/billing/quote", headers=auth, json={
+        "tax_year": 2026, "w2_count": 2, "schedule_d": True,
+    }).json()
+    waiting = client.post("/api/billing/payments/request", headers=auth, json={
+        "quote_id": second["quote_id"], "method": "zelle",
+        "pay_to": "billing@your-practice.example",
+    }).json()
+    client.post("/api/billing/payments/declare", headers=auth, json={
+        "declaration_id": waiting["declaration_id"],
+    })
+
+    session = new_session()
+    try:
+        today = date.today()
+        jobs = [
+            automation.watch_deadlines(session, as_of=today),
+            automation.review_new_documents(session),
+            automation.chase_questions(session),
+            automation.chase_unpaid_fees(session, as_of=today),
+            automation.flag_awaiting_confirmation(session),
+        ]
+        # A bank export with one credit that matches, one that is short, and
+        # one with no reference at all -- the three outcomes a real export has.
+        bank = automation.reconcile(session, [
+            BankRow(description=f"ZELLE FROM DANA REED MEMO {waiting['reference']}",
+                    amount=Decimal(str(waiting["amount"])),
+                    bank_reference="ZELLE CONF 90114"),
+            BankRow(description=f"ZELLE FROM D REED MEMO {waiting['reference']}",
+                    amount=Decimal("25.00"), bank_reference="ZELLE CONF 90115"),
+            BankRow(description="ZELLE FROM SOMEBODY ELSE NO MEMO",
+                    amount=Decimal("150.00"), bank_reference="ZELLE CONF 90116"),
+        ], proposed_by="preparer@your-practice.example")
+        receipts = send_pending_receipts(
+            session, practice="Your Tax Practice", dry_run=True
+        )
+        queue = automation.pending(session, limit=50)
+        session.commit()
+    finally:
+        session.close()
+
+    return {
+        "jobs": [job.to_dict() for job in jobs],
+        "queued": sum(job.queued for job in jobs),
+        "bank": bank,
+        "queue": queue,
+        "receipts": receipts,
+        "never_automated": [
+            {"what": "Confirming money against a bank statement",
+             "why": automation.HUMAN_BANK},
+            {"what": "A client's review and their Form 8879",
+             "why": automation.HUMAN_SIGNATURE},
+            {"what": "Transmitting a return to the IRS",
+             "why": automation.HUMAN_EFILE},
+        ],
+    }
+
 
 def inline_svg(name: str) -> str:
     """A data: URI, so the single file has no sibling assets to lose."""
