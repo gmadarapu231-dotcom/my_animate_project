@@ -822,7 +822,7 @@ function viewDocuments() {
       <div class="row three">
         <button class="choice" data-doc-mode="boxes" aria-pressed="true"><strong>Type the boxes</strong><span>Most accurate</span></button>
         <button class="choice" data-doc-mode="text" aria-pressed="false"><strong>Paste text</strong><span>From a payroll portal</span></button>
-        <button class="choice" data-doc-mode="file" aria-pressed="false"><strong>Upload the file</strong><span>PDFs are read</span></button>
+        <button class="choice" data-doc-mode="file" aria-pressed="false"><strong>Upload the file</strong><span>PDFs, scans and photos</span></button>
       </div>
     </div>
 
@@ -888,10 +888,12 @@ function viewDocuments() {
         <input id="upload" type="file" accept=".pdf,.png,.jpg,.jpeg,.heic,.tif,.tiff,.txt,.csv">
       </div>
       <button class="btn" id="save-file">Upload</button>
-      <div class="note warn">
-        A PDF or photo is stored encrypted but is <strong>not</strong> read — this server
-        does not run OCR. You will still need to type the boxes for an estimate. Better to
-        type them now.
+      <div class="note info">
+        A payroll PDF is read straight off the file. A scan or a photo is read by
+        OCR — point the camera straight at the form, in good light, with the form
+        filling the frame. Either way the boxes come back below for you to check
+        before anything is computed, because a character reader mistakes 3 for 8
+        and a tax return is not the place to find that out.
       </div>
     </div>
   </div>
@@ -1480,6 +1482,54 @@ function downloadCard(result) {
   </div>`;
 }
 
+/**
+ * What the demo cannot do, said where it would otherwise mislead.
+ *
+ * The demo reads an uploaded W-2 for real -- the boxes on the Documents
+ * screen are from the visitor's own file. The estimate is not: it is output
+ * captured from the engine at build time for a sample return, because there
+ * is no server here to run the engine against new figures.
+ *
+ * Those two facts are fine apart and dangerous together. Upload a Kentucky
+ * W-2, land on a California refund, and the honest conclusion is that the
+ * software is broken. So when the uploaded form disagrees with the sample,
+ * the estimate says so first, in terms that name both.
+ *
+ * Returns nothing in the real application, where `TAXVAULT_DEMO_UPLOAD` is
+ * never set and the figures genuinely come from the upload.
+ */
+function demoSampleNotice(result) {
+  const read = window.TAXVAULT_DEMO_UPLOAD;
+  if (!read || !result) return '';
+  const shownState = (result.resident_state || '').toUpperCase();
+  const theirState = (read.state || '').toUpperCase();
+  const shownWages = Number((result.federal && result.federal.total_income) || 0);
+  const differs = (theirState && theirState !== shownState)
+    || (read.wages && Math.abs(read.wages - shownWages) > 1);
+  if (!differs) return '';
+
+  const theirs = [
+    read.employer ? `from ${esc(read.employer)}` : '',
+    read.wages ? `showing ${money(read.wages)} of wages` : '',
+    theirState ? `with ${esc(theirState)} on the state line` : '',
+  ].filter(Boolean).join(', ');
+
+  return `
+    <div class="note bad">
+      <strong>These are not your figures.</strong>
+      Your upload <em>was</em> read — ${theirs || 'the boxes are on the Documents screen'} —
+      but this demo is a single file with no server behind it, so it cannot run
+      the tax engine on new numbers. Everything below is real output captured
+      from the engine for a <strong>sample
+      ${esc(shownState || 'federal')}</strong> return.
+      ${theirState && theirState !== shownState ? `
+        <br><br>The installed application computes
+        <strong>${esc(theirState)}</strong> here, from your form: the state on
+        the W-2 decides the return, and it says so when that disagrees with the
+        state on your account.` : ''}
+    </div>`;
+}
+
 function estimateResult(result) {
   const totals = result.totals;
   const balance = Number(totals.total_balance);
@@ -1487,6 +1537,7 @@ function estimateResult(result) {
   const federal = result.federal;
 
   return `
+  ${demoSampleNotice(result)}
   <div class="headline ${refund ? '' : 'owed'}">
     <div class="label">${refund ? 'Estimated refund' : balance > 0 ? 'Estimated balance to pay' : 'Estimated result'}</div>
     <div class="amount ${refund ? 'good' : 'bad'}">${money2(Math.abs(balance))}</div>

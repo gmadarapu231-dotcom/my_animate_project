@@ -245,6 +245,16 @@
     document.parse_confidence = found.confidence;
     document.warnings = found.notes || [];
     document.status = found.confidence >= 0.75 ? 'parsed' : 'needs_review';
+    // Remember what was actually read, so the estimate screen can own up to
+    // showing a stored sample instead. A visitor who uploads a Kentucky W-2
+    // and is handed a California refund has been misled, however clearly the
+    // banner at the top of the page is worded.
+    window.TAXVAULT_DEMO_UPLOAD = {
+      filename: meta.filename || '',
+      state: f.states.length ? f.states[0].state : '',
+      wages: Number(f.wages) || 0,
+      employer: f.employerName || '',
+    };
     document.extraction = {
       method: meta.method || 'pdf_text', readable: true, pages: meta.pages || 1,
       notes: [], strategy: 'layout',
@@ -295,8 +305,10 @@
       document.original_filename = file.name || '';
       document.warnings = [{
         severity: 'warning', box: '',
-        message: 'A photograph or scan cannot be read without OCR, which this demo does '
-          + 'not run. The boxes below are blank — fill them in and the estimate follows.',
+        message: 'This demo runs entirely in your browser with no server, so it '
+          + 'cannot read a photograph — the installed application does, with '
+          + 'Tesseract, and reads the boxes off a scan as accurately as off a '
+          + 'payroll PDF. Here, fill the boxes in below.',
       }];
       return document;
     }
