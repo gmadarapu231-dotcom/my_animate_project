@@ -153,6 +153,23 @@ export class DemoClient extends CareerOsClient {
       500,
     );
 
+  uploadResume = () =>
+    Promise.reject(
+      new ApiError('The demo has no server to read a résumé. Run `careeros serve` to upload one.', 501),
+    );
+
+  intakeText = () =>
+    Promise.reject(new ApiError('The demo has no server to read a résumé.', 501));
+
+  evidence = () => settle({ count: 0, evidence: [] as any[] });
+
+  verifyEvidence = (ids: number[]) => settle({ changed: ids.length, verified: true });
+
+  apply = () =>
+    Promise.reject(
+      new ApiError('Applying needs the real server. In the demo, use “Prepare packet”.', 501),
+    );
+
   agentTools = () => settle<AgentTools>(F.agentTools);
 
   agentRuns = () => settle({ count: 0, runs: [] as any[] });

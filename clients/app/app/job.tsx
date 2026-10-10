@@ -8,10 +8,16 @@
  * `tailor_resume` is the one action with a gate the UI must respect: a resume
  * that failed the factuality check comes back `is_final: false`, and this
  * screen reports that plainly rather than presenting the document as ready.
+ *
+ * "Apply" previews first: it tailors if needed, picks the channel and shows
+ * the packet. Boards with an application API and postings that name an email
+ * address can then be sent from here; everything else opens the posting so
+ * you submit it yourself, then mark it applied.
  */
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Linking, View } from 'react-native';
 
+import { ApplyResult } from '../src/api';
 import { VerdictBanner } from '../src/components/JobCard';
 import {
   Body,
@@ -43,6 +49,11 @@ export default function JobDetailScreen() {
   const tailor = useAction(() => client.tailorResume(jobId));
   const letter = useAction(() => client.coverLetter(jobId));
   const prepare = useAction(() => client.prepare(jobId));
+  const preview = useAction(() => client.apply(jobId, false));
+  const send = useAction(() => client.apply(jobId, true));
+  const markApplied = useAction((applicationId: number) =>
+    client.setStatus(applicationId, 'applied', 'Submitted by hand from the app'),
+  );
 
   if (job.loading && !job.data) {
     return (
@@ -101,14 +112,38 @@ export default function JobDetailScreen() {
 
       <Panel title="Actions">
         <Row gap={spacing.xs + 2}>
+          <Button
+            label="Apply"
+            small
+            variant="primary"
+            pending={preview.pending}
+            onPress={() => {
+              send.reset();
+              markApplied.reset();
+              preview.invoke();
+            }}
+          />
           <Button label="Analyze" small pending={analyze.pending} onPress={() => analyze.invoke().then(job.refresh)} />
-          <Button label="Tailor resume" small variant="primary" pending={tailor.pending} onPress={() => tailor.invoke()} />
+          <Button label="Tailor resume" small pending={tailor.pending} onPress={() => tailor.invoke()} />
           <Button label="Cover letter" small pending={letter.pending} onPress={() => letter.invoke()} />
           <Button label="Prepare packet" small pending={prepare.pending} onPress={() => prepare.invoke()} />
           {data.url ? (
             <Button label="Open posting" small onPress={() => Linking.openURL(data.url as string)} />
           ) : null}
         </Row>
+
+        {preview.error ? <Small style={{ marginTop: spacing.sm, color: p.bad }}>{preview.error.message}</Small> : null}
+        {preview.result ? (
+          <ApplyPanel
+            result={send.result ?? preview.result}
+            sending={send.pending}
+            sendError={send.error?.message ?? null}
+            markedApplied={Boolean(markApplied.result)}
+            marking={markApplied.pending}
+            onSend={() => send.invoke().then(job.refresh)}
+            onMarkApplied={(id) => markApplied.invoke(id).then(job.refresh)}
+          />
+        ) : null}
 
         {tailor.error ? <Small style={{ marginTop: spacing.sm }}>{tailor.error.message}</Small> : null}
 
@@ -286,5 +321,87 @@ export default function JobDetailScreen() {
         </Panel>
       ) : null}
     </Screen>
+  );
+}
+
+function ApplyPanel({
+  result,
+  sending,
+  sendError,
+  markedApplied,
+  marking,
+  onSend,
+  onMarkApplied,
+}: {
+  result: ApplyResult;
+  sending: boolean;
+  sendError: string | null;
+  markedApplied: boolean;
+  marking: boolean;
+  onSend: () => void;
+  onMarkApplied: (applicationId: number) => void;
+}) {
+  const p = usePalette();
+  const { channel, submission } = result;
+  const handOff =
+    !result.sent &&
+    !result.blockers.length &&
+    (channel.tier === 'assisted' || channel.tier === 'blocked' || submission?.downgraded_to === 'assisted');
+  const canSend =
+    !result.sent && !result.blockers.length && channel.automatable && !handOff && Boolean(submission?.dry_run);
+  const applyUrl = channel.apply_url ?? result.job.url;
+
+  return (
+    <View style={{ marginTop: spacing.md }}>
+      <Divider />
+      <Row gap={spacing.sm}>
+        <Chip label={channel.tier_label} tone={channel.automatable ? 'ok' : 'accent'} />
+        <Chip label={result.resume_final ? 'Résumé passed the factuality check' : 'Résumé blocked'} tone={result.resume_final ? 'ok' : 'bad'} />
+        {result.tailored_now ? <Chip label="Tailored just now" /> : null}
+        {result.sent || markedApplied ? <Chip label="Applied" tone="ok" /> : null}
+      </Row>
+      <Small style={{ marginTop: spacing.sm }}>{channel.reason}</Small>
+
+      {result.blockers.map((blocker) => (
+        <Small key={blocker} style={{ marginTop: spacing.xs, color: p.bad }}>{`✕ ${blocker}`}</Small>
+      ))}
+      {result.warnings.map((warning) => (
+        <Small key={warning} style={{ marginTop: spacing.xs, color: p.warn }}>{`! ${warning}`}</Small>
+      ))}
+      {submission && !handOff ? <Small style={{ marginTop: spacing.sm }}>{submission.message}</Small> : null}
+      {sendError ? <Small style={{ marginTop: spacing.sm, color: p.bad }}>{sendError}</Small> : null}
+
+      {result.packet.answers.length ? (
+        <View style={{ marginTop: spacing.md }}>
+          <Small>Answers for the application form</Small>
+          {result.packet.answers.map((answer) => (
+            <Small key={answer.question} style={{ marginTop: 2 }}>
+              {`• ${answer.question} → ${answer.value ?? '—'}`}
+            </Small>
+          ))}
+          {result.packet.unanswered.map((question) => (
+            <Small key={question} style={{ marginTop: 2, color: p.warn }}>{`• ${question} → answer this yourself`}</Small>
+          ))}
+        </View>
+      ) : null}
+
+      <Row style={{ marginTop: spacing.md }} gap={spacing.sm}>
+        {canSend ? (
+          <Button
+            label={channel.tier === 'email' ? `Send to ${channel.email}` : `Submit via ${channel.provider}`}
+            variant="primary"
+            pending={sending}
+            onPress={onSend}
+          />
+        ) : null}
+        {handOff && applyUrl ? (
+          <Button label="Open application page" variant="primary" onPress={() => Linking.openURL(applyUrl)} />
+        ) : null}
+        {handOff && !markedApplied ? (
+          <Button label="I've submitted it" pending={marking} onPress={() => onMarkApplied(result.application_id)} />
+        ) : null}
+      </Row>
+      {result.next_step ? <Caveat>{result.next_step}</Caveat> : null}
+    </View>
   );
 }
