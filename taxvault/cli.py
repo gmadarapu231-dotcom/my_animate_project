@@ -99,7 +99,63 @@ def _profile_from_args(args: argparse.Namespace) -> TaxProfile:
     )
 
 
+def _apply_w2_file(args: argparse.Namespace) -> list[str]:
+    """Fill the estimate's inputs from an actual W-2 file.
+
+    This is the answer to "will it work on my form?" -- one command, the real
+    reader, the real engine, no server and no account. What comes back is
+    what the application would compute from that file.
+
+    Returns lines to print, so the caller controls the output order.
+    """
+    from taxvault.forms.ocr import cross_check
+
+    path = Path(args.w2)
+    if not path.exists():
+        return [f"No such file: {path}"]
+    blob = path.read_bytes()
+    form, confidence, strategy, extraction = _read_a_w2(blob, path.name)
+
+    out = [f"Read {path.name} by {strategy} at {confidence:.0%}"]
+    if not extraction.readable:
+        out.append("  Nothing could be read from it.")
+        for note in extraction.notes:
+            out.append(f"  {note['severity']}: {note['message']}")
+        return out
+
+    args.wages = form.wages
+    args.withheld = form.federal_withheld
+    if form.tax_year and not args.year:
+        args.year = form.tax_year
+    # The form decides the state. That is the whole point: a Kentucky W-2
+    # produces a Kentucky return, whatever anybody typed anywhere else.
+    if form.states and not args.state:
+        args.state = form.states[0].state
+        args.state_withheld = form.states[0].state_withheld
+
+    out.append(f"  box 1 wages         {float(form.wages):>12,.2f}")
+    out.append(f"  box 2 withheld      {float(form.federal_withheld):>12,.2f}")
+    for line in form.states:
+        out.append(f"  box 15-17 {line.state:<9} {float(line.state_wages):>12,.2f}"
+                   f"   tax {float(line.state_withheld):,.2f}")
+    for finding in cross_check(form, year=args.year or form.tax_year):
+        out.append(f"  CHECK box {finding['box']}: {finding['message']}")
+    if strategy == "ocr":
+        out.append("  Read off pixels. Check every figure against the form "
+                   "before relying on it.")
+    return out
+
+
 def cmd_estimate(args: argparse.Namespace) -> int:
+    read_lines: list[str] = []
+    if getattr(args, "w2", ""):
+        read_lines = _apply_w2_file(args)
+        if not args.json:
+            print("\n" + "\n".join(read_lines))
+        if str(args.wages) in ("", "0"):
+            print("\nNo wages were read, so there is nothing to estimate.\n")
+            return 1
+
     profile = _profile_from_args(args)
     lines = [{"state": profile.resident_state, "wages": profile.wages,
               "withheld": money(args.state_withheld)}] if profile.resident_state else []
@@ -157,6 +213,45 @@ def cmd_estimate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_a_w2(blob: bytes, filename: str) -> tuple[Any, float, str, Any]:
+    """Read a W-2 from a file, whatever kind of file it is.
+
+    Returns (form, confidence, strategy, extraction). Shared by `read-w2` and
+    `estimate --w2` so the command that shows you the boxes and the command
+    that computes from them can never disagree about what the file says.
+    """
+    from taxvault.forms.extract import extract_text
+    from taxvault.forms.ocr import pages as ocr_pages
+    from taxvault.forms.w2 import W2, parse_w2_text
+    from taxvault.forms.w2_layout import read_w2_layout, read_w2_pages
+
+    kind = "application/pdf" if blob[:5] == b"%PDF-" else _image_type(filename)
+    extraction = extract_text(blob, kind, filename)
+    if not extraction.readable:
+        return W2(), 0.0, "none", extraction
+
+    if extraction.method == "ocr":
+        # Positions, not flat text: a W-2 is a grid and OCR hands back the
+        # label row and the value row as separate lines.
+        form, confidence, _ = read_w2_pages(ocr_pages(blob, content_type=kind))
+        return form, round(confidence * extraction.confidence, 3), "ocr", extraction
+
+    layout, layout_confidence, _ = read_w2_layout(blob)
+    flat, flat_confidence, _ = parse_w2_text(extraction.text)
+    if layout_confidence >= flat_confidence:
+        return layout, layout_confidence, "layout", extraction
+    return flat, flat_confidence, "text", extraction
+
+
+def _image_type(filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    return {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".heic": "image/heic", ".tif": "image/tiff", ".tiff": "image/tiff",
+        ".webp": "image/webp",
+    }.get(suffix, "")
+
+
 def cmd_read_w2(args: argparse.Namespace) -> int:
     """Show exactly what is read out of a W-2 PDF, and what is not.
 
@@ -165,35 +260,25 @@ def cmd_read_w2(args: argparse.Namespace) -> int:
     with `--dump` -- the raw text and label positions, so the failure can be
     seen rather than guessed at.
     """
-    from taxvault.forms.extract import extract_text
-    from taxvault.forms.w2 import parse_w2_text
-    from taxvault.forms.w2_layout import read_w2_layout
-
     path = Path(args.file)
     if not path.exists():
         print(f"No such file: {path}")
         return 1
     blob = path.read_bytes()
-    kind = "application/pdf" if blob[:5] == b"%PDF-" else ""
 
-    extraction = extract_text(blob, kind, path.name)
+    form, confidence, strategy, extraction = _read_a_w2(blob, path.name)
     print(f"\nFile        {path.name}  ({len(blob) / 1024:.0f} KB)")
     print(f"Extraction  {extraction.method}  readable={extraction.readable}  "
-          f"pages={extraction.pages}")
+          f"pages={extraction.pages}"
+          + (f"  confidence {extraction.confidence:.0%}"
+             if extraction.method == "ocr" else ""))
     for note in extraction.notes:
         print(f"  {note['severity']}: {note['message']}")
     if not extraction.readable:
         print("\nNothing to read. Enter the boxes by hand.\n")
         return 0
 
-    layout, layout_confidence, layout_notes = read_w2_layout(blob)
-    flat, flat_confidence, _ = parse_w2_text(extraction.text)
-    form, confidence, strategy = (
-        (layout, layout_confidence, "layout") if layout_confidence >= flat_confidence
-        else (flat, flat_confidence, "text")
-    )
-
-    print(f"\nStrategy    {strategy}   (layout {layout_confidence}, text {flat_confidence})")
+    print(f"\nStrategy    {strategy}   (read at {confidence:.0%})")
     print(f"\nNames")
     print(f"  employer            {form.employer_name or '-- NOT FOUND --'}")
     print(f"  employee            {(form.employee_first_name + ' ' + form.employee_last_name).strip() or '-- NOT FOUND --'}")
@@ -575,6 +660,9 @@ def main(argv: list[str] | None = None) -> int:
     limits.set_defaults(func=cmd_limits)
 
     est = sub.add_parser("estimate", help="estimate a return from the command line")
+    est.add_argument("--w2", default="",
+                     help="read the figures from a W-2 file (PDF, scan or photo) "
+                          "instead of typing them; the form's own state is used")
     est.add_argument("--wages", default=0)
     est.add_argument("--withheld", default=0)
     est.add_argument("--state", default="")

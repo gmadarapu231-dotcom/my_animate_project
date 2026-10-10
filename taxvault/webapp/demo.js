@@ -326,7 +326,12 @@
     if (!read.ok) {
       const document = blankDocument(taxYear);
       document.original_filename = file.name || '';
-      document.warnings = [{ severity: 'warning', box: '', message: read.reason }];
+      document.warnings = [{
+        severity: 'warning', box: '',
+        message: read.reason + ' This demo has no server, so it cannot run '
+          + 'OCR; the installed application reads a scan or a photo with '
+          + 'Tesseract and gets the boxes off it. Here, type them in below.',
+      }];
       return document;
     }
 

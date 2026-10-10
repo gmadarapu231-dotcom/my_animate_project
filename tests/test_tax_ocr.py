@@ -265,3 +265,57 @@ def test_a_scanned_kentucky_w2_produces_a_kentucky_estimate(client, scanned_pdf)
     assert [s["code"] for s in estimate["states"]] == ["KY"]
     assert any("KY" in w["message"] and "CA" in w["message"]
                for w in estimate["warnings"]), estimate["warnings"]
+
+
+# ------------------------------------------------- one command, your own file
+@needs_render
+def test_the_cli_estimates_straight_from_a_w2_file(tmp_path, capsys, scanned_pdf):
+    """The answer to "will it work on my form?" has to be runnable on their
+    form, without a server, an account or a browser."""
+    from taxvault.cli import main
+
+    path = tmp_path / "ky-scan.pdf"
+    path.write_bytes(scanned_pdf)
+    assert main(["estimate", "--w2", str(path), "--status", "single"]) == 0
+
+    out = capsys.readouterr().out
+    assert "by ocr at" in out
+    assert "88,000.00" in out
+    assert "KY" in out
+    assert "Kentucky" in out
+    # Read off pixels, so it says so rather than presenting figures as read.
+    assert "Check every figure against the form" in out
+
+
+@needs_render
+def test_every_format_of_the_same_w2_gives_the_same_answer(tmp_path, capsys,
+                                                           scanned_pdf, photo_png):
+    """A payroll PDF, a scan of it and a photo of it are the same form. If
+    the three disagree, one of the readers is wrong."""
+    import re
+
+    from taxvault.cli import main
+
+    answers = []
+    for name, blob in (("w2.pdf", _w2_pdf()),
+                       ("scan.pdf", scanned_pdf),
+                       ("photo.png", photo_png)):
+        path = tmp_path / name
+        path.write_bytes(blob)
+        assert main(["estimate", "--w2", str(path), "--status", "single"]) == 0
+        out = capsys.readouterr().out
+        total = re.search(r"TOTAL\s+(owed|refund)\s+([\d,]+)", out)
+        assert total, out
+        answers.append(total.group(0))
+    assert len(set(answers)) == 1, answers
+
+
+def test_a_file_that_cannot_be_read_does_not_produce_an_estimate(tmp_path, capsys):
+    """Silence here would mean an estimate of zero wages, presented as if it
+    were the client's return."""
+    from taxvault.cli import main
+
+    path = tmp_path / "junk.pdf"
+    path.write_bytes(b"%PDF-1.4 not really")
+    assert main(["estimate", "--w2", str(path), "--status", "single"]) == 1
+    assert "nothing to estimate" in capsys.readouterr().out.lower()
