@@ -90,6 +90,32 @@ class OcrResult:
 # ===========================================================================
 # Is it even possible here?
 # ===========================================================================
+def _register_image_formats() -> None:
+    """Teach Pillow the formats a phone actually produces.
+
+    An iPhone photographs in HEIC by default, and Pillow cannot open HEIC on
+    its own -- so the one format most likely to arrive from a client was the
+    one format that could not be read. The upload endpoint accepted it, which
+    made it worse: the file was taken and then nothing came out of it.
+
+    Registered once, lazily, and a missing package is not fatal: every other
+    format still reads.
+    """
+    global _FORMATS_REGISTERED
+    if _FORMATS_REGISTERED:
+        return
+    _FORMATS_REGISTERED = True
+    try:
+        import pillow_heif
+
+        pillow_heif.register_heif_opener()
+    except Exception as exc:        # pragma: no cover - depends on the install
+        logger.info("HEIC support is not available: %s", exc)
+
+
+_FORMATS_REGISTERED = False
+
+
 def _tesseract() -> str | None:
     return shutil.which(os.getenv("TAXVAULT_TESSERACT", "tesseract"))
 
@@ -107,12 +133,22 @@ def available() -> dict[str, Any]:
         binding = True
     except ImportError:
         binding = False
+    _register_image_formats()
+    try:
+        from PIL import Image
+
+        heic = "HEIF" in Image.OPEN or "HEIC" in Image.OPEN
+    except Exception:
+        heic = False
     return {
         "tesseract": engine or "",
         "rasteriser": render or "",
         "binding": binding,
         "images": bool(engine and binding),
         "pdfs": bool(engine and binding and render),
+        # An iPhone photographs in HEIC by default, so this is not an exotic
+        # format -- it is the commonest thing a client will send.
+        "heic": heic,
     }
 
 
@@ -293,6 +329,7 @@ def pages(blob: bytes, *, content_type: str = "", dpi: int = DPI,
     """Positioned words for every page of an upload. Empty when it cannot read."""
     if not blob or not available()["images"]:
         return []
+    _register_image_formats()
     kind = (content_type or "").split(";")[0].strip().lower()
     is_pdf = kind == "application/pdf" or blob[:5] == b"%PDF-"
     try:
@@ -392,6 +429,7 @@ def read(blob: bytes, *, content_type: str = "", dpi: int = DPI,
         )
         return result
 
+    _register_image_formats()
     kind = (content_type or "").split(";")[0].strip().lower()
     is_pdf = kind == "application/pdf" or blob[:5] == b"%PDF-"
 

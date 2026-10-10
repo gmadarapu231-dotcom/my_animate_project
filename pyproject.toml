@@ -30,6 +30,10 @@ dependencies = [
     # installs and `taxvault check` reports on.
     "pytesseract>=0.3.10",
     "pillow>=10.0",
+    # An iPhone photographs in HEIC by default, and Pillow cannot open HEIC
+    # on its own. Without this the commonest thing a client sends is the one
+    # thing that cannot be read.
+    "pillow-heif>=0.16",
 ]
 
 [project.optional-dependencies]

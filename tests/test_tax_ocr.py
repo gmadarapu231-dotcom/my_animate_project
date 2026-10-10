@@ -319,3 +319,31 @@ def test_a_file_that_cannot_be_read_does_not_produce_an_estimate(tmp_path, capsy
     path.write_bytes(b"%PDF-1.4 not really")
     assert main(["estimate", "--w2", str(path), "--status", "single"]) == 1
     assert "nothing to estimate" in capsys.readouterr().out.lower()
+
+
+# ----------------------------------------------------------------- HEIC
+def test_an_iphone_photo_can_be_opened_at_all():
+    """HEIC is the default on every iPhone, so it is not an exotic format --
+    it is the commonest thing a client will send. The upload endpoint
+    accepted it long before anything could open it."""
+    assert ocr.available().get("heic") is True, (
+        "pillow-heif is missing, so every iPhone photo will be refused"
+    )
+
+
+@needs_ocr
+def test_a_heic_photo_reads_like_any_other(tmp_path, photo_png):
+    pytest.importorskip("pillow_heif")
+    import pillow_heif
+    from PIL import Image
+
+    pillow_heif.register_heif_opener()
+    path = tmp_path / "w2.heic"
+    Image.open(io.BytesIO(photo_png)).convert("RGB").save(
+        path, format="HEIF", quality=90)
+
+    form, confidence, _ = read_w2_pages(
+        ocr.pages(path.read_bytes(), content_type="image/heic"))
+    assert confidence == 1.0
+    assert float(form.wages) == pytest.approx(WAGES, abs=1)
+    assert [line.state for line in form.states] == ["KY"]

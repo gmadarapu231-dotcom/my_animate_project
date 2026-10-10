@@ -31,7 +31,7 @@ FROM python:3.12-slim AS runtime
 # Without them an upload that is pixels rather than text cannot be read at
 # all, and most clients photograph the form rather than downloading it.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng poppler-utils \
+ && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng poppler-utils libheif1 \
  && rm -rf /var/lib/apt/lists/*
 
 # A fixed uid so a mounted volume's ownership is predictable across hosts.

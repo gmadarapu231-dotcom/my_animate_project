@@ -461,7 +461,13 @@ def _forms(r: _Runner) -> None:
                 "Tesseract is installed but poppler-utils (pdftoppm) is not, "
                 "so a photograph reads and a scanned PDF does not."
             )
-        return "tesseract and pdftoppm both present"
+        if not capable.get("heic"):
+            raise _Skip(
+                "Tesseract and pdftoppm are present but pillow-heif is not, "
+                "so an iPhone photo (HEIC) cannot be opened -- which is the "
+                "commonest thing a client sends. `pip install pillow-heif`."
+            )
+        return "tesseract, pdftoppm and HEIC all present"
 
     @r.check("A W-2 is checked against its own arithmetic",
              "This is what makes a scanned form trustworthy. If it stops "
