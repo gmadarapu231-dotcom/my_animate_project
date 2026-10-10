@@ -123,6 +123,12 @@ class TaxProfile:
 
     # --- itemised deductions ---
     state_local_income_tax: Decimal = ZERO
+    #: IRC 164(b)(5): state and local SALES tax, taken INSTEAD of income tax,
+    #: never as well. It is the only one of the two a Texas, Florida, Nevada,
+    #: Washington, Wyoming, South Dakota, Tennessee, Alaska or New Hampshire
+    #: filer has, and leaving it out hands them a smaller deduction than the
+    #: law allows.
+    state_local_sales_tax: Decimal = ZERO
     property_tax: Decimal = ZERO
     mortgage_interest: Decimal = ZERO
     charitable_cash: Decimal = ZERO
@@ -326,7 +332,24 @@ def _itemised(
     notes: list[str] = []
     status = profile.filing_status
 
-    salt_paid = profile.state_local_income_tax + profile.property_tax
+    # IRC 164(b)(5) is an election between income tax and sales tax, not a
+    # sum of the two. Taking the larger is what any preparer would do, and in
+    # a state with no income tax it is the only thing on offer.
+    income_tax = positive(profile.state_local_income_tax)
+    sales_tax = positive(profile.state_local_sales_tax)
+    chosen_salt = max(income_tax, sales_tax)
+    if sales_tax > ZERO and income_tax > ZERO:
+        notes.append(
+            "State sales tax of {:,.0f} and state income tax of {:,.0f} cannot "
+            "both be deducted; the larger is taken.".format(sales_tax, income_tax)
+        )
+    elif sales_tax > ZERO:
+        notes.append(
+            f"Deducting {sales_tax:,.0f} of state and local sales tax instead of "
+            "income tax, which is the election to make where there is no income "
+            "tax to deduct."
+        )
+    salt_paid = chosen_salt + positive(profile.property_tax)
     cap = params.amount(
         "deductions",
         "salt_cap_married_separately" if status == "married_separately" else "salt_cap",
@@ -718,8 +741,12 @@ def _amt(profile: TaxProfile, params: FederalParams, result: FederalResult, agi:
     """
     salt_added_back = ZERO
     if result.deduction_kind == "itemised":
+        # Whatever SALT was actually deducted comes back for AMT, and that is
+        # the sales-tax election where it was the larger one.
         salt_added_back = min(
-            profile.state_local_income_tax + profile.property_tax,
+            max(positive(profile.state_local_income_tax),
+                positive(profile.state_local_sales_tax))
+            + positive(profile.property_tax),
             params.amount("deductions", "salt_cap"),
         )
         amti = agi - (result.itemised_deduction - salt_added_back)

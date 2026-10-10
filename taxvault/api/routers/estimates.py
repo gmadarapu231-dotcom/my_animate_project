@@ -234,6 +234,9 @@ class Situation(BaseModel):
     covered_by_retirement_plan: bool = True
 
     state_local_income_tax: float = 0
+    #: Deducted INSTEAD of income tax, never as well (IRC 164(b)(5)). The only
+    #: one of the two available in the nine states with no income tax.
+    state_local_sales_tax: float = 0
     property_tax: float = 0
     mortgage_interest: float = 0
     charitable_cash: float = 0

@@ -675,6 +675,53 @@ def _compute(run: AgentRun, profile: Any, parsed: dict[str, Any],
             step.findings.extend(federal.warnings[:4])
 
 
+def _ask_about_sales_tax(run: AgentRun, profile: Any, as_filed: dict[str, Any],
+                         answered: set[str]) -> None:
+    """A filer with no state income tax can still deduct sales tax.
+
+    Nothing on any form says what somebody paid in sales tax, so this is a
+    question or it is nothing. It is asked only where it could change the
+    answer: a filer in one of the nine states with no income tax who is
+    already itemising, or close enough that a few thousand would tip them
+    over. Asked of everyone it would be noise; not asked at all, a Texas
+    client quietly takes a smaller deduction than the law allows.
+    """
+    from taxvault.config import states as _states
+
+    if "state_local_sales_tax" in answered:
+        return
+    code = (getattr(profile, "resident_state", "") or "").upper()
+    if not code or positive(money(getattr(profile, "state_local_sales_tax", 0))) > ZERO:
+        return
+    try:
+        if code not in _states(profile.tax_year).no_tax_states():
+            return
+    except Exception:
+        return
+
+    standard = money(as_filed.get("standard_deduction", 0))
+    itemised = money(as_filed.get("itemised_deduction", 0))
+    # Within touching distance counts: sales tax on a car or a kitchen can be
+    # several thousand on its own, and the SALT cap leaves room in a state
+    # that takes no income tax.
+    within_reach = itemised >= standard * Decimal("0.75")
+    if standard > ZERO and not within_reach:
+        return
+
+    run.ask(ReviewItem(
+        question="How much state and local sales tax did you pay? A large "
+                 "purchase — a car, a boat, building work — counts on top of "
+                 "the IRS table amount.",
+        why=(f"{code} has no state income tax, so there is no income tax to "
+             "deduct — but sales tax can be deducted instead, and nothing on "
+             "any form reports it. Left blank it is taken as nothing, which "
+             "makes the deduction smaller than the law allows. The IRS Sales "
+             "Tax Deduction Calculator gives the table figure from income and "
+             "household size."),
+        field="state_local_sales_tax", severity="ask", form="Schedule A",
+    ))
+
+
 # ----------------------------------------- 7. what the documents cannot say
 def _ask_what_cannot_be_read(run: AgentRun, parsed: dict[str, Any],
                              profile: Any, answered: set[str]) -> None:
@@ -776,6 +823,8 @@ def _ask_what_cannot_be_read(run: AgentRun, parsed: dict[str, Any],
                 moves=f"{at_risk:,.0f}",
                 severity="confirm", form="1095-A",
             ))
+
+        _ask_about_sales_tax(run, profile, as_filed, answered)
 
         for form in parsed["simple"]:
             if form.kind == "1099_k" and form.amount("gross_payments") > 0:

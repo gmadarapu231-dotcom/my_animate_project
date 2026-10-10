@@ -479,9 +479,45 @@ def _health_section(ptc: dict[str, Any]) -> Section | None:
     return section
 
 
+def _is_untaxed(state: dict[str, Any]) -> bool:
+    """A state that took nothing and is owed nothing.
+
+    `kind == "none"` alone is not enough: Washington levies no tax on wages
+    but does charge an excise on large long-term gains, and a filer who owes
+    that needs the figures, not a reassuring sentence.
+    """
+    return (state.get("kind") == "none"
+            and not _nonzero(state.get("total_tax"))
+            and not _nonzero(state.get("withheld"))
+            and not _nonzero(state.get("balance")))
+
+
 def _state_section(states: list[dict[str, Any]]) -> Section | None:
     if not states:
         return None
+    # Texas, Florida, Nevada and the rest levy nothing on wages. A table of
+    # four zeros under their name tells a client nothing; the one useful
+    # sentence is that there is no state income tax at all.
+    if all(_is_untaxed(state) for state in states):
+        section = Section(title="State tax")
+        for state in states:
+            name = state.get("name") or state.get("code") or "State"
+            # The state engine reports its commentary as `notes`; the single
+            # `note` is the config field. Prefer whichever is there.
+            said = state.get("notes") or []
+            note = (said[0] if said else state.get("note") or "").strip()
+            section.rows.append(Row(
+                f"{name} — no state income tax", _money(0),
+                note=note or "Nothing is owed to this state on this income.",
+            ))
+        section.notes.append(
+            "No state return is needed for income tax. A state with no income "
+            "tax still raises money other ways -- sales tax and property tax "
+            "among them -- and the sales tax may be deductible on your federal "
+            "return, which is why it is asked about."
+        )
+        return section
+
     section = Section(
         title="State tax",
         blurb="State figures are modelled at statewide level. Local taxes, where "
@@ -517,10 +553,14 @@ def _state_section(states: list[dict[str, Any]]) -> Section | None:
 
 def _bottom_line_section(federal: dict[str, Any], totals: dict[str, Any],
                          states: list[dict[str, Any]]) -> Section:
+    taxed_anywhere = bool(states) and not all(_is_untaxed(state) for state in states)
     section = Section(
         title="Where this leaves you",
-        blurb="Federal and state are separate debts to separate governments. "
-              "They are shown together here only so you can see the whole year.",
+        blurb=("Federal and state are separate debts to separate governments. "
+               "They are shown together here only so you can see the whole year."
+               if taxed_anywhere else
+               "There is no state income tax where you live, so this is the "
+               "whole year's income tax."),
     )
     section.rows.append(Row("Total federal tax", _money(totals.get("federal_tax"))))
     section.rows.append(Row("Federal tax already paid",
@@ -531,7 +571,7 @@ def _bottom_line_section(federal: dict[str, Any], totals: dict[str, Any],
     section.rows.append(Row(
         "Federal refund" if fed_balance < ZERO else "Federal balance to pay",
         _money(abs(fed_balance)), kind="subtotal"))
-    if states:
+    if states and not all(_is_untaxed(state) for state in states):
         state_balance = _amount(totals.get("state_balance"))
         section.rows.append(Row("Total state tax", _money(totals.get("state_tax"))))
         section.rows.append(Row(

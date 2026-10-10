@@ -36,6 +36,23 @@ CAFETERIA_CODES = {"W"}  # employer + employee HSA via cafeteria plan
 #: States that do not allow the federal 401(k) exclusion, so Box 16 > Box 1.
 STATES_TAXING_DEFERRALS = {"NJ", "PA", "MS", "AL"}
 
+def _no_income_tax_states(year: int | None) -> frozenset[str]:
+    """The states that levy no income tax on wages, for the year in question.
+
+    Read from the state parameters rather than hard-coded: New Hampshire only
+    joined the list in 2025, when its interest-and-dividends tax was repealed,
+    and a list in code would still be wrong about it.
+    """
+    from taxvault.config import states as _states
+
+    try:
+        return frozenset(_states(year or 0).no_tax_states())
+    except Exception:
+        # An unsupported year should not turn a cosmetic check into a crash.
+        return frozenset()
+
+
+
 
 @dataclass
 class W2StateLine:
@@ -240,7 +257,14 @@ class W2:
                 add("error", "17", f"{code}: Box 17 withholding exceeds Box 16 wages.")
             difference = money(line.state_wages) - money(self.wages)
             if abs(difference) > Decimal("1.00"):
-                if code in STATES_TAXING_DEFERRALS:
+                if code in _no_income_tax_states(self.tax_year):
+                    # Texas, Florida, Nevada and the rest have no state income
+                    # tax, so boxes 16 and 17 are blank on every W-2 they
+                    # issue. Warning about it told nine states' worth of
+                    # clients to check a form that is perfectly correct, which
+                    # is how people learn to ignore warnings.
+                    pass
+                elif code in STATES_TAXING_DEFERRALS:
                     add("info", "16",
                         f"{code}: Box 16 differs from Box 1 by {difference:,.2f}, which is "
                         f"expected -- {code} does not allow the federal 401(k) exclusion.")

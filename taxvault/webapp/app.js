@@ -1066,11 +1066,18 @@ function viewEstimate() {
       <h3>Deductions you might itemise</h3>
       <div class="row three">
         ${numField('state_local_income_tax', 'State income tax paid', s.state_local_income_tax ?? '')}
+        ${numField('state_local_sales_tax', 'or state sales tax paid', s.state_local_sales_tax ?? '')}
         ${numField('property_tax', 'Property tax', s.property_tax ?? '')}
         ${numField('charitable_cash', 'Charitable giving', s.charitable_cash ?? '')}
         ${numField('medical_expenses', 'Medical costs', s.medical_expenses ?? '')}
         ${numField('student_loan_interest', 'Student loan interest', s.student_loan_interest ?? '')}
       </div>
+      <p class="note info">Income tax <em>or</em> sales tax, never both — the law lets
+         you pick one, and this takes whichever is larger. In Texas, Florida, Nevada,
+         Washington, Wyoming, South Dakota, Tennessee, Alaska and New Hampshire there is
+         no state income tax to deduct, so sales tax is the only one on offer and
+         leaving it blank costs you the deduction. A big purchase — a car, a boat,
+         building work — counts on top of the IRS table amount.</p>
       <p class="note info">Shares, your 401(k) and your mortgage each have their own
          card below — they carry rules a single box cannot express.</p>
       <h3>For planning mode</h3>
@@ -2717,7 +2724,7 @@ function collectSituation() {
     'dependent_care_expenses', 'estimated_payments', 'taxable_interest', 'ordinary_dividends',
     'qualified_dividends', 'long_term_gains', 'short_term_gains', 'self_employment_income',
     'social_security_benefits', 'retirement_distributions', 'unemployment',
-    'state_local_income_tax', 'property_tax', 'charitable_cash',
+    'state_local_income_tax', 'state_local_sales_tax', 'property_tax', 'charitable_cash',
     'medical_expenses', 'student_loan_interest', 'existing_401k', 'existing_hsa',
     'traditional_ira', 'capital_gain_distributions', 'wash_sale_disallowed',
     'capital_loss_carryforward_short', 'capital_loss_carryforward_long',
