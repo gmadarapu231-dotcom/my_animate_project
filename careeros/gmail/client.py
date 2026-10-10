@@ -196,14 +196,22 @@ class OAuthGmailClient:
                 labels=full.get("labelIds", []),
             )
 
-    def _raw(self, to: str, subject: str, body: str) -> str:
+    def _raw(
+        self, to: str, subject: str, body: str, attachment: tuple[str, bytes] | None = None
+    ) -> str:
         import base64  # noqa: PLC0415
+        import mimetypes  # noqa: PLC0415
         from email.message import EmailMessage  # noqa: PLC0415
 
         msg = EmailMessage()
         msg["To"] = to
         msg["Subject"] = subject
         msg.set_content(body)
+        if attachment:
+            filename, data = attachment
+            kind = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            maintype, _, subtype = kind.partition("/")
+            msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
         return base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
 
     def create_draft(self, thread_id: str | None, to: str, subject: str, body: str) -> str:
@@ -224,6 +232,20 @@ class OAuthGmailClient:
         message: dict[str, Any] = {"raw": self._raw(to, subject, body)}
         if thread_id:
             message["threadId"] = thread_id
+        sent = service.users().messages().send(userId="me", body=message).execute()
+        return sent["id"]
+
+    def send_with_attachment(
+        self, to: str, subject: str, body: str, attachment: tuple[str, bytes]
+    ) -> str:
+        """An application email: the résumé goes as a file, not pasted inline."""
+        if not self.can_send:
+            raise PermissionError(
+                "Sending is disabled. Re-run `careeros gmail-auth --allow-send` to grant "
+                "the gmail.send scope."
+            )
+        service = self._connect()
+        message = {"raw": self._raw(to, subject, body, attachment)}
         sent = service.users().messages().send(userId="me", body=message).execute()
         return sent["id"]
 

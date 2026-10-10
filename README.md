@@ -154,6 +154,24 @@ careeros jobs
 careeros serve                       # app at http://127.0.0.1:8000
 ```
 
+### Start from your own résumé instead
+
+```bash
+pip install -e '.[resume,ocr]'       # PDF text + OCR for scans and photos
+sudo apt install tesseract-ocr       # or: brew install tesseract
+careeros init && careeros serve
+```
+
+Open the **Résumé** tab and upload a .pdf, .docx, .txt, or a scan/phone photo.
+Scans are read with OCR (tesseract locally; Claude reads them instead when
+tesseract is missing and `ANTHROPIC_API_KEY` is set). On a fresh server the
+upload creates your profile from the résumé. Confirm the facts it read, then
+open any job and press **Apply**: it tailors the résumé, picks the channel and
+shows the packet. Postings with an application API or an application email can
+be sent from the app (email needs `careeros gmail-auth --allow-send`); all
+others open the posting for you to submit, then **I've submitted it** marks it
+applied.
+
 No API key required for any of that. Everything above runs on deterministic
 engines. Set `ANTHROPIC_API_KEY` (or run `ant auth login`) and the same commands
 get sharper — better classification, invented domains for unfamiliar

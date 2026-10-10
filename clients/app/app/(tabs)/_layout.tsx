@@ -44,6 +44,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="resume"
+        options={{
+          title: 'Résumé',
+          tabBarIcon: ({ color }) => <TabIcon glyph="▤" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="today"
         options={{
           title: 'Today',

@@ -1,12 +1,12 @@
 """Résumé in, searches and evidence out.
 
-    extract_text  -> plain text from .txt/.md/.docx/.pdf
+    extract_text  -> plain text from .txt/.md/.docx/.pdf, OCR for scans and photos
     parse_resume  -> employers, bullets, skills, dates as *proposals*
     commit_parsed -> rows in the database, evidence always unverified
     verify        -> the human confirming facts, the one gate that matters
     terms_from_resume -> what to search for, derived from the résumé itself
 
-`intake_file` runs the whole chain for a path.
+`intake_file` runs the whole chain for a path, `intake_upload` for bytes.
 """
 
 from __future__ import annotations
@@ -23,7 +23,15 @@ from careeros.resume_intake.commit import (
     commit_parsed,
     verify,
 )
-from careeros.resume_intake.extract import SUPPORTED, ExtractionError, extract_text, normalise
+from careeros.resume_intake.extract import (
+    SUPPORTED,
+    Extraction,
+    ExtractionError,
+    extract,
+    extract_text,
+    extract_upload,
+    normalise,
+)
 from careeros.resume_intake.parse import (
     EmployerProposal,
     EvidenceProposal,
@@ -34,15 +42,19 @@ from careeros.resume_intake.parse import (
 __all__ = [
     "EmployerProposal",
     "EvidenceProposal",
+    "Extraction",
     "ExtractionError",
     "IntakeResult",
     "ParsedResume",
     "SUPPORTED",
     "apply_profile",
     "commit_parsed",
+    "extract",
     "extract_text",
+    "extract_upload",
     "intake_file",
     "intake_text",
+    "intake_upload",
     "normalise",
     "parse_resume",
     "terms_from_resume",
@@ -127,14 +139,49 @@ def intake_file(
     overwrite_profile: bool = False,
 ) -> dict[str, Any]:
     file = Path(path)
-    text = extract_text(file)
+    extraction = extract(file)
     report = intake_text(
         session,
         user,
-        text,
+        extraction.text,
         source=f"résumé: {file.name}",
         commit=commit,
         overwrite_profile=overwrite_profile,
     )
-    report["file"] = {"name": file.name, "bytes": file.stat().st_size, "characters": len(text)}
+    report["file"] = {
+        "name": file.name,
+        "bytes": file.stat().st_size,
+        "characters": len(extraction.text),
+        "method": extraction.method,
+    }
+    return report
+
+
+def intake_upload(
+    session: Session,
+    user: User,
+    data: bytes,
+    filename: str,
+    *,
+    commit: bool = True,
+    overwrite_profile: bool = False,
+) -> dict[str, Any]:
+    """`intake_file` for an uploaded file. The name is kept only as a label."""
+    extraction = extract_upload(data, filename)
+    label = Path(filename or "upload").name[:120]
+    report = intake_text(
+        session,
+        user,
+        extraction.text,
+        source=f"résumé: {label}",
+        commit=commit,
+        overwrite_profile=overwrite_profile,
+    )
+    report["file"] = {
+        "name": label,
+        "bytes": len(data),
+        "characters": len(extraction.text),
+        "method": extraction.method,
+    }
+    report["text"] = extraction.text
     return report

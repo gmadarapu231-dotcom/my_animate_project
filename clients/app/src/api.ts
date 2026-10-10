@@ -404,6 +404,95 @@ export type SearchPlanView = {
   note: string;
 };
 
+export type ParsedResume = {
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  current_title: string | null;
+  total_experience_years: number;
+  employers: {
+    name: string;
+    title: string | null;
+    location: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    current: boolean;
+  }[];
+  evidence: { text: string; kind: string; metrics?: Record<string, unknown> }[];
+  skills: Record<string, number>;
+  certifications: string[];
+  sections_found: string[];
+  warnings: string[];
+};
+
+export type IntakeReport = {
+  user_id: number;
+  email: string;
+  parsed: ParsedResume;
+  search_terms: string[];
+  committed: boolean;
+  file: { name: string; bytes: number; characters: number; method: string };
+  intake?: {
+    employers_created: number;
+    evidence_created: number;
+    evidence_skipped: number;
+    certifications_created: number;
+    profile_fields_set: string[];
+    evidence_ids: number[];
+    next_step: string;
+  };
+};
+
+/** A file picked on any platform: web gives a File, native gives a uri. */
+export type PickedFile = { name: string; uri: string; mimeType?: string | null; file?: Blob | null };
+
+export type Evidence = {
+  id: number;
+  kind: string;
+  text: string;
+  employer: string | null;
+  role_title: string | null;
+  verified: boolean;
+};
+
+export type ApplyResult = {
+  application_id: number;
+  status: string;
+  job: { id: number; title: string; company: string; url: string | null };
+  channel: {
+    tier: 'api' | 'email' | 'assisted' | 'blocked';
+    tier_label: string;
+    automatable: boolean;
+    provider: string;
+    apply_url: string | null;
+    email: string | null;
+    reason: string;
+  };
+  resume_id: number;
+  resume_final: boolean;
+  tailored_now: boolean;
+  packet: {
+    answers: { question: string; value: string | null; source: string; confident: boolean }[];
+    unanswered: string[];
+    disclaimers: string[];
+    complete: boolean;
+    resume_filename: string;
+    ats: { overall: number | null; keyword_match: number | null; matched: string[]; missing: string[] };
+  };
+  blockers: string[];
+  warnings: string[];
+  submission: {
+    ok: boolean;
+    tier: string;
+    dry_run: boolean;
+    message: string;
+    reference: string | null;
+    downgraded_to: string | null;
+  } | null;
+  sent: boolean;
+  next_step: string;
+};
+
 export type ClientConfig = { baseUrl: string; token?: string | null };
 
 const TIMEOUT_MS = 120_000;   // the agent loop can legitimately take a while
@@ -424,19 +513,25 @@ export class CareerOsClient {
 
   private async request<T>(
     path: string,
-    options: { method?: 'GET' | 'POST'; body?: unknown; query?: Record<string, any> } = {},
+    options: {
+      method?: 'GET' | 'POST';
+      body?: unknown;
+      form?: FormData;
+      query?: Record<string, any>;
+    } = {},
   ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+    // FormData sets its own multipart boundary; a hand-set Content-Type breaks it.
+    if (options.body !== undefined && !options.form) headers['Content-Type'] = 'application/json';
     if (this.config.token) headers.Authorization = `Bearer ${this.config.token}`;
 
     try {
       const response = await fetch(this.url(path, options.query), {
         method: options.method ?? 'GET',
         headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body: options.form ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
         signal: controller.signal,
       });
       const text = await response.text();
@@ -491,7 +586,45 @@ export class CareerOsClient {
       { method: 'POST', body: { job_id: jobId, use_ai: true } },
     );
 
+  /** Upload a résumé file. Scans and photos are read by OCR on the server. */
+  uploadResume = (picked: PickedFile, commit = true) => {
+    const form = new FormData();
+    if (picked.file) {
+      form.append('file', picked.file, picked.name);
+    } else {
+      // React Native's FormData takes this shape for a file on disk.
+      form.append('file', {
+        uri: picked.uri,
+        name: picked.name,
+        type: picked.mimeType ?? 'application/octet-stream',
+      } as any);
+    }
+    form.append('commit', String(commit));
+    return this.request<IntakeReport>('/api/resumes/upload', { method: 'POST', form });
+  };
+
+  intakeText = (text: string, commit = true) =>
+    this.request<IntakeReport>('/api/resumes/intake-text', {
+      method: 'POST',
+      body: { text, commit },
+    });
+
+  evidence = () => this.request<{ count: number; evidence: Evidence[] }>('/api/profile/evidence');
+
+  verifyEvidence = (ids: number[], verified = true) =>
+    this.request<{ changed: number; verified: boolean }>('/api/profile/evidence/verify', {
+      method: 'POST',
+      body: { evidence_ids: ids, verified },
+    });
+
   // -- applications ------------------------------------------------------
+  /** `send: false` previews; `send: true` submits through API/email channels. */
+  apply = (jobId: number, send = false) =>
+    this.request<ApplyResult>('/api/applications/apply', {
+      method: 'POST',
+      body: { job_id: jobId, send, use_ai: true },
+    });
+
   applications = (status?: string) =>
     this.request<{ count: number; lifecycle: string[]; applications: ApplicationRow[] }>(
       '/api/applications',

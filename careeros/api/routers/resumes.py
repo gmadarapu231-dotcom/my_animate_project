@@ -1,15 +1,16 @@
-"""Resume assembly, tailoring, the factuality gate, and cover letters."""
+"""Résumé upload and parsing, assembly, tailoring, the factuality gate, cover letters."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from careeros.api.deps import current_user, get_db, pipeline
+from careeros.api.deps import current_user, get_db, optional_user, pipeline
+from careeros.auth import AuthMode, auth_mode
 from careeros.db.models import CoverLetter, FactualityReport, Job, ResumeDocument, User
 from careeros.engines.resume import ResumeBuilder, render_text
 from careeros.enums import ResumeKind
@@ -32,6 +33,116 @@ class TailorRequest(BaseModel):
 class CoverLetterRequest(BaseModel):
     job_id: int
     use_ai: bool = True
+
+
+class IntakeTextRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=200_000)
+    commit: bool = True
+    overwrite_profile: bool = False
+
+
+#: A résumé, even a 3-page 300-dpi scan, is well under this.
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+
+
+def _owner_for_intake(request: Request, session: Session, parsed_email: str | None, name: str | None) -> User:
+    """The signed-in account, else the local profile, else one opened from the résumé.
+
+    The last case is the first-run path on an open (single-person) server:
+    there is no profile yet, and the résumé is how one gets made. On a server
+    that requires sign-in, `current_user` has already refused.
+    """
+    user = optional_user(request, session)
+    if user is not None:
+        return user
+    if auth_mode() is AuthMode.REQUIRED:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    if not parsed_email:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No profile on this server yet, and no email address was found in the "
+                "résumé to open one with. Add your email to the résumé header, or sign in first."
+            ),
+        )
+    user = User(
+        email=parsed_email.strip().lower(),
+        full_name=name or parsed_email.split("@", 1)[0],
+        links={},
+        preferred_locations=[],
+        industries=[],
+    )
+    session.add(user)
+    session.flush()
+    return user
+
+
+def _intake_response(report: dict[str, Any], user: User) -> dict[str, Any]:
+    return {**report, "user_id": user.id, "email": user.email}
+
+
+@router.post("/upload")
+async def upload_resume(
+    request: Request,
+    file: UploadFile = File(...),
+    commit: bool = Form(True),
+    overwrite_profile: bool = Form(False),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Upload a résumé (.pdf .docx .txt, or a scan/photo read by OCR) and parse it.
+
+    The profile's descriptive fields are filled in, and every bullet lands as
+    *unverified* evidence: confirm the accurate ones before a tailored résumé
+    can cite them.
+    """
+    from careeros.resume_intake import ExtractionError, intake_text, parse_resume
+    from careeros.resume_intake.extract import extract_upload
+
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"That file is over {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
+    try:
+        extraction = extract_upload(data, file.filename or "")
+    except ExtractionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    parsed = parse_resume(extraction.text)
+    user = _owner_for_intake(request, session, parsed.email, parsed.full_name)
+    label = (file.filename or "upload").replace("\\", "/").rsplit("/", 1)[-1][:120]
+    report = intake_text(
+        session, user, extraction.text, source=f"résumé: {label}",
+        commit=commit, overwrite_profile=overwrite_profile,
+    )
+    report["file"] = {
+        "name": label,
+        "bytes": len(data),
+        "characters": len(extraction.text),
+        "method": extraction.method,
+    }
+    report["text"] = extraction.text
+    return _intake_response(report, user)
+
+
+@router.post("/intake-text")
+def intake_pasted_text(
+    payload: IntakeTextRequest,
+    request: Request,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The same as an upload, for résumé text pasted in directly."""
+    from careeros.resume_intake import intake_text, normalise, parse_resume
+
+    text = normalise(payload.text)
+    if len(text) < 80:
+        raise HTTPException(422, "That is too little text to be a résumé.")
+    parsed = parse_resume(text)
+    user = _owner_for_intake(request, session, parsed.email, parsed.full_name)
+    report = intake_text(
+        session, user, text, source="résumé: pasted text",
+        commit=payload.commit, overwrite_profile=payload.overwrite_profile,
+    )
+    report["file"] = {"name": "pasted text", "bytes": len(payload.text), "characters": len(text), "method": "text"}
+    return _intake_response(report, user)
 
 
 def _resume_payload(session: Session, doc: ResumeDocument) -> dict[str, Any]:

@@ -142,8 +142,8 @@ def test_a_missing_pdf_dependency_names_the_fix(tmp_path, monkeypatch):
     real_import = builtins.__import__
 
     def no_pypdf(name, *args, **kwargs):
-        if name == "pypdf":
-            raise ImportError("no pypdf")
+        if name in ("pypdf", "pypdfium2"):
+            raise ImportError(f"no {name}")
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", no_pypdf)

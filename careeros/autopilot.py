@@ -41,6 +41,7 @@ from careeros.apply.guardrails import (
     in_quiet_hours,
 )
 from careeros.apply.packet import build as build_packet
+from careeros.apply.channels import SubmitTier
 from careeros.apply.submit import Submission, submit
 from careeros.db.models import (
     Application,
@@ -280,6 +281,7 @@ def _record(
     job: Job,
     resume: ResumeDocument | None,
     result: Submission,
+    source: str = "autopilot",
 ) -> Application:
     """Write the outcome onto the application row and its event log."""
     application = _application_for(session, user, job.id)
@@ -290,9 +292,12 @@ def _record(
 
     previous = application.status
     application.resume_id = resume.id if resume else application.resume_id
-    application.submission_mode = "automatic" if result.ok and not result.dry_run else "assisted"
+    # An assisted hand-off is ok=True and not a dry run, but nothing was sent:
+    # the person still has to submit it, so it must not read as "applied".
+    sent = result.ok and not result.dry_run and result.tier != SubmitTier.ASSISTED.value
+    application.submission_mode = "automatic" if sent else "assisted"
 
-    if result.ok and not result.dry_run:
+    if sent:
         application.status = ApplicationStatus.APPLIED.value
         application.applied_on = date.today()
         application.last_activity_on = date.today()
@@ -305,6 +310,9 @@ def _record(
     elif result.ok and result.dry_run:
         application.status = ApplicationStatus.APPLICATION_READY.value
         detail = f"Dry run: {result.message}"
+    elif result.ok:
+        application.status = ApplicationStatus.APPLICATION_READY.value
+        detail = f"Ready to submit yourself: {result.message}"
     else:
         application.status = ApplicationStatus.APPLICATION_READY.value
         detail = result.message
@@ -316,7 +324,7 @@ def _record(
             to_status=application.status,
             at=_now(),
             detail=detail[:2000],
-            source="autopilot",
+            source=source,
         )
     )
     session.flush()

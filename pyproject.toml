@@ -15,6 +15,8 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
     "pyyaml>=6.0",
+    # Résumé uploads arrive as multipart/form-data.
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +25,9 @@ ai = ["anthropic>=1.0"]
 gmail = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 # Reading a PDF résumé. .txt/.md/.docx need nothing.
 resume = ["pypdf>=4.0"]
+# Scanned PDFs and photos of a résumé. Also needs the `tesseract` program;
+# without it, Claude reads the scan when ANTHROPIC_API_KEY is set.
+ocr = ["pytesseract>=0.3.10", "Pillow>=10.0", "pypdfium2>=4.0"]
 dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [project.scripts]

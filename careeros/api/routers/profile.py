@@ -186,3 +186,21 @@ def verify_evidence(
         raise HTTPException(404, "Evidence not found")
     item.verification = VerificationState.VERIFIED.value
     return {"id": item.id, "verification": item.verification}
+
+
+class VerifyMany(BaseModel):
+    evidence_ids: list[int]
+    verified: bool = True
+
+
+@router.post("/evidence/verify")
+def verify_many(
+    payload: VerifyMany,
+    session: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict[str, Any]:
+    """Confirm (or un-confirm) several items at once -- the review step after an upload."""
+    from careeros.resume_intake import verify
+
+    changed = verify(session, user, payload.evidence_ids, verified=payload.verified)
+    return {"changed": changed, "verified": payload.verified}
