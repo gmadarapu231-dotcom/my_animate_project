@@ -442,6 +442,60 @@ def _autofill(
     return notes
 
 
+def _resolve_home_state(asked_for: str, taxpayer: Taxpayer,
+                        forms: list[Any]) -> tuple[str, list[dict[str, str]]]:
+    """Which state this return is computed for, and why.
+
+    The order matters and it was wrong. A state named on THIS request is the
+    preparer saying so, and wins. Otherwise the W-2 wins: it is the evidence,
+    issued by the employer, for the year being computed. The account's own
+    field comes last, because it was typed once at sign-up and a client who
+    moved in March does not go back and edit it -- and when it quietly beat
+    the W-2, a Kentucky form produced a California return with nothing said.
+
+    A disagreement is always reported, whichever way it resolves. "You told
+    us California and your W-2 says Kentucky" is a question with three real
+    answers -- you moved, the account is stale, or this is not your W-2 --
+    and only the client knows which.
+    """
+    warnings: list[dict[str, str]] = []
+    on_file = (taxpayer.resident_state or "").strip().upper()
+    on_forms = [f.primary_state.strip().upper()
+                for f in forms if getattr(f, "primary_state", "")]
+    from_forms = on_forms[0] if on_forms else ""
+
+    home = asked_for or from_forms or on_file
+
+    if from_forms and on_file and from_forms != on_file and not asked_for:
+        warnings.append({
+            "severity": "warning", "box": "15", "message": (
+                f"Your account says you live in {on_file}, but your W-2 reports "
+                f"wages to {from_forms}. This return is computed for "
+                f"{from_forms}, from the form. If you moved during the year a "
+                "part-year return is needed in both states; if the account is "
+                "simply out of date, correct it."
+            ),
+        })
+    elif asked_for and from_forms and asked_for != from_forms:
+        warnings.append({
+            "severity": "info", "box": "15", "message": (
+                f"Computed for {asked_for} as asked, although the W-2 reports "
+                f"wages to {from_forms}. Wages taxed by another state usually "
+                "mean a non-resident return there and a credit at home."
+            ),
+        })
+    if len({code for code in on_forms if code}) > 1:
+        warnings.append({
+            "severity": "warning", "box": "15", "message": (
+                "The W-2s on file report wages to "
+                + ", ".join(sorted({c for c in on_forms if c}))
+                + ". Only one of them can be the resident state; the others "
+                "need non-resident returns."
+            ),
+        })
+    return home, warnings
+
+
 def _build(session: Session, taxpayer: Taxpayer, body: EstimateRequest) -> tuple[Any, Any, Any]:
     year = body.tax_year or latest_year()
     # Check the year before anything else. Telling someone asking about 1999
@@ -453,12 +507,14 @@ def _build(session: Session, taxpayer: Taxpayer, body: EstimateRequest) -> tuple
     planning_context = {k: situation.pop(k) for k in list(situation) if k in PLANNING_KEYS}
     for key in STRUCTURED_KEYS:
         situation.pop(key, None)
-    home = situation.pop("resident_state", "") or (taxpayer.resident_state or "")
+    asked_for = (situation.pop("resident_state", "") or "").strip().upper()
     status = situation.pop("filing_status", "single")
+    home, state_warnings = _resolve_home_state(asked_for, taxpayer, forms)
 
     profile, warnings = profile_from_documents(
         forms, tax_year=year, filing_status=status, resident_state=home, extra=situation,
     )
+    warnings = state_warnings + warnings
     detail = body.situation
     other = _load_other(session, taxpayer, year)
     warnings.extend(_autofill(profile, other, detail))

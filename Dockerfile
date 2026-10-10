@@ -26,6 +26,14 @@ RUN python -m venv /opt/venv \
 
 FROM python:3.12-slim AS runtime
 
+# Reading a photographed W-2 shells out to two programs: Tesseract reads the
+# characters and Poppler's pdftoppm renders a scanned PDF into a page image.
+# Without them an upload that is pixels rather than text cannot be read at
+# all, and most clients photograph the form rather than downloading it.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng poppler-utils \
+ && rm -rf /var/lib/apt/lists/*
+
 # A fixed uid so a mounted volume's ownership is predictable across hosts.
 RUN groupadd --gid 10001 taxvault \
  && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin taxvault

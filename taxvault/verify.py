@@ -439,6 +439,53 @@ def _forms(r: _Runner) -> None:
         )
         return "reported as unreadable rather than estimated"
 
+    @r.check("A photographed form can be read",
+             "Install tesseract-ocr and poppler-utils. Without them every "
+             "client who photographs their W-2 instead of downloading it "
+             "has to type the boxes in by hand.")
+    def _() -> str:
+        from taxvault.forms import ocr
+
+        capable = ocr.available()
+        if not capable["images"]:
+            missing = []
+            if not capable["tesseract"]:
+                missing.append("tesseract")
+            if not capable["binding"]:
+                missing.append("the pytesseract package")
+            raise _Skip("Not installed here: " + ", ".join(missing)
+                        + ". Photographed forms will be refused with an "
+                        "explanation, and typed entry still works.")
+        if not capable["pdfs"]:
+            raise _Skip(
+                "Tesseract is installed but poppler-utils (pdftoppm) is not, "
+                "so a photograph reads and a scanned PDF does not."
+            )
+        return "tesseract and pdftoppm both present"
+
+    @r.check("A W-2 is checked against its own arithmetic",
+             "This is what makes a scanned form trustworthy. If it stops "
+             "working, a misread digit reaches a return unchallenged.")
+    def _() -> str:
+        from taxvault.forms.ocr import cross_check
+        from taxvault.forms.w2 import W2
+
+        clean = W2.from_dict({
+            "box1_wages": 88000, "box3_social_security_wages": 88000,
+            "box4_social_security_withheld": 5456,
+            "box5_medicare_wages": 88000, "box6_medicare_withheld": 1276,
+        })
+        assert cross_check(clean, year=2025) == [], "a correct W-2 was questioned"
+        misread = W2.from_dict({
+            "box1_wages": 88000, "box3_social_security_wages": 88000,
+            "box4_social_security_withheld": 8456,   # a 5 read as an 8
+            "box5_medicare_wages": 88000, "box6_medicare_withheld": 1276,
+        })
+        boxes = [f["box"] for f in cross_check(misread, year=2025)]
+        assert "4" in boxes, "a misread digit passed the self-check"
+        return "6.2% and 1.45% hold; a misread digit in box 4 is caught"
+
+
 
 # -------------------------------------------------------------- 6. agent
 def _agent(r: _Runner) -> None:

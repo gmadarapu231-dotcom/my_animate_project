@@ -170,8 +170,9 @@ def test_a_mistyped_box_is_caught_on_upload(client):
     assert any(w["severity"] == "error" and w["box"] == "4" for w in body["warnings"])
 
 
-def test_an_unreadable_upload_is_stored_but_not_guessed_at(client):
-    """A photo is pixels. It is kept, and the response says it was not read."""
+def test_an_upload_nothing_can_be_read_from_is_refused(client):
+    """Not stored as a W-2 of zeros, which reads as a successful upload and
+    silently leaves a job out of the estimate."""
     token = verify_identity(client, sign_in(client))
     response = client.post(
         "/api/documents/w2/file",
@@ -179,24 +180,22 @@ def test_an_unreadable_upload_is_stored_but_not_guessed_at(client):
         data={"tax_year": "2025"},
         headers=auth(token),
     )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["parse_confidence"] == 0.0
-    assert body["status"] == "needs_review"
-    assert any("OCR" in w["message"] for w in body["warnings"])
+    assert response.status_code == 422, response.text
+    assert "not been saved" in response.json()["detail"]
 
 
 def test_a_corrupt_pdf_is_told_apart_from_a_scan(client):
     """Both are unreadable, but only one is worth re-downloading."""
     token = verify_identity(client, sign_in(client))
-    body = client.post(
+    response = client.post(
         "/api/documents/w2/file",
         files={"file": ("broken.pdf", b"%PDF-1.4 truncated", "application/pdf")},
         data={"tax_year": "2025"},
         headers=auth(token),
-    ).json()
-    assert body["parse_confidence"] == 0.0
-    assert any("corrupt or password-protected" in w["message"] for w in body["warnings"])
+    )
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert "corrupt or password-protected" in body["detail"]
 
 
 # ---------------------------------------------------------------------------

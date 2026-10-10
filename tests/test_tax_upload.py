@@ -59,9 +59,10 @@ def test_a_payroll_pdf_is_read():
     assert "118,000.00" in result.text
 
 
-def test_a_scanned_pdf_says_it_needs_ocr():
-    """No text in the file means pixels, and pixels need OCR we do not have."""
-    reportlab = pytest.importorskip("reportlab")
+def test_a_pdf_with_no_text_layer_goes_to_ocr():
+    """A shape and no text is a scan. There is nothing to extract, so the
+    reader falls through to OCR rather than giving up on the file."""
+    pytest.importorskip("reportlab")
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
 
@@ -71,14 +72,35 @@ def test_a_scanned_pdf_says_it_needs_ocr():
     c.save()
 
     result = extract_text(buffer.getvalue(), "application/pdf", "scan.pdf")
+    # A blank box holds no words, so this still fails -- but on the OCR path,
+    # having actually looked, rather than on a refusal to try.
     assert result.readable is False
-    assert any("OCR" in n["message"] for n in result.notes)
+    assert result.method in ("none", "ocr")
 
 
-def test_a_photo_is_refused_clearly():
+def test_the_text_path_can_be_asked_for_on_its_own():
+    """`ocr=False` keeps extraction to text already in the file, which is
+    what a test of the text path wants and what a caller with no time for a
+    render wants."""
+    pytest.importorskip("reportlab")
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    c.rect(100, 100, 300, 300, fill=0)
+    c.save()
+
+    result = extract_text(buffer.getvalue(), "application/pdf", "scan.pdf", ocr=False)
+    assert result.readable is False
+    assert result.method != "ocr"
+
+
+def test_a_file_that_is_not_an_image_at_all_is_refused_clearly():
     result = extract_text(b"\xff\xd8\xff\xe0 jpeg bytes", "image/jpeg", "w2.jpg")
     assert result.readable is False
-    assert any("OCR" in n["message"] for n in result.notes)
+    assert any("could not be read" in n["message"]
+               or "could not be opened" in n["message"] for n in result.notes), result.notes
 
 
 def test_a_corrupt_pdf_explains_itself_rather_than_exploding():
@@ -187,7 +209,14 @@ def test_an_uploaded_pdf_alone_is_enough_for_an_estimate(client):
     assert [s["code"] for s in body["states"]] == ["CA"]
 
 
-def test_an_unreadable_scan_still_says_so_through_the_api(client):
+def test_an_unreadable_upload_is_refused_rather_than_saved_as_zeros(client):
+    """The worst outcome here is a 200 and a W-2 of all zeros.
+
+    It looks like a successful upload, contributes nothing to the estimate,
+    and the client never learns their job is missing from the figures they
+    are about to rely on. Refusing says so while they are still holding the
+    form.
+    """
     from tests.test_tax_journey import auth
 
     token = _ready(client)
@@ -197,11 +226,15 @@ def test_an_unreadable_scan_still_says_so_through_the_api(client):
         data={"tax_year": "2025"},
         headers=auth(token),
     )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["parse_confidence"] == 0.0
-    assert body["status"] == "needs_review"
-    assert any("OCR" in w["message"] for w in body["warnings"])
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert "scan.png" in detail
+    assert "not been saved" in detail
+
+    listing = client.get("/api/documents", headers=auth(token)).json()
+    assert not [d for d in listing["documents"] if d["tax_year"] == 2025], (
+        "an unreadable upload left a document behind"
+    )
 
 
 # ---------------------------------------------------------------------------

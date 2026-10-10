@@ -6,9 +6,10 @@ Three kinds of upload arrive, and they deserve three different answers:
   Paychex). The text is already in the file; it only has to be pulled out.
   This is the common case and it is handled, so uploading a W-2 downloaded
   from a payroll site produces figures rather than homework.
-* **A scanned PDF or a photo** -- pixels, no text. Reading it needs OCR, which
-  this server does not have. Saying so plainly is the only honest answer;
-  pretending otherwise would put an estimate on figures nobody read.
+* **A scanned PDF or a photo** -- pixels, no text. Most clients photograph
+  the form rather than downloading it, so this is not an edge case. It goes
+  to `taxvault.forms.ocr`, which renders and reads it, and comes back marked
+  as OCR with the engine's confidence attached so a person checks it.
 * **Plain text** -- pasted or exported. Decoded and used as-is.
 
 `extract_text` never raises on a bad file. A corrupt PDF is a thing a client
@@ -34,9 +35,13 @@ IMAGE_TYPES = {"image/jpeg", "image/png", "image/heic", "image/tiff", "image/web
 @dataclass
 class Extraction:
     text: str = ""
-    method: str = "none"          # pdf_text | plain_text | none
+    method: str = "none"          # pdf_text | plain_text | ocr | none
     readable: bool = False
     pages: int = 0
+    #: 1.0 for text taken straight out of a file, which is exact. Lower for
+    #: OCR, where it is the engine's own mean word confidence -- the number
+    #: that decides whether figures are shown or a person is asked to type.
+    confidence: float = 1.0
     notes: list[dict[str, str]] = field(default_factory=list)
 
     def note(self, severity: str, message: str) -> None:
@@ -44,7 +49,8 @@ class Extraction:
 
     def to_dict(self) -> dict[str, Any]:
         return {"method": self.method, "readable": self.readable,
-                "pages": self.pages, "notes": self.notes}
+                "pages": self.pages, "confidence": round(self.confidence, 3),
+                "notes": self.notes}
 
 
 def _pdf_text(blob: bytes, result: Extraction) -> None:
@@ -85,11 +91,9 @@ def _pdf_text(blob: bytes, result: Extraction) -> None:
     text = "\n".join(chunks).strip()
 
     if len(text) < MIN_MEANINGFUL_CHARS:
-        result.note("warning",
-                    "This PDF holds no readable text, which means it is a scan or a "
-                    "photograph saved as a PDF. Reading it needs OCR, which this server "
-                    "does not run. The file is stored securely — enter the boxes by hand "
-                    "and the estimate will follow.")
+        result.note("info",
+                    "This PDF holds no text layer, so it is a scan or a photograph "
+                    "saved as a PDF. Reading it by eye instead.")
         return
 
     result.text = text
@@ -97,8 +101,44 @@ def _pdf_text(blob: bytes, result: Extraction) -> None:
     result.readable = True
 
 
-def extract_text(blob: bytes, content_type: str = "", filename: str = "") -> Extraction:
-    """Pull whatever text an upload contains, and say how it went."""
+def _ocr_into(blob: bytes, content_type: str, result: Extraction) -> None:
+    """Read pixels, and record how much the engine trusted itself.
+
+    Kept separate so that OCR being unavailable, slow or simply bad at a
+    particular photo degrades to the same honest "could not read it" the
+    application gave before it existed, rather than to a stack trace.
+    """
+    try:
+        from taxvault.forms import ocr as _ocr
+
+        read = _ocr.read(blob, content_type=content_type)
+    except Exception as exc:                        # pragma: no cover
+        result.note("warning", f"That file could not be read as an image. {exc}")
+        return
+
+    result.pages = result.pages or read.pages
+    if read.readable:
+        # The "this has no text layer" note was a step on the way, not a
+        # finding. Leaving it beside a successful read tells a client their
+        # form could not be read, directly above the figures from it.
+        result.notes = [n for n in result.notes if "no text layer" not in n["message"]]
+    for note in read.notes:
+        result.note("info" if read.readable else "warning", note)
+    if not read.readable:
+        return
+    result.text = read.text
+    result.method = "ocr"
+    result.readable = True
+    result.confidence = read.confidence
+
+
+def extract_text(blob: bytes, content_type: str = "", filename: str = "",
+                 *, ocr: bool = True) -> Extraction:
+    """Pull whatever text an upload contains, and say how it went.
+
+    `ocr=False` keeps this to text already in the file, which is what a test
+    wants when it is checking the text path rather than the reader.
+    """
     result = Extraction()
     kind = (content_type or "").split(";")[0].strip().lower()
     name = (filename or "").lower()
@@ -117,6 +157,11 @@ def extract_text(blob: bytes, content_type: str = "", filename: str = "") -> Ext
 
     if kind in PDF_TYPES or blob[:5] == b"%PDF-":
         _pdf_text(blob, result)
+        if not result.readable and ocr:
+            # A payroll portal's PDF carries its text; a scan is pixels in a
+            # PDF wrapper. Falling through to OCR is what turns "we could not
+            # read that" into an answer.
+            _ocr_into(blob, kind or "application/pdf", result)
         return result
 
     if kind in TEXT_TYPES or kind.startswith("text/"):
@@ -128,10 +173,13 @@ def extract_text(blob: bytes, content_type: str = "", filename: str = "") -> Ext
         return result
 
     if kind in IMAGE_TYPES:
-        result.note("warning",
-                    "A photograph cannot be read without OCR, which this server does not "
-                    "run. The image is stored securely — enter the boxes by hand, which "
-                    "takes about a minute and is more accurate than any scan.")
+        if ocr:
+            _ocr_into(blob, kind, result)
+        if not result.readable:
+            result.note("warning",
+                        "That photograph could not be read. The image is stored "
+                        "securely — enter the boxes by hand, which takes about a "
+                        "minute and is more accurate than any scan.")
         return result
 
     result.note("warning",

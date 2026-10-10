@@ -25,6 +25,11 @@ dependencies = [
     # Draws the estimate a client takes away. Not optional: a practice that
     # cannot hand someone their estimate has no deliverable.
     "reportlab>=4.0",
+    # Reads a photographed or scanned W-2. The Python side is small; the work
+    # is done by the `tesseract` and `pdftoppm` programs, which the Dockerfile
+    # installs and `taxvault check` reports on.
+    "pytesseract>=0.3.10",
+    "pillow>=10.0",
 ]
 
 [project.optional-dependencies]

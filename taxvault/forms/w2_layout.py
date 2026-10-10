@@ -280,14 +280,29 @@ def _read_acroform(blob: bytes, form: W2, notes: list[dict[str, str]]) -> None:
 
 def read_w2_layout(blob: bytes) -> tuple[W2, float, list[dict[str, str]]]:
     """Read a W-2 from a PDF's layout. Returns (form, confidence, notes)."""
-    notes: list[dict[str, str]] = []
-    form = W2()
-
     try:
         pages = words_from_pdf(blob)
     except Exception as exc:
-        return form, 0.0, [{"severity": "error", "box": "",
+        return W2(), 0.0, [{"severity": "error", "box": "",
                             "message": f"The PDF's layout could not be read ({type(exc).__name__})."}]
+    return read_w2_pages(pages, blob=blob)
+
+
+def read_w2_pages(pages: list[Page], *,
+                  blob: bytes | None = None) -> tuple[W2, float, list[dict[str, str]]]:
+    """Read a W-2 from positioned words, wherever they came from.
+
+    A W-2 is a grid, and reading a grid needs the grid. Pulled out as its own
+    function so OCR can use it: Tesseract reports where each word sat on the
+    page, which is the same information pypdf gives for a text PDF, and a
+    scan read through this comes out as accurate as a payroll download. Read
+    flat instead, the label row and the value row are separate lines and
+    "1 Wages" picks up the 2 from the next box along.
+
+    `blob` is only for the AcroForm fallback, which needs the original PDF.
+    """
+    notes: list[dict[str, str]] = []
+    form = W2()
     if not pages:
         return form, 0.0, notes
 
@@ -324,7 +339,8 @@ def read_w2_layout(blob: bytes) -> tuple[W2, float, list[dict[str, str]]]:
         form.employee_ssn = "-".join(ssn.groups())
 
     _read_names(page, form, notes)
-    if not form.employer_name or not (form.employee_first_name or form.employee_last_name):
+    if blob and (not form.employer_name
+                 or not (form.employee_first_name or form.employee_last_name)):
         _read_acroform(blob, form, notes)
     _read_box12(page, form, notes)
     _read_state_rows(page, form, notes)

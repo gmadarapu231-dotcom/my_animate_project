@@ -32,6 +32,8 @@ from taxvault.crypto import encrypt_field
 from taxvault.db.models import TaxDocument, Taxpayer
 from taxvault.enums import DocumentKind, DocumentStatus
 from taxvault.forms.extract import extract_text, pair_orphan_amounts
+from taxvault.forms.ocr import cross_check as ocr_cross_check
+from taxvault.forms.ocr import pages as ocr_pages
 from taxvault.forms.identity_match import compare_names, compare_ssn
 from taxvault.forms.f1095 import parse_1095a_text
 from taxvault.forms.f1098 import parse_1098_text
@@ -45,7 +47,8 @@ from taxvault.forms.f1099 import (
     parse_simple_form,
 )
 from taxvault.forms.w2 import W2, parse_w2_text
-from taxvault.forms.w2_layout import read_w2_layout
+from taxvault.money import ZERO, money
+from taxvault.forms.w2_layout import read_w2_layout, read_w2_pages
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -272,6 +275,60 @@ def add_w2_text(
     return _serialise(document)
 
 
+#: The boxes that make a W-2 worth storing. A form with none of them is not a
+#: quiet partial read -- it is a failed one.
+_W2_SIGNS_OF_LIFE = (
+    "wages", "federal_withheld", "social_security_wages", "medicare_wages",
+)
+
+
+def _w2_has_anything(form: W2) -> bool:
+    """Did anything at all come off the page?
+
+    An employer name on its own counts: a form that named the employer but
+    lost the figures is a real read that needs correcting, which is a
+    different thing from a photograph nothing came out of.
+    """
+    if (form.employer_name or "").strip():
+        return True
+    if (form.employee_first_name or "").strip() or (form.employee_last_name or "").strip():
+        return True
+    for field in _W2_SIGNS_OF_LIFE:
+        try:
+            if money(getattr(form, field, 0) or 0) > ZERO:
+                return True
+        except Exception:
+            continue
+    return bool(form.states)
+
+
+def _unreadable_advice(extraction: Any, filename: str) -> str:
+    """Why it failed and what to do instead, in that order.
+
+    The client is holding the form. The useful reply names the likely cause
+    and the next action, not a status code.
+    """
+    from taxvault.forms import ocr as _ocr
+
+    said = " ".join(note.get("message", "") for note in extraction.notes).strip()
+    capable = _ocr.available()
+    if not capable["images"]:
+        cure = ("This server cannot read photographs — OCR is not installed on "
+                "it. Enter the boxes by hand, or upload the PDF your payroll "
+                "provider gives you, which is read straight off the file.")
+    elif extraction.method == "ocr":
+        cure = ("Photograph it straight on, in good light, with the form filling "
+                "the frame and no shadow across it — that usually reads. "
+                "Otherwise enter the boxes by hand; it takes about a minute and "
+                "is more accurate than any scan.")
+    else:
+        cure = ("Download the PDF from your payroll provider rather than "
+                "photographing the paper, or enter the boxes by hand.")
+    return (f"Nothing could be read from {filename}, so it has not been saved — "
+            f"an estimate missing a job is worse than no estimate. "
+            + (said + " " if said else "") + cure)
+
+
 @router.post("/w2/file")
 async def add_w2_file(
     request: Request,
@@ -284,12 +341,15 @@ async def add_w2_file(
     """Upload the original W-2 file, and read it where it can be read.
 
     A PDF from a payroll portal carries its text, so the boxes come straight
-    out of it -- which is the common case and the one worth getting right. A
-    scan or a photograph carries pixels instead, and reading those needs OCR
-    this server does not run: the file is stored encrypted, the confidence
-    comes back at zero, and the response says plainly that it was not read
-    rather than quietly contributing nothing to an estimate that looks
-    complete.
+    out of it. A scan or a photograph carries pixels, and goes to OCR -- most
+    clients photograph the form rather than downloading it, so that path is
+    the common one, not the exception.
+
+    Whatever the route, a W-2 that comes back empty is refused rather than
+    stored. A form of all zeros is the worst possible outcome here: it looks
+    like a successful upload, contributes nothing to the estimate, and the
+    client never learns that the figures they are reading do not include
+    their job.
     """
     content_type = (file.content_type or "").split(";")[0].strip()
     if content_type and content_type not in ALLOWED_CONTENT:
@@ -323,6 +383,16 @@ async def add_w2_file(
             form, confidence, layout_notes = read_w2_layout(blob)
             strategy = "layout"
             warnings += layout_notes
+        elif extraction.method == "ocr":
+            # OCR reports where each word sat, which is the same information
+            # pypdf gives for a text PDF -- so a scan goes through the same
+            # grid reader. Read flat instead, the label row and the value row
+            # are separate lines and box 1 picks up the digit from box 2.
+            form, confidence, layout_notes = read_w2_pages(
+                ocr_pages(blob, content_type=content_type)
+            )
+            strategy = "ocr_layout"
+            warnings += layout_notes
 
         # Fall back to the flat parse when the geometry was unreadable, and
         # keep whichever read found more of the boxes that matter.
@@ -351,6 +421,28 @@ async def add_w2_file(
                     })
 
     form.tax_year = tax_year
+
+    # OCR gets no benefit of the doubt. Whatever the parser thought of the
+    # text, the figures came off pixels, so the confidence is scaled by how
+    # much the engine trusted its own reading and the form is always put in
+    # front of a person.
+    if extraction.method == "ocr":
+        confidence = round(confidence * extraction.confidence, 3)
+        warnings += ocr_cross_check(form, year=tax_year)
+        # Never "parsed". A character reader mistakes 3 for 8, and the cost of
+        # that on a tax return is not symmetrical with the cost of one person
+        # glancing at six boxes. Capped below the threshold that marks a
+        # document confirmed, so it always lands in the review queue.
+        confidence = min(confidence, 0.74)
+
+    if not _w2_has_anything(form):
+        # Nothing legible came out. Refusing is the kind answer: the client
+        # finds out now, while they are holding the form, instead of reading
+        # an estimate that silently left their job out of it.
+        raise HTTPException(
+            status_code=422,
+            detail=_unreadable_advice(extraction, file.filename or "that file"),
+        )
 
     document = _store(
         session, taxpayer, form, source="upload", confidence=confidence,
