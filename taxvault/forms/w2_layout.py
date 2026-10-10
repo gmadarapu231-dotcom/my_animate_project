@@ -25,6 +25,7 @@ from taxvault.forms.layout import (
     find_box_value,
     find_label,
     find_text_block,
+    lines_of,
     looks_like_name,
     tidy_name,
     words_from_pdf,
@@ -62,12 +63,140 @@ EIN_SHAPE = re.compile(r"\b(\d{2}-\d{7})\b")
 YEAR = re.compile(r"\b(20[12]\d)\b")
 
 
+#: What box 1's label looks like. Finding it more than once on a page means
+#: the page carries more than one copy of the form.
+_BOX_ONE = re.compile(r"wages,? tips,? other comp", re.I)
+
+#: Two copies' box-1 labels closer together than this are the same copy read
+#: twice, not two copies. A W-2 copy is about 280 points wide and 290 deep.
+_COPY_GAP = 90.0
+
+
+def _copy_anchors(page: Page) -> list[Word]:
+    """Where each copy of the form starts, found by its box 1 label."""
+    anchors: list[Word] = []
+    for row in lines_of(page):
+        pieces = [re.sub(r"\s+", " ", w.text).strip() for w in row]
+        joined = " ".join(pieces)
+        for match in _BOX_ONE.finditer(joined):
+            # Map the match back to the word it began in.
+            offset, found = 0, None
+            for word, piece in zip(row, pieces):
+                start = joined.find(piece, offset)
+                if start <= match.start() < start + len(piece) + 1:
+                    found = word
+                    break
+                offset = start + len(piece)
+            anchors.append(found or row[0])
+    return anchors
+
+
+def _split(values: list[float], gap: float) -> list[float]:
+    """Cluster a list of coordinates, returning one representative each."""
+    out: list[float] = []
+    for value in sorted(values):
+        if not out or value - out[-1] > gap:
+            out.append(value)
+    return out
+
+
+def first_copy_region(page: Page) -> tuple[tuple[float, float, float, float] | None, int]:
+    """Where the first copy of the form sits, in the page's own point space.
+
+    Returns ((left, bottom, right, top), copies). The box is None when the
+    page carries a single form and there is nothing to narrow down.
+
+    Separate from `one_copy` because filtering words is only half the job: an
+    OCR pass over a four-up sheet reads every copy at a quarter of the size
+    it could, and the figures come back wrong before there is anything to
+    filter. The caller crops the image to this box and reads it again.
+    """
+    anchors = _copy_anchors(page)
+    if len(anchors) <= 1:
+        return None, max(1, len(anchors))
+
+    columns = _split([a.x for a in anchors], _COPY_GAP)
+    rows = _split([-a.y for a in anchors], _COPY_GAP)
+    if len(columns) * len(rows) <= 1:
+        return None, len(anchors)
+
+    right = ((columns[0] + columns[1]) / 2) if len(columns) > 1 else page.width
+    bottom = (-(rows[0] + rows[1]) / 2) if len(rows) > 1 else 0.0
+    return (0.0, bottom, right, page.height), len(anchors)
+
+
+def one_copy(page: Page) -> tuple[Page, int]:
+    """Narrow a multi-copy page down to a single form.
+
+    The IRS sends a W-2 as four copies on one sheet -- Copy B, Copy C and two
+    Copy 2s -- and employers print exactly that. Read across the whole sheet
+    the figures survive, because each copy agrees with the others, but the
+    text blocks do not: the employee's name comes out as "Ann M. Smith Ann M.
+    Smith" and the employer's name is not found at all, because the window
+    that should hold one name block holds two.
+
+    So the copies are located by their box 1 labels, the page is cut on the
+    midpoints between them, and the first complete copy is what gets read.
+    Returns the page to read and how many copies were on the sheet.
+    """
+    anchors = _copy_anchors(page)
+    if len(anchors) <= 1:
+        return page, max(1, len(anchors))
+
+    columns = _split([a.x for a in anchors], _COPY_GAP)
+    rows = _split([-a.y for a in anchors], _COPY_GAP)
+    if len(columns) * len(rows) <= 1:
+        return page, len(anchors)
+
+    # The first copy: leftmost column, topmost row. Its right edge is halfway
+    # to the next column's box 1, its bottom halfway to the next row's.
+    right = ((columns[0] + columns[1]) / 2) if len(columns) > 1 else float("inf")
+    bottom = (-(rows[0] + rows[1]) / 2) if len(rows) > 1 else float("-inf")
+    kept = [w for w in page.words if w.x < right and w.y > bottom]
+    return Page(number=page.number, words=kept, height=page.height), len(anchors)
+
+
 def _line_text(page: Page) -> str:
     from taxvault.forms.layout import lines_of
 
     return "\n".join(
         " ".join(w.text for w in row) for row in lines_of(page)
     )
+
+
+#: What starts a box on a W-2: its number, or the letter of a lettered box.
+#: Every box on the form is introduced this way, which makes it the one
+#: reliable marker of where one box ends and the next begins.
+_BOX_START = re.compile(r"^(?:[1-9]|1[0-9]|20|[a-f])$", re.I)
+
+
+def _cell_width(page: Page, label: Word, default: float) -> float:
+    """How wide the box this label sits in actually is.
+
+    A fixed window is wrong in both directions. Too wide and a box reaches
+    into its neighbour -- box 3 came back holding box 4's figure, which is
+    wrong and wrong quietly. Too narrow and it stops inside its own label.
+
+    So the edge is found rather than assumed: every box on a W-2 is
+    introduced by its own number or letter, so the next such marker to the
+    right, on the same line, is where this box ends. When OCR has merged a
+    label row into the row above or below, that marker is still the only
+    thing that reliably separates one column from the next.
+    """
+    right = None
+    for row in lines_of(page):
+        if label not in row:
+            continue
+        for word in row:
+            if word is label or word.x <= label.x + 10:
+                continue
+            head = word.text.strip().split()
+            if head and _BOX_START.match(head[0]) and (right is None or word.x < right):
+                right = word.x
+        break
+    if right is None:
+        return default
+    return max(55.0, right - label.x - 4)
 
 
 def _read_names(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
@@ -88,7 +217,8 @@ def _read_names(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
         r"employer name and address",
     ])
     if employer_label is not None:
-        block = find_text_block(page, employer_label, width=300, depth=90)
+        block = find_text_block(page, employer_label,
+                                width=_cell_width(page, employer_label, 300), depth=90)
         for line in block:
             if looks_like_name(line):
                 form.employer_name = tidy_name(line)
@@ -106,7 +236,8 @@ def _read_names(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
         r"employee name and address",
     ])
     if employee_label is not None:
-        block = find_text_block(page, employee_label, width=300, depth=95)
+        block = find_text_block(page, employee_label,
+                                width=_cell_width(page, employee_label, 300), depth=95)
         for line in block:
             if looks_like_name(line):
                 # "MARIA J SANTOS-RIVERA": everything up to the last token is
@@ -123,6 +254,73 @@ def _read_names(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
                       "message": "The employee's name could not be read from the form."})
 
 
+#: Words that make a neighbouring two-letter token part of a printed label
+#: rather than a state. "Employer's state ID no." contains "ID"; so does
+#: "Employer ID no. (EIN)". Reading either as Idaho puts a Kentucky return
+#: on the wrong state's rate table and says nothing.
+_LABEL_NEIGHBOURS = {"no", "no.", "number", "num", "#", "nos", "nos."}
+
+
+#: The state code sits in the same box as the employer's state ID, and OCR
+#: does not always put a space between them: "KY A123456789" has come back as
+#: "KY_A123456789". Splitting on whitespace alone then finds no state at all,
+#: and the return is computed federal-only with the state silently missing.
+_LEADING_STATE = re.compile(r"^([A-Za-z]{2})(?![A-Za-z])")
+
+
+def _leading_state(token: str) -> str:
+    match = _LEADING_STATE.match(token.strip())
+    if not match:
+        return ""
+    code = match.group(1).upper()
+    return code if code in _US_STATES else ""
+
+
+def _state_code(page: Page, state_label: Word | None) -> str:
+    """The two-letter state code from boxes 15-17, or nothing.
+
+    Nothing is a perfectly good answer. The previous fallback swept the whole
+    page for any two-letter run that happened to be a state abbreviation and
+    took the first -- which on a real IRS sheet is the "ID" in "Employer ID
+    no.", so every form it could not read properly came back as Idaho.
+    """
+    if state_label is not None:
+        # The code sits in the box under the label, often in the same run as
+        # the employer's state ID: "KY A123456789".
+        candidates = sorted(
+            page.words,
+            key=lambda w: (state_label.y - w.y, abs(w.x - state_label.x)),
+        )
+        for word in candidates:
+            dy = state_label.y - word.y
+            dx = word.x - state_label.x
+            if not (0 < dy <= 46 and -6 <= dx <= 60):
+                continue
+            code = _leading_state(word.text)
+            if code:
+                return code
+
+    # Failing that, look only along the state row itself, and only at tokens
+    # that are not part of a printed label.
+    for row in lines_of(page):
+        tokens = [t for word in row for t in word.text.split()]
+        lowered = [t.lower().strip(":") for t in tokens]
+        if not any(t in ("state", "15") for t in lowered):
+            continue
+        for index, token in enumerate(tokens):
+            upper = _leading_state(token)
+            if not upper:
+                continue
+            after = lowered[index + 1] if index + 1 < len(lowered) else ""
+            before = lowered[index - 1] if index else ""
+            if after in _LABEL_NEIGHBOURS or before in _LABEL_NEIGHBOURS:
+                continue
+            if before in ("employer", "employer's", "employers"):
+                continue
+            return upper
+    return ""
+
+
 def _read_state_rows(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
     """Boxes 15-20, which is where a flat read goes most wrong.
 
@@ -136,24 +334,17 @@ def _read_state_rows(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
     local_tax_label = find_label(page, [r"\b19\b.{0,4}local income tax", r"local income tax"])
     state_label = find_label(page, [r"\b15\b.{0,4}state", r"employer'?s? state id"])
 
-    code = ""
-    if state_label is not None:
-        # The two-letter code sits under the "15 State" label.
-        for word in sorted(page.words, key=lambda w: (state_label.y - w.y, abs(w.x - state_label.x))):
-            dy = state_label.y - word.y
-            dx = word.x - state_label.x
-            if 0 < dy <= 46 and -6 <= dx <= 60 and word.text.strip().upper() in _US_STATES:
-                code = word.text.strip().upper()
-                break
-    if not code:
-        text = _line_text(page)
-        found = [c for c in re.findall(r"\b([A-Z]{2})\b", text) if c in _US_STATES]
-        code = found[0] if found else ""
+    code = _state_code(page, state_label)
 
-    wages = find_box_value(page, wages_label, width=110) if wages_label else None
-    tax = find_box_value(page, tax_label, width=95) if tax_label else None
-    local_wages = find_box_value(page, local_wages_label, width=95) if local_wages_label else None
-    local_tax = find_box_value(page, local_tax_label, width=70) if local_tax_label else None
+    def value_for(label: Word | None, default: float) -> Any:
+        if label is None:
+            return None
+        return find_box_value(page, label, width=_cell_width(page, label, default))
+
+    wages = value_for(wages_label, 110.0)
+    tax = value_for(tax_label, 95.0)
+    local_wages = value_for(local_wages_label, 95.0)
+    local_tax = value_for(local_tax_label, 70.0)
 
     if code and (wages is not None or tax is not None):
         form.states.append(W2StateLine(
@@ -168,6 +359,11 @@ def _read_state_rows(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
                       "message": (f"A {code} state line is on this form but its wages and "
                                   "withholding could not be read. Enter boxes 16 and 17 by "
                                   "hand or the state estimate will be wrong.")})
+    elif wages is not None or tax is not None:
+        notes.append({"severity": "warning", "box": "15", "message": (
+            "Boxes 16 and 17 hold figures but the state in box 15 could not be "
+            "read. Say which state it is: the wrong one puts the return on the "
+            "wrong rate table.")})
 
 
 def _read_box12(page: Page, form: W2, notes: list[dict[str, str]]) -> None:
@@ -278,6 +474,105 @@ def _read_acroform(blob: bytes, form: W2, notes: list[dict[str, str]]) -> None:
                       "message": "Some details were read from the PDF's form fields."})
 
 
+#: Regions of a page to try when a whole-page read comes back incomplete,
+#: as fractions of (width, height). The IRS issues a W-2 as four copies to a
+#: sheet and employers print exactly that, so a quadrant is the likely home
+#: of one whole form. Each extends past the halfway mark so a copy that sits
+#: slightly off-centre is still contained rather than sliced in half.
+_CANDIDATE_REGIONS = (
+    (0.0, 0.0, 1.00, 1.00),     # the page as it came
+    (0.0, 0.0, 0.56, 0.56),     # top-left quadrant: four copies to a sheet
+    (0.0, 0.0, 0.56, 1.00),     # left half: two copies side by side
+    (0.0, 0.0, 1.00, 0.56),     # top half: two copies stacked
+)
+
+
+def _score(form: W2, confidence: float) -> tuple:
+    """How good a read is, for choosing between crops.
+
+    Critical boxes first, because they are what an estimate needs. Then the
+    things that tell a complete read from a lucky one: a state line, an
+    employer, an employee, and a form whose own arithmetic holds.
+    """
+    from taxvault.forms.ocr import cross_check
+
+    return (
+        round(confidence, 3),
+        1 if form.states else 0,
+        1 if (form.employer_name or "").strip() else 0,
+        1 if (form.employee_first_name or form.employee_last_name) else 0,
+        -len(cross_check(form)),
+    )
+
+
+def read_w2_image(blob: bytes, *,
+                  content_type: str = "") -> tuple[W2, float, list[dict[str, str]]]:
+    """Read a W-2 off pixels: render it, and read the region that reads best.
+
+    The single entry point for a scan or a photograph, so the API, the CLI
+    and the agent cannot drift on how a pixel form is handled.
+
+    The whole page is tried first and usually wins. When it does not, the
+    reason is almost always that the sheet carries several copies of the
+    form: Tesseract reads straight across two copies printed side by side,
+    interleaving them into nonsense, and no amount of filtering afterwards
+    recovers figures the reader never saw separately. Cropping first does
+    recover them -- on a real IRS four-up sheet the whole page gave box 1 as
+    empty and box 3 as box 4's figure, and the top-left quadrant gave every
+    value correctly.
+
+    So each candidate region is read and scored, and the best one wins. It
+    costs a few seconds on the uncommon path and nothing on the common one,
+    which is the right way round.
+    """
+    from taxvault.forms import ocr as _ocr
+
+    images, dpi = _ocr.rendered(blob, content_type=content_type)
+    if not images:
+        return W2(), 0.0, []
+
+    best: tuple | None = None
+    for index, region in enumerate(_CANDIDATE_REGIONS):
+        image = _crop(images[0], region) if index else images[0]
+        if image is None:
+            continue
+        try:
+            page = _ocr.positioned(image, page_number=1, dpi=dpi)
+        except Exception:
+            continue
+        form, confidence, notes = read_w2_pages([page])
+        score = _score(form, confidence)
+        if best is None or score > best[0]:
+            best = (score, form, confidence, notes, index)
+        if index == 0 and confidence >= 1.0 and form.states:
+            # The page read completely as it came. Nothing to look for.
+            break
+
+    if best is None:
+        return W2(), 0.0, []
+
+    _, form, confidence, notes, index = best
+    if index:
+        notes = list(notes) + [{"severity": "info", "box": "", "message": (
+            "This page holds more than one copy of the form, which is how the "
+            "IRS sheet is printed. One copy was read on its own, because "
+            "reading the whole sheet runs the copies together."
+        )}]
+    return form, confidence, notes
+
+
+def _crop(image: Any, region: tuple[float, float, float, float]) -> Any:
+    left, top, right, bottom = region
+    box = (int(image.width * left), int(image.height * top),
+           int(image.width * right), int(image.height * bottom))
+    if box[2] - box[0] < 120 or box[3] - box[1] < 120:
+        return None
+    try:
+        return image.crop(box)
+    except Exception:
+        return None
+
+
 def read_w2_layout(blob: bytes) -> tuple[W2, float, list[dict[str, str]]]:
     """Read a W-2 from a PDF's layout. Returns (form, confidence, notes)."""
     try:
@@ -312,13 +607,25 @@ def read_w2_pages(pages: list[Page], *,
         (p for p in pages if find_label(p, [r"wages,? tips,? other comp"]) is not None),
         pages[0],
     )
+    # An employer prints the IRS sheet as issued: four copies of the same form
+    # on one page. Everything below reads one copy.
+    page, copies = one_copy(page)
+    if copies > 1:
+        notes.append({"severity": "info", "box": "", "message": (
+            f"This page carries {copies} copies of the same W-2, which is how "
+            "the IRS sheet is printed. The first one was read."
+        )})
 
     found = 0
     for attribute, patterns in MONEY_BOXES:
         label = find_label(page, patterns)
         if label is None:
             continue
-        value = find_box_value(page, label)
+        # A box ends where the next box's label begins. Fixed at 118 points
+        # the window reached into the neighbouring column, so on a form with
+        # narrower boxes than that, box 3 came back holding box 4's figure
+        # and box 5 holding box 6's -- wrong, and wrong quietly.
+        value = find_box_value(page, label, width=_cell_width(page, label, 118.0))
         if value is None:
             continue
         setattr(form, attribute, value)
@@ -329,6 +636,12 @@ def read_w2_pages(pages: list[Page], *,
     year = YEAR.search(whole)
     if year:
         form.tax_year = int(year.group(1))
+    else:
+        notes.append({"severity": "info", "box": "", "message": (
+            "No tax year is printed on this form that could be read -- a "
+            "blank or sample W-2 shows '20XX' -- so the year you chose is "
+            "used. Check it is the right one: the rates change every year."
+        )})
     ein = EIN_SHAPE.search(whole)
     if ein:
         form.employer_ein = ein.group(1)

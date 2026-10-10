@@ -221,9 +221,8 @@ def _read_a_w2(blob: bytes, filename: str) -> tuple[Any, float, str, Any]:
     that computes from them can never disagree about what the file says.
     """
     from taxvault.forms.extract import extract_text
-    from taxvault.forms.ocr import pages as ocr_pages
     from taxvault.forms.w2 import W2, parse_w2_text
-    from taxvault.forms.w2_layout import read_w2_layout, read_w2_pages
+    from taxvault.forms.w2_layout import read_w2_image, read_w2_layout
 
     kind = "application/pdf" if blob[:5] == b"%PDF-" else _image_type(filename)
     extraction = extract_text(blob, kind, filename)
@@ -233,7 +232,7 @@ def _read_a_w2(blob: bytes, filename: str) -> tuple[Any, float, str, Any]:
     if extraction.method == "ocr":
         # Positions, not flat text: a W-2 is a grid and OCR hands back the
         # label row and the value row as separate lines.
-        form, confidence, _ = read_w2_pages(ocr_pages(blob, content_type=kind))
+        form, confidence, _ = read_w2_image(blob, content_type=kind)
         return form, round(confidence * extraction.confidence, 3), "ocr", extraction
 
     layout, layout_confidence, _ = read_w2_layout(blob)
@@ -311,12 +310,14 @@ def cmd_read_w2(args: argparse.Namespace) -> int:
         print(f"\n  note: {form.tax_year} has no rate table installed, so the "
               f"cross-checks below use {nearest} figures.")
     findings = form.validate(year=form.tax_year or None)
+    if strategy == "ocr":
+        from taxvault.forms.ocr import cross_check
+
+        findings += cross_check(form, year=form.tax_year or None)
     if findings:
         print("\nCross-checks")
         for finding in findings:
             print(f"  {finding['severity']:<8} box {finding['box']:<3} {finding['message']}")
-    for note in layout_notes:
-        print(f"  {note['severity']:<8} {note['message']}")
 
     if args.dump:
         from taxvault.forms.layout import lines_of, words_from_pdf

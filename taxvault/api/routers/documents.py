@@ -33,7 +33,6 @@ from taxvault.db.models import TaxDocument, Taxpayer
 from taxvault.enums import DocumentKind, DocumentStatus
 from taxvault.forms.extract import extract_text, pair_orphan_amounts
 from taxvault.forms.ocr import cross_check as ocr_cross_check
-from taxvault.forms.ocr import pages as ocr_pages
 from taxvault.forms.identity_match import compare_names, compare_ssn
 from taxvault.forms.f1095 import parse_1095a_text
 from taxvault.forms.f1098 import parse_1098_text
@@ -48,7 +47,7 @@ from taxvault.forms.f1099 import (
 )
 from taxvault.forms.w2 import W2, parse_w2_text
 from taxvault.money import ZERO, money
-from taxvault.forms.w2_layout import read_w2_layout, read_w2_pages
+from taxvault.forms.w2_layout import read_w2_image, read_w2_layout
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -388,8 +387,8 @@ async def add_w2_file(
             # pypdf gives for a text PDF -- so a scan goes through the same
             # grid reader. Read flat instead, the label row and the value row
             # are separate lines and box 1 picks up the digit from box 2.
-            form, confidence, layout_notes = read_w2_pages(
-                ocr_pages(blob, content_type=content_type)
+            form, confidence, layout_notes = read_w2_image(
+                blob, content_type=content_type
             )
             strategy = "ocr_layout"
             warnings += layout_notes

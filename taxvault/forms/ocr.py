@@ -36,6 +36,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -244,27 +245,38 @@ def _positioned(image: Any, *, page_number: int, dpi: int) -> Any:
     height_points = (image.height / dpi) * POINTS_PER_INCH
 
     words: list[Any] = []
-    count = len(data.get("text", []))
-    for index in range(count):
-        text = str(data["text"][index]).strip()
-        if not text:
-            continue
-        try:
-            if float(data["conf"][index]) < 0:
-                continue
-        except (TypeError, ValueError, KeyError):
-            continue
-        left = data["left"][index] / scale
-        top = data["top"][index] / scale
-        word_height = data["height"][index] / scale
+    raw = _tokens(data)
+    for token in _rejoin_amounts(raw):
+        left = token["left"] / scale
+        top = token["top"] / scale
+        word_height = token["height"] / scale
         x_points = (left / dpi) * POINTS_PER_INCH
         # Anchor on the word's BASELINE, near the bottom of its box, so that a
         # label and the figure under it differ by the real gap rather than by
         # the gap plus a line height.
         y_points = height_points - (((top + word_height) / dpi) * POINTS_PER_INCH)
-        words.append(Word(text=text, x=x_points, y=y_points, page=page_number))
+        words.append(Word(text=token["text"], x=x_points, y=y_points,
+                          page=page_number))
 
-    return Page(number=page_number, words=_snap_rows(words), height=height_points)
+    return Page(number=page_number, words=_snap_rows(words, _row_tolerance(raw, scale, dpi)),
+                height=height_points)
+
+
+def _row_tolerance(tokens: list[dict], scale: float, dpi: float) -> float:
+    """How far apart two baselines can be and still be the same printed line.
+
+    Measured from the text rather than fixed, because the right answer
+    depends entirely on how big the print is. A fixed 7 points suited a
+    full-page form and merged the label row into the value row on a dense
+    one -- and once those merge, sorting by x interleaves two printed rows
+    and the figures land in the wrong boxes.
+    """
+    heights = sorted(t["height"] for t in tokens if t["height"] > 0)
+    if not heights:
+        return 7.0
+    median_px = heights[len(heights) // 2] / max(scale, 0.01)
+    median_points = (median_px / dpi) * POINTS_PER_INCH
+    return max(3.0, min(7.0, median_points * 0.9))
 
 #: How far apart two baselines can be and still be the same printed line.
 #: A PDF reports exact baselines, so the reader downstream uses 3 points. OCR
@@ -274,7 +286,7 @@ def _positioned(image: Any, *, page_number: int, dpi: int) -> Any:
 ROW_TOLERANCE = 7.0
 
 
-def _snap_rows(words: list[Any]) -> list[Any]:
+def _snap_rows(words: list[Any], tolerance: float = 7.0) -> list[Any]:
     """Put words that share a printed line on exactly the same baseline.
 
     The grid reader groups words into lines before matching a label, and a
@@ -288,7 +300,7 @@ def _snap_rows(words: list[Any]) -> list[Any]:
     if not words:
         return words
     out: list[Any] = []
-    for cluster in _clusters(sorted(words, key=lambda w: -w.y)):
+    for cluster in _clusters(sorted(words, key=lambda w: -w.y), tolerance):
         # The median is steadier than the mean when one word in the row sits
         # low because it has a descender.
         ys = sorted(word.y for word in cluster)
@@ -297,7 +309,7 @@ def _snap_rows(words: list[Any]) -> list[Any]:
     return out
 
 
-def _clusters(ordered: list[Any]) -> list[list[Any]]:
+def _clusters(ordered: list[Any], tolerance: float = 7.0) -> list[list[Any]]:
     """Group words into printed lines, allowing a baseline to drift.
 
     A scan's baseline is not flat: across the width of a page the same
@@ -316,19 +328,24 @@ def _clusters(ordered: list[Any]) -> list[list[Any]]:
         if rows:
             edge = rows[-1][-1].y
             start = rows[-1][0].y
-            if (abs(edge - word.y) <= ROW_TOLERANCE
-                    and abs(start - word.y) <= ROW_TOLERANCE * 1.8):
+            if (abs(edge - word.y) <= tolerance
+                    and abs(start - word.y) <= tolerance * 1.8):
                 rows[-1].append(word)
                 continue
         rows.append([word])
     return rows
 
 
-def pages(blob: bytes, *, content_type: str = "", dpi: int = DPI,
-          max_pages: int = MAX_PAGES) -> list[Any]:
-    """Positioned words for every page of an upload. Empty when it cannot read."""
+def rendered(blob: bytes, *, content_type: str = "", dpi: int = DPI,
+             max_pages: int = MAX_PAGES) -> tuple[list[Any], float]:
+    """Every page of an upload as an image, with the resolution they are at.
+
+    Handed out so a caller can crop before reading. On a form printed several
+    times to a sheet that is the difference between working and not: read
+    whole, every character is a quarter of the size it could be.
+    """
     if not blob or not available()["images"]:
-        return []
+        return [], float(dpi)
     _register_image_formats()
     kind = (content_type or "").split(";")[0].strip().lower()
     is_pdf = kind == "application/pdf" or blob[:5] == b"%PDF-"
@@ -336,19 +353,29 @@ def pages(blob: bytes, *, content_type: str = "", dpi: int = DPI,
         from PIL import Image
 
         if is_pdf:
-            images = _pdf_pages(blob, dpi=dpi, limit=max_pages)
-        else:
-            with Image.open(io.BytesIO(blob)) as handle:
-                images = [handle.copy()]
-            dpi = _guess_dpi(images[0])
+            return _pdf_pages(blob, dpi=dpi, limit=max_pages), float(dpi)
+        with Image.open(io.BytesIO(blob)) as handle:
+            image = handle.copy()
+        return [image], _guess_dpi(image)
     except Exception as exc:
         logger.info("ocr could not rasterise the upload: %s", exc)
-        return []
+        return [], float(dpi)
 
+
+def positioned(image: Any, *, page_number: int = 1, dpi: float = DPI) -> Any:
+    """One image as positioned words, in PDF point space."""
+    return _positioned(image, page_number=page_number, dpi=dpi)
+
+
+def pages(blob: bytes, *, content_type: str = "", dpi: int = DPI,
+          max_pages: int = MAX_PAGES) -> list[Any]:
+    """Positioned words for every page of an upload. Empty when it cannot read."""
+    images, actual = rendered(blob, content_type=content_type, dpi=dpi,
+                              max_pages=max_pages)
     out = []
     for number, image in enumerate(images[:max_pages], 1):
         try:
-            out.append(_positioned(image, page_number=number, dpi=dpi))
+            out.append(_positioned(image, page_number=number, dpi=actual))
         except Exception as exc:
             logger.info("ocr could not position page %s: %s", number, exc)
     return out
@@ -571,3 +598,86 @@ def cross_check(form: Any, *, year: int | None = None) -> list[dict[str, str]]:
                  "That happens, but it is unusual enough to check.")
 
     return findings
+
+
+# ===========================================================================
+# Putting numbers back together
+# ===========================================================================
+#: A whole-number run, and a decimal tail on its own. Tesseract splits an
+#: amount at the decimal point when the characters are small and the point is
+#: faint, so "37847.06" arrives as "37847" and ".06" six pixels apart. Left
+#: alone neither is a number, and box 1 of the form reads as empty.
+_WHOLE = re.compile(r"^\(?\$?\d[\d,]*$")
+_TAIL = re.compile(r"^[.,]\d{2}\)?$")
+_TRAILING_POINT = re.compile(r"^\(?\$?\d[\d,]*[.,]$")
+_TWO_DIGITS = re.compile(r"^\d{2}\)?$")
+
+
+def _tokens(data: dict) -> list[dict]:
+    """Tesseract's words as plain dictionaries, in reading order."""
+    out: list[dict] = []
+    for index in range(len(data.get("text", []))):
+        text = str(data["text"][index]).strip()
+        if not text:
+            continue
+        try:
+            if float(data["conf"][index]) < 0:
+                continue
+        except (TypeError, ValueError, KeyError):
+            continue
+        out.append({
+            "text": text,
+            "left": data["left"][index],
+            "top": data["top"][index],
+            "width": data["width"][index],
+            "height": data["height"][index],
+        })
+    return out
+
+
+def _rejoin_amounts(tokens: list[dict]) -> list[dict]:
+    """Repair amounts that OCR split at the decimal point.
+
+    The two halves sit side by side on the same line with a gap narrower
+    than a character, so the test is geometric rather than a guess about
+    what the digits mean: same row, touching, and the shapes of a number and
+    a decimal tail. Anything else is left exactly as it came.
+
+    This is not cosmetic. An amount split in two is not an amount, and the
+    box it belongs to reads as empty -- which on a W-2 means an estimate
+    computed without the client's wages in it.
+    """
+    out: list[dict] = []
+    index = 0
+    while index < len(tokens):
+        current = tokens[index]
+        following = tokens[index + 1] if index + 1 < len(tokens) else None
+        if following is not None and _joinable(current, following):
+            out.append({
+                "text": current["text"] + following["text"],
+                "left": current["left"],
+                "top": min(current["top"], following["top"]),
+                "width": (following["left"] + following["width"]) - current["left"],
+                "height": max(current["height"], following["height"]),
+            })
+            index += 2
+            continue
+        out.append(current)
+        index += 1
+    return out
+
+
+def _joinable(first: dict, second: dict) -> bool:
+    pair = (
+        (_WHOLE.match(first["text"]) and _TAIL.match(second["text"]))
+        or (_TRAILING_POINT.match(first["text"]) and _TWO_DIGITS.match(second["text"]))
+    )
+    if not pair:
+        return False
+    line_height = max(first["height"], second["height"], 1)
+    if abs(first["top"] - second["top"]) > line_height * 0.6:
+        return False
+    gap = second["left"] - (first["left"] + first["width"])
+    # Touching or nearly: a real space between two separate figures is wider
+    # than this, and a negative gap just means the boxes overlap slightly.
+    return -3 <= gap <= line_height * 0.8
