@@ -146,6 +146,25 @@ def _apply_w2_file(args: argparse.Namespace) -> list[str]:
     return out
 
 
+def _print_audit(result: Any, read_lines: list[str]) -> None:
+    """Re-derive the return from the form and say whether it ties.
+
+    Printed before the figures, not after. A number you are about to rely on
+    should arrive already checked.
+    """
+    from taxvault.agent.audit import audit_return
+
+    forms = [line for line in read_lines if line.startswith("Read ")]
+    del forms  # the read is already printed; this is the check on top of it
+    report = audit_return(result)
+    print(f"\nChecked: {report.summary()}")
+    for check in report.failures:
+        print(f"  FAILS  {check.name}")
+        print(f"         expected {check.expected}, got {check.actual}")
+        if check.detail:
+            print(f"         {check.detail}")
+
+
 def cmd_estimate(args: argparse.Namespace) -> int:
     read_lines: list[str] = []
     if getattr(args, "w2", ""):
@@ -167,6 +186,9 @@ def cmd_estimate(args: argparse.Namespace) -> int:
     if args.json:
         _print_json(result.to_dict())
         return 0
+
+    if getattr(args, "w2", ""):
+        _print_audit(result, read_lines)
 
     federal_result = result.federal
     print(f"\n{result.headline()}")

@@ -52,7 +52,7 @@ def test_every_scenario_records_every_step(key):
     _, run = _run(key)
     names = [s.name for s in run.steps]
     assert names == ["classify", "extract", "identity", "reconcile", "assemble",
-                     "compute", "review", "price", "gate"]
+                     "compute", "audit", "review", "price", "gate"]
     assert all(s.duration_ms >= 0 for s in run.steps)
 
 

@@ -555,6 +555,50 @@ def _agent(r: _Runner) -> None:
         assert run.blockers, "a mismatched name was allowed through"
         return "flagged as blocking before anything else happens"
 
+    @r.check("The agent checks its own arithmetic",
+             "This is the step that makes an automated preparer reviewable. "
+             "If it stops catching a wrong figure, nothing downstream will.")
+    def _() -> str:
+        from decimal import Decimal as D
+
+        from taxvault.agent.audit import audit_return
+        from taxvault.engines.estimate import run_estimate
+        from taxvault.engines.federal import TaxProfile
+        from taxvault.forms.w2 import W2
+
+        def build():
+            profile = TaxProfile(tax_year=2025, filing_status="single",
+                                 resident_state="KY", wages=D("37847.06"),
+                                 federal_withheld=D("4238.29"))
+            estimate = run_estimate(profile, wage_lines=[
+                {"state": "KY", "wages": D("37847.06"), "withheld": D("1849.21")}],
+                method="regular")
+            form = W2.from_dict({
+                "tax_year": 2025, "employer_name": "Verify Sample",
+                "box1_wages": 37847.06, "box2_federal_withheld": 4238.29,
+                "box3_social_security_wages": 37847.06,
+                "box5_medicare_wages": 37847.06,
+                "states": [{"state": "KY", "state_wages": 37847.06,
+                            "state_withheld": 1849.21}]})
+            return estimate, form
+
+        estimate, form = build()
+        clean = audit_return(estimate, w2s=[form])
+        assert clean.clean, [c.name for c in clean.failures]
+
+        # Inflated withholding WITH the balance adjusted to match: the
+        # return adds up perfectly and only the documents give it away.
+        estimate, form = build()
+        estimate.federal.total_payments = D("9000")
+        estimate.federal.balance = estimate.federal.total_tax - D("9000")
+        caught = audit_return(estimate, w2s=[form])
+        assert any("withholding" in c.name.lower() for c in caught.failures), (
+            "withholding that is on no document passed the audit"
+        )
+        return (f"{clean.ran} checks tie on a correct return; withholding "
+                "claimed on no document is caught")
+
+
 
 # ------------------------------------------------------ 7. what they keep
 def _documents(r: _Runner) -> None:

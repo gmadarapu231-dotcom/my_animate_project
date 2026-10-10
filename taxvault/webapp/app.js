@@ -232,8 +232,9 @@ function viewAgent() {
   return `
   <div class="card">
     <h2>What the agent does</h2>
-    <p class="sub">Nine steps. Eight are automatic. The ninth is the one that
-       cannot be.</p>
+    <p class="sub">Ten steps. Nine are automatic — including one where the
+       agent re-derives the return from the forms and the rate table, and
+       checks its own answer. The tenth is the one that cannot be.</p>
     <div class="tabstrip">
       ${data.scenarios.map((s) => `
         <button data-agent-scenario="${esc(s.key)}" aria-selected="${s.key === key}">

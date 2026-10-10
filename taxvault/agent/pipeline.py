@@ -175,6 +175,8 @@ class AgentRun:
     estimate: dict[str, Any] | None = None
     client_fee: dict[str, Any] | None = None
     platform_fee: dict[str, Any] | None = None
+    #: The agent's own re-derivation of the return from its sources.
+    audit: dict[str, Any] | None = None
     confidence: float = 0.0
     elapsed_ms: int = 0
     notes: list[str] = field(default_factory=list)
@@ -210,6 +212,7 @@ class AgentRun:
             "blockers": [item.to_dict() for item in self.blockers],
             "gate": self.gate.to_dict(),
             "estimate": self.estimate,
+            "audit": self.audit,
             "client_fee": self.client_fee,
             "platform_fee": self.platform_fee,
             "notes": self.notes,
@@ -271,6 +274,7 @@ def run_agent(
     _reconcile(run, parsed, year)
     profile = _assemble(run, parsed, year, filing_status, resident_state, situation)
     _compute(run, profile, parsed, as_of)
+    _audit(run, parsed, profile)
     _ask_what_cannot_be_read(run, parsed, profile, set(answered or ()))
     _price(run, parsed, profile, returns_this_period)
     _gate(run, parsed, client_reviewed, client_signed_8879, preparer_ptin)
@@ -673,6 +677,69 @@ def _compute(run: AgentRun, profile: Any, parsed: dict[str, Any],
         if federal.warnings:
             step.status = WARN
             step.findings.extend(federal.warnings[:4])
+
+
+# ------------------------------------------------- 7. check its own working
+def _audit(run: AgentRun, parsed: dict[str, Any], profile: Any) -> None:
+    """Re-derive the return from its sources and see whether it ties.
+
+    The step a practice would call the review. Everything before this point
+    trusts the engine; this does not. The tax is recomputed off the published
+    bracket table, the wages and withholding are summed off the documents,
+    and the two are compared -- so the agent arrives at a figure the way a
+    second preparer would and says whether it agrees with itself.
+
+    A failure here is a blocker, not a note. If the return does not tie to
+    the forms it came from, nothing further about it is worth discussing.
+    """
+    from taxvault.agent.audit import audit_return
+
+    with run.step("audit", "Check the return against the forms it came from") as step:
+        result = getattr(run, "_result", None)
+        if result is None:
+            step.status = WARN
+            step.detail = "there is no computed return to check"
+            return
+
+        # Everything paid in that is not W-2 withholding, so the withholding
+        # check can be two-sided. Claiming withholding nobody withheld is the
+        # commonest shape of refund fraud and the preparer carries the penalty.
+        other = ZERO
+        sources = []
+        for form in parsed.get("1099_r", []):
+            withheld = money(getattr(form, "federal_withheld", 0) or 0)
+            if withheld > ZERO:
+                other += withheld
+                sources.append("1099-R")
+        estimated = money(getattr(profile, "estimated_payments", 0) or 0)
+        if estimated > ZERO:
+            other += estimated
+            sources.append("estimated payments")
+
+        report = audit_return(
+            result, w2s=parsed.get("w2", []), quote=getattr(run, "_quote", None),
+            other_payments=other,
+            other_payments_detail=" and ".join(dict.fromkeys(sources)),
+        )
+        run.audit = report.to_dict()
+        step.detail = report.summary()
+        step.findings = [
+            f"{c.name}: {c.detail}" for c in report.failures
+        ][:6] or [c.name for c in report.checks[:4]]
+        if report.failures:
+            step.status = BLOCKED
+            for check in report.failures:
+                run.ask(ReviewItem(
+                    question=f"The return does not tie to the forms: "
+                             f"{check.name[0].lower()}{check.name[1:]}. "
+                             "What is right?",
+                    why=(f"{check.detail} Re-derived from the forms and the "
+                         f"published rate table, the figure is "
+                         f"{check.expected}; the return says {check.actual}. "
+                         "Nothing else about this return is worth discussing "
+                         "until that is settled."),
+                    severity="blocker", form="return",
+                ))
 
 
 def _ask_about_sales_tax(run: AgentRun, profile: Any, as_filed: dict[str, Any],
