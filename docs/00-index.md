@@ -43,6 +43,8 @@ planning. An estimation system, not an IRS e-file provider.
 |---|---|---|
 | 20 | [Tax Architecture](20-tax-architecture.md) | Layers, Form 1040 order of operations, regular vs planning, the 51 jurisdictions, prior years, payment |
 | 21 | [Tax Security](21-tax-security.md) | SSN envelope encryption and blind index, the two gates, no-password sign-in, transport, audit trail, known limits |
+| 22 | [Tax Production](22-tax-production.md) | What has to be true before the first request, what the business needs that no code supplies, fees, and what the engine still does not do |
+| 23 | [Getting a URL](23-getting-a-url.md) | From the source tree to an address a client can open: a laptop, a phone on your wifi, then a real domain over HTTPS |
 
 ## Two ways to run
 

@@ -1,0 +1,56 @@
+# The piece that turns `docker compose up` into a URL other people can open.
+#
+# Layered on top of docker-compose.yml, it puts Caddy in front of the app.
+# Caddy gets a TLS certificate from Let's Encrypt on first start and renews it
+# by itself, so there is no certbot cron to forget. The app stops being
+# published on a port of its own: everything arrives over HTTPS or not at all.
+#
+#   # in .env:  TAXVAULT_DOMAIN=tax.yourfirm.com
+#   #           TAXVAULT_ADMIN_EMAIL=you@yourfirm.com
+#   docker compose -f docker-compose.yml -f docker-compose.public.yml up -d --build
+#
+# Point an A record at the machine BEFORE starting: Caddy proves it owns the
+# name over port 80, and a name that does not resolve yet fails that proof.
+#
+# This file sets TAXVAULT_ENV=production, which turns on the boot gate. The
+# process refuses to start without a real master key, a real session secret
+# and no development codes -- which is the point. Run `taxvault check` if it
+# refuses and it will say which one.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      TAXVAULT_DOMAIN: ${TAXVAULT_DOMAIN:?set TAXVAULT_DOMAIN in .env, e.g. tax.yourfirm.com}
+      TAXVAULT_ADMIN_EMAIL: ${TAXVAULT_ADMIN_EMAIL:?set TAXVAULT_ADMIN_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data          # the certificates; losing this re-issues them
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  migrate:
+    # The same environment as the app. Running the schema change under one
+    # set of settings and the app under another is how a migration ends up
+    # applied with development codes still enabled.
+    environment:
+      TAXVAULT_ENV: production
+
+  app:
+    # No longer published directly. Caddy is the only way in.
+    ports: !override []
+    environment:
+      TAXVAULT_ENV: production
+      TAXVAULT_FORCE_HSTS: "1"
+      # Caddy terminates TLS, so the app sees plain HTTP from one known
+      # address and has to be told whose X-Forwarded-For to believe.
+      TAXVAULT_TRUSTED_PROXIES: "*"
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,31 @@
+# Caddy in front of TaxVault.
+#
+# Certificates are obtained and renewed automatically; there is nothing to
+# schedule. The headers below are the ones a reverse proxy has to add on the
+# app's behalf, because the app cannot know it is behind TLS.
+{$TAXVAULT_DOMAIN} {
+	tls {$TAXVAULT_ADMIN_EMAIL}
+
+	encode zstd gzip
+
+	# A tax return is not cacheable by anything in between.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# A client photographs a W-2 at full camera resolution; the default
+	# request cap is smaller than that.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy app:8000 {
+		header_up X-Forwarded-Proto https
+		# OCR on a scanned PDF takes seconds, not milliseconds.
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+}
