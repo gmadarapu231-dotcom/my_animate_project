@@ -127,7 +127,7 @@ export default function AutopilotScreen() {
               ) : null}
             </Row>
             <Text style={[type.display, { color: p.ink, marginTop: spacing.md }]}>
-              Apply to every job that fits. Hands off.
+              Your job search, running itself.
             </Text>
             <Body muted style={{ marginTop: spacing.sm, maxWidth: 620 }}>
               {described.data?.summary ??

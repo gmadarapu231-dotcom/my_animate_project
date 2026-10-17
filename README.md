@@ -113,7 +113,8 @@ The file says so if you try:
 python3 -m http.server 8000    # in the folder containing the file
 ```
 
-Screens: **Jobs** (ranked, filters, natural-language search) · **Today**
+Screens: **Autopilot** (the four stages of the last pass, the approval queue,
+and the switches for how hands-off it runs) · **Jobs** (ranked, filters, natural-language search) · **Today**
 (what to apply for + learning signals) · **Pipeline** (lifecycle) ·
 **Insights** (funnel + breakdowns) · **Agent** (the loop, with its tool trace) ·
 job detail with the tailor/cover-letter/prepare actions · Settings.
@@ -191,6 +192,9 @@ careeros search "QUERY"            natural-language search
 careeros recommend                 what should I apply for today?
 careeros analytics                 funnel + career learning signals
 careeros agent "QUESTION"          the agentic loop (needs model access)
+careeros autopilot [once|loop]     find, prep, apply, track on a timer (off + dry run by default)
+careeros autopilot queue           applications waiting for your yes
+careeros autopilot approve JOB_ID  re-check the guardrails and send that one
 careeros agent-runs                audit trail of past agent runs
 careeros email-sync [MAILBOX]      classify job mail, draft replies
 careeros gmail-auth                OAuth consent flow (never a password)
