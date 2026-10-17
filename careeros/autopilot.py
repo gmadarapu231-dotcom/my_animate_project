@@ -1,8 +1,9 @@
-"""The cycle: search, rank, tailor, apply -- on a timer.
+"""The cycle: find, prep, apply, track -- on a timer.
 
 One pass is `run_once()`: discover from every ready provider, classify and
-rank, tailor a résumé for the top candidates, then walk them in priority order
-and apply where the guardrails allow. Every job produces a verdict, so the
+rank, tailor a résumé for the top candidates, walk them in priority order and
+apply where the guardrails allow, then read the mailbox so replies move each
+application along. Every job produces a verdict, so the
 report answers "why did it not apply to that one?" for all of them, not just
 the ones it acted on.
 
@@ -16,7 +17,9 @@ process does not wedge the loop forever.
 the history is inspectable rather than a feeling.
 
 **Off and dry by default.** `AutopilotPolicy.enabled` is false and `dry_run` is
-true. The first thing a user gets is a list of what it *would* have sent.
+true. The first thing a user gets is a list of what it *would* have sent. Going
+live still queues each application for a yes or no (`require_approval`); only
+switching that off as well makes the cycle fully hands-off.
 """
 
 from __future__ import annotations
@@ -186,6 +189,8 @@ class PassReport:
     submitted: int = 0
     would_submit: int = 0
     assisted: int = 0
+    awaiting_approval: int = 0
+    tracking: dict[str, Any] | None = None
     verdicts: list[JobVerdict] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     skipped_reason: str | None = None
@@ -199,6 +204,51 @@ class PassReport:
                 key = blocker.split("(")[0].strip().rstrip(":")
                 counts[key] = counts.get(key, 0) + 1
         return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
+
+    def stages(self) -> list[dict[str, Any]]:
+        """The pass as the four steps a person thinks in: find, prep, apply, track."""
+        found = ((self.discovery or {}).get("ingest") or {}).get("inserted")
+        tracked = self.tracking or {}
+        return [
+            {
+                "key": "find",
+                "label": "Find",
+                "done": self.discovery is not None,
+                "detail": (
+                    f"{found} new posting(s), {self.classified} classified and ranked"
+                    if found is not None
+                    else f"search skipped, {self.classified} classified"
+                ),
+            },
+            {
+                "key": "prep",
+                "label": "Prep",
+                "done": True,
+                "detail": f"{self.tailored} résumé(s) tailored and fact-checked",
+            },
+            {
+                "key": "apply",
+                "label": "Apply",
+                "done": True,
+                "detail": (
+                    f"{self.submitted} sent, {self.awaiting_approval} waiting for you, "
+                    f"{self.would_submit} dry-run, {self.assisted} need a human"
+                ),
+            },
+            {
+                "key": "track",
+                "label": "Track",
+                "done": self.tracking is not None and "skipped" not in tracked,
+                "detail": (
+                    tracked["skipped"]
+                    if "skipped" in tracked
+                    else f"{tracked.get('fetched', 0)} email(s) read, "
+                    f"{tracked.get('advanced', 0)} application(s) moved"
+                    if self.tracking is not None
+                    else "not run"
+                ),
+            },
+        ]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -219,7 +269,10 @@ class PassReport:
                 "submitted": self.submitted,
                 "would_submit": self.would_submit,
                 "assisted": self.assisted,
+                "awaiting_approval": self.awaiting_approval,
             },
+            "stages": self.stages(),
+            "tracking": self.tracking,
             "blocked_by": self.blocked_counts,
             "verdicts": [v.to_dict() for v in self.verdicts],
             "errors": self.errors,
@@ -323,6 +376,260 @@ def _record(
     return application
 
 
+def _default_mailbox() -> Any | None:
+    """The mailbox to watch for replies, only when one is actually connected."""
+    from careeros.gmail.client import OAuthGmailClient, get_client
+
+    if os.getenv("CAREEROS_LOCAL_MAILBOX"):
+        return get_client()
+    oauth = OAuthGmailClient()
+    return oauth if oauth.available else None
+
+
+def _queue(
+    session: Session, user: User, job: Job, resume: ResumeDocument | None
+) -> Application:
+    """Park a ready application until the user says yes or no."""
+    application = _application_for(session, user, job.id)
+    if application is None:
+        application = Application(user_id=user.id, job_id=job.id)
+        session.add(application)
+        session.flush()
+    if application.approval == "pending":
+        return application
+    previous = application.status
+    application.status = ApplicationStatus.APPLICATION_READY.value
+    application.resume_id = resume.id if resume else application.resume_id
+    application.approval = "pending"
+    session.add(
+        ApplicationEvent(
+            application_id=application.id,
+            from_status=previous,
+            to_status=application.status,
+            at=_now(),
+            detail="Ready to send. Waiting for your approval.",
+            source="autopilot",
+        )
+    )
+    session.flush()
+    return application
+
+
+def _consider(
+    session: Session,
+    user: User,
+    job: Job,
+    policy: AutopilotPolicy,
+    *,
+    verified_evidence_ids: set[int],
+    submitted_this_run: int,
+    submitted_today: int,
+    client: HttpClient | None = None,
+    send_email: Callable[[dict[str, str], tuple[str, bytes]], str] | None = None,
+    today: date | None = None,
+    now: datetime | None = None,
+) -> tuple[JobVerdict, str]:
+    """Check one job against the guardrails and act on it.
+
+    The outcome is one of blocked, assisted, queued, would_submit, submitted,
+    failed or error. On error the message is the verdict's last note.
+    """
+    channel = channel_module.detect(
+        url=job.url,
+        description=job.description,
+        source=job.source,
+        company=job.company,
+    )
+    resume = _latest_resume(session, user, job.id)
+    factuality = None
+    if resume is not None and getattr(resume, "factuality", None):
+        factuality = resume.factuality[-1]
+
+    eligibility, match, priority = _assessments(session, user, job.id)
+    application = _application_for(session, user, job.id)
+    decision = evaluate(
+        policy=policy,
+        job=job,
+        channel=channel,
+        resume=resume,
+        factuality=factuality,
+        eligibility=eligibility,
+        match=match,
+        priority=priority,
+        verified_evidence_ids=verified_evidence_ids,
+        application=application,
+        submitted_this_run=submitted_this_run,
+        submitted_today=submitted_today,
+        today=today,
+        now=now,
+    )
+    verdict = JobVerdict(
+        job_id=job.id,
+        title=job.title,
+        company=job.company,
+        tier=channel.tier.value,
+        allowed=decision.allowed,
+        blockers=decision.blockers,
+        notes=decision.notes,
+    )
+
+    if not decision.allowed:
+        if channel.tier.value == "assisted" or decision.tier == "blocked":
+            return verdict, "assisted"
+        return verdict, "blocked"
+
+    approved = application is not None and application.approval == "approved"
+    if policy.submits_for_real and policy.require_approval and not approved:
+        _queue(session, user, job, resume)
+        verdict.notes.append("Waiting for your approval before it is sent.")
+        return verdict, "queued"
+
+    cover = session.scalars(
+        select(CoverLetter).where(CoverLetter.user_id == user.id, CoverLetter.job_id == job.id)
+    ).first()
+    ats = (
+        session.scalars(
+            select(AtsAssessment).where(
+                AtsAssessment.job_id == job.id, AtsAssessment.resume_id == resume.id
+            )
+        ).first()
+        if resume is not None
+        else None
+    )
+    packet = build_packet(
+        user=user,
+        job=job,
+        channel=channel,
+        resume=resume,
+        cover_letter=cover,
+        eligibility=eligibility,
+        ats=ats,
+    )
+
+    try:
+        result = submit(packet, dry_run=policy.dry_run, client=client, send=send_email)
+    except Exception as exc:  # noqa: BLE001 - one bad submission is not the run
+        logger.exception("submission failed for job %s", job.id)
+        verdict.notes.append(f"submit[job {job.id}]: {type(exc).__name__}: {exc}")
+        return verdict, "error"
+
+    verdict.submission = result.to_dict()
+    _record(session, user, job, resume, result)
+
+    if result.ok and result.dry_run:
+        return verdict, "would_submit"
+    if result.ok:
+        return verdict, "submitted"
+    verdict.allowed = False
+    verdict.blockers.append(result.message)
+    return verdict, "assisted"
+
+
+# ---------------------------------------------------------------------------
+# The approval queue
+# ---------------------------------------------------------------------------
+class NotQueued(LookupError):
+    pass
+
+
+def approval_queue(session: Session, user: User) -> list[dict[str, Any]]:
+    """Applications the autopilot has ready and is holding for a yes or no."""
+    rows = session.execute(
+        select(Application, Job)
+        .join(Job, Job.id == Application.job_id)
+        .where(Application.user_id == user.id, Application.approval == "pending")
+        .order_by(Application.id)
+    ).all()
+    out: list[dict[str, Any]] = []
+    for application, job in rows:
+        _eligibility, match, priority = _assessments(session, user, job.id)
+        channel = channel_module.detect(
+            url=job.url, description=job.description, source=job.source, company=job.company
+        )
+        out.append(
+            {
+                "job_id": job.id,
+                "application_id": application.id,
+                "title": job.title,
+                "company": job.company,
+                "url": job.url,
+                "tier": channel.tier.value,
+                "resume_id": application.resume_id,
+                "match_score": round(match.match_score, 1) if match else None,
+                "priority": round(priority.overall, 1) if priority else None,
+                "deadline_on": job.deadline_on.isoformat() if job.deadline_on else None,
+            }
+        )
+    return out
+
+
+def _pending(session: Session, user: User, job_id: int) -> tuple[Application, Job]:
+    application = _application_for(session, user, job_id)
+    job = session.get(Job, job_id)
+    if application is None or job is None or application.approval != "pending":
+        raise NotQueued(f"Job {job_id} is not waiting for approval.")
+    return application, job
+
+
+def approve(
+    session: Session,
+    user: User,
+    job_id: int,
+    *,
+    client: HttpClient | None = None,
+    send_email: Callable[[dict[str, str], tuple[str, bytes]], str] | None = None,
+    today: date | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Say yes to one queued application: it is re-checked, then sent.
+
+    The guardrails run again at this moment rather than trusting the earlier
+    pass, so a deadline that passed or a cap that filled in the meantime still
+    stops it.
+    """
+    application, job = _pending(session, user, job_id)
+    application.approval = "approved"
+    session.flush()
+
+    existing = session.scalars(select(Application).where(Application.user_id == user.id)).all()
+    verdict, outcome = _consider(
+        session,
+        user,
+        job,
+        load_policy(user),
+        verified_evidence_ids=_verified_evidence(session, user),
+        submitted_this_run=0,
+        submitted_today=applications_today(existing, today),
+        client=client,
+        send_email=send_email,
+        today=today,
+        now=now,
+    )
+    if outcome not in ("submitted", "would_submit"):
+        # Not sent after all: back in the queue, with the reason on record.
+        application.approval = "pending"
+        session.flush()
+    return {"outcome": outcome, "verdict": verdict.to_dict()}
+
+
+def decline(session: Session, user: User, job_id: int) -> dict[str, Any]:
+    """Say no: the autopilot will not queue or send this one again."""
+    application, _job = _pending(session, user, job_id)
+    application.approval = "declined"
+    session.add(
+        ApplicationEvent(
+            application_id=application.id,
+            from_status=application.status,
+            to_status=application.status,
+            at=_now(),
+            detail="You passed on this one. The autopilot will not send it.",
+            source="user",
+        )
+    )
+    session.flush()
+    return {"outcome": "declined", "job_id": job_id}
+
+
 def run_once(
     session: Session,
     user: User | None = None,
@@ -332,6 +639,8 @@ def run_once(
     client: HttpClient | None = None,
     send_email: Callable[[dict[str, str], tuple[str, bytes]], str] | None = None,
     discover_jobs: bool = True,
+    track_email: bool = True,
+    mail_client: Any | None = None,
     tailor_limit: int = DEFAULT_TAILOR_LIMIT,
     consider_limit: int = DEFAULT_CONSIDER_LIMIT,
     use_ai: bool = True,
@@ -409,98 +718,51 @@ def run_once(
 
     for job in ranked:
         report.considered += 1
-        channel = channel_module.detect(
-            url=job.url,
-            description=job.description,
-            source=job.source,
-            company=job.company,
-        )
-        resume = _latest_resume(session, user, job.id)
-        factuality = None
-        if resume is not None and getattr(resume, "factuality", None):
-            factuality = resume.factuality[-1]
-
-        eligibility, match, priority = _assessments(session, user, job.id)
-        decision = evaluate(
-            policy=active,
-            job=job,
-            channel=channel,
-            resume=resume,
-            factuality=factuality,
-            eligibility=eligibility,
-            match=match,
-            priority=priority,
+        verdict, outcome = _consider(
+            session,
+            user,
+            job,
+            active,
             verified_evidence_ids=verified,
-            application=_application_for(session, user, job.id),
             submitted_this_run=submitted_this_run,
             submitted_today=submitted_today,
+            client=client,
+            send_email=send_email,
             today=today,
             now=now,
         )
-        verdict = JobVerdict(
-            job_id=job.id,
-            title=job.title,
-            company=job.company,
-            tier=channel.tier.value,
-            allowed=decision.allowed,
-            blockers=decision.blockers,
-            notes=decision.notes,
-        )
-
-        if not decision.allowed:
-            if channel.tier.value == "assisted" or decision.tier == "blocked":
-                report.assisted += 1
-            report.verdicts.append(verdict)
-            continue
-
-        cover = session.scalars(
-            select(CoverLetter).where(
-                CoverLetter.user_id == user.id, CoverLetter.job_id == job.id
-            )
-        ).first()
-        ats = (
-            session.scalars(
-                select(AtsAssessment).where(
-                    AtsAssessment.job_id == job.id, AtsAssessment.resume_id == resume.id
-                )
-            ).first()
-            if resume is not None
-            else None
-        )
-        packet = build_packet(
-            user=user,
-            job=job,
-            channel=channel,
-            resume=resume,
-            cover_letter=cover,
-            eligibility=eligibility,
-            ats=ats,
-        )
-
-        try:
-            result = submit(packet, dry_run=active.dry_run, client=client, send=send_email)
-        except Exception as exc:  # noqa: BLE001 - one bad submission is not the run
-            report.errors.append(f"submit[job {job.id}]: {type(exc).__name__}: {exc}")
-            logger.exception("submission failed for job %s", job.id)
-            report.verdicts.append(verdict)
-            continue
-
-        verdict.submission = result.to_dict()
-        _record(session, user, job, resume, result)
-
-        if result.ok and result.dry_run:
+        if outcome == "error":
+            report.errors.append(verdict.notes.pop())
+        elif outcome == "assisted":
+            report.assisted += 1
+        elif outcome == "queued":
+            report.awaiting_approval += 1
+            # A queued job holds its place under the run cap, so approving the
+            # whole queue can never exceed what one pass would have sent.
+            submitted_this_run += 1
+        elif outcome == "would_submit":
             report.would_submit += 1
             submitted_this_run += 1
-        elif result.ok:
+        elif outcome == "submitted":
             report.submitted += 1
             submitted_this_run += 1
             submitted_today += 1
-        else:
-            report.assisted += 1
-            verdict.allowed = False
-            verdict.blockers.append(result.message)
-
         report.verdicts.append(verdict)
+
+    # -- 5. track replies -------------------------------------------------
+    if track_email:
+        mailbox = mail_client if mail_client is not None else _default_mailbox()
+        if mailbox is None:
+            report.tracking = {"skipped": "no mailbox connected"}
+        else:
+            try:
+                from careeros.gmail.sync import GmailSync
+
+                stats = GmailSync(session, mailbox).sync(user, use_ai=use_ai)
+                report.tracking = stats.to_dict()
+            except Exception as exc:  # noqa: BLE001 - mail must not end the pass
+                report.errors.append(f"track: {type(exc).__name__}: {exc}")
+                logger.exception("email tracking failed")
 
     report.finished_at = _now()
 

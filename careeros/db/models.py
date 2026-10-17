@@ -547,6 +547,8 @@ class Application(Base, TimestampMixin):
     last_activity_on: Mapped[Optional[date]] = mapped_column(Date)
     submission_mode: Mapped[str] = mapped_column(String(16), default=AutomationMode.ASSISTED.value)
     answers: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # screening question answers
+    # Autopilot sign-off: pending | approved | declined. None when never queued.
+    approval: Mapped[Optional[str]] = mapped_column(String(16))
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
     job: Mapped[Job] = relationship(back_populates="applications")

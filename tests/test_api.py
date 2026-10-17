@@ -354,3 +354,20 @@ def test_the_plan_endpoint_derives_searches_from_the_profile(client):
     assert set(body["countries"]) <= {"US", "IN"}
     assert body["terms"], "a loaded profile must yield search terms"
     assert "hard-coded" in body["note"]
+
+
+def test_autopilot_approval_toggle_and_queue_endpoints(client):
+    policy = client.get("/api/autopilot").json()
+    assert policy["policy"]["require_approval"] is True
+    assert policy["hands_off"] is False
+
+    changed = client.post("/api/autopilot", json={"enabled": True, "dry_run": False}).json()
+    assert changed["submits_for_real"] is True
+    assert changed["hands_off"] is False
+
+    assert client.get("/api/autopilot/queue").json() == {"count": 0, "items": []}
+    assert client.post("/api/autopilot/queue/999999/approve").status_code == 404
+    assert client.post("/api/autopilot/queue/999999/decline").status_code == 404
+
+    off = client.post("/api/autopilot", json={"require_approval": False}).json()
+    assert off["hands_off"] is True

@@ -16,7 +16,17 @@ from sqlalchemy.orm import Session
 
 from careeros.api.deps import current_user, get_db
 from careeros.apply.guardrails import AutopilotPolicy
-from careeros.autopilot import AlreadyRunning, RunLock, load_policy, run_once, save_policy
+from careeros.autopilot import (
+    AlreadyRunning,
+    NotQueued,
+    RunLock,
+    approval_queue,
+    approve,
+    decline,
+    load_policy,
+    run_once,
+    save_policy,
+)
 from careeros.db.models import PipelineRun, User
 
 router = APIRouter(prefix="/api/autopilot", tags=["autopilot"])
@@ -27,6 +37,7 @@ class PolicyUpdate(BaseModel):
 
     enabled: bool | None = None
     dry_run: bool | None = None
+    require_approval: bool | None = None
     interval_hours: float | None = Field(default=None, ge=0.25, le=168)
     max_per_run: int | None = Field(default=None, ge=1, le=50)
     max_per_day: int | None = Field(default=None, ge=1, le=200)
@@ -54,6 +65,7 @@ def _describe(policy: AutopilotPolicy) -> dict[str, Any]:
         "policy": policy.to_dict(),
         "summary": policy.summary(),
         "submits_for_real": policy.submits_for_real,
+        "hands_off": policy.submits_for_real and not policy.require_approval,
         "never_configurable": [
             "The tailored résumé must pass the factuality check.",
             "It must cite at least one verified evidence item.",
@@ -134,3 +146,38 @@ def history(
             for row in rows
         ],
     }
+
+
+@router.get("/queue")
+def queue(
+    user: User = Depends(current_user),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Applications that are ready and waiting for the user's yes or no."""
+    rows = approval_queue(session, user)
+    return {"count": len(rows), "items": rows}
+
+
+@router.post("/queue/{job_id}/approve")
+def approve_one(
+    job_id: int,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Send one queued application. The guardrails are checked again first."""
+    try:
+        return approve(session, user, job_id)
+    except NotQueued as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/queue/{job_id}/decline")
+def decline_one(
+    job_id: int,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        return decline(session, user, job_id)
+    except NotQueued as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
