@@ -613,8 +613,8 @@ _AUTOPILOT_FIELDS = (
     "domains", "countries", "min_salary", "skip_if_applicants_over", "quiet_hours",
 )
 
-#: The two fields that display order shows first.
-_AUTOPILOT_SWITCHES = ("enabled", "dry_run")
+#: The switches that display order shows first.
+_AUTOPILOT_SWITCHES = ("enabled", "dry_run", "require_approval")
 
 
 def _print_report(report) -> None:
@@ -637,9 +637,25 @@ def _print_report(report) -> None:
         print(f"  SUBMITTED  {counts['submitted']}")
     if counts["would_submit"]:
         print(f"  Would send {counts['would_submit']} (dry run)")
+    if counts.get("awaiting_approval"):
+        print(f"  Waiting    {counts['awaiting_approval']} for your approval")
     print(f"  For you    {counts['assisted']} need submitting by hand")
+    tracking = data.get("tracking") or {}
+    if "skipped" in tracking:
+        print(f"  Tracked    nothing ({tracking['skipped']})")
+    elif tracking:
+        print(
+            f"  Tracked    {tracking.get('fetched', 0)} email(s), "
+            f"{tracking.get('advanced', 0)} application(s) moved"
+        )
 
-    acted = [v for v in report.verdicts if v.allowed]
+    queued = [v for v in report.verdicts if v.allowed and v.submission is None]
+    if queued:
+        print("\nWaiting for your approval (careeros autopilot approve JOB_ID):")
+        for verdict in queued:
+            print(f"  {verdict.job_id:>4}  {verdict.company} — {verdict.title}")
+
+    acted = [v for v in report.verdicts if v.allowed and v.submission is not None]
     if acted:
         print("\nApplied:" if counts["submitted"] else "\nWould apply:")
         for verdict in acted:
@@ -663,7 +679,11 @@ def cmd_autopilot(args: argparse.Namespace) -> None:
     from careeros.apply.guardrails import AutopilotPolicy
     from careeros.autopilot import (
         AlreadyRunning,
+        NotQueued,
         RunLock,
+        approval_queue,
+        approve,
+        decline,
         load_policy,
         lock_path,
         run_forever,
@@ -696,6 +716,8 @@ def cmd_autopilot(args: argparse.Namespace) -> None:
                 policy.dry_run = False
             elif args.dry_run:
                 policy.dry_run = True
+            if args.require_approval is not None:
+                policy.require_approval = args.require_approval
             save_policy(session, user, policy)
             summary, as_dict = policy.summary(), policy.to_dict()
 
@@ -705,6 +727,9 @@ def cmd_autopilot(args: argparse.Namespace) -> None:
         elif as_dict["enabled"] and as_dict["dry_run"]:
             print("\nStill a dry run: it assembles and reports, and sends nothing.")
             print("When the reports look right:  careeros autopilot set --live")
+        elif as_dict["enabled"] and as_dict["require_approval"]:
+            print("\nLIVE, with your sign-off. Each ready application waits in the queue.")
+            print("See it:  careeros autopilot queue")
         elif as_dict["enabled"]:
             print("\nLIVE. Applications will be submitted automatically.")
             print(f"Caps: {as_dict['max_per_run']} per run, {as_dict['max_per_day']} per day.")
@@ -762,6 +787,53 @@ def cmd_autopilot(args: argparse.Namespace) -> None:
             print(json.dumps(report.to_dict(), indent=2, default=str))
         else:
             _print_report(report)
+        return
+
+    if action == "queue":
+        with session_scope() as session:
+            rows = approval_queue(session, _require_user(session))
+        if args.json:
+            print(json.dumps(rows, indent=2))
+            return
+        if not rows:
+            print("Nothing is waiting for your approval.")
+            return
+        for row in rows:
+            print(
+                f"  {row['job_id']:>4}  match {row['match_score'] or '-':>5}  "
+                f"[{row['tier']}]  {row['company']} — {row['title']}"
+            )
+        print("\ncareeros autopilot approve JOB_ID   |   careeros autopilot decline JOB_ID")
+        return
+
+    if action in ("approve", "decline"):
+        if args.job_id is None:
+            print(f"autopilot {action} needs a JOB_ID.", file=sys.stderr)
+            raise SystemExit(2)
+        try:
+            with session_scope() as session:
+                user = _require_user(session)
+                if action == "approve":
+                    result = approve(session, user, args.job_id)
+                else:
+                    result = decline(session, user, args.job_id)
+        except NotQueued as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(1)
+        if args.json:
+            print(json.dumps(result, indent=2, default=str))
+            return
+        outcome = result["outcome"]
+        if outcome == "submitted":
+            print("Sent.")
+        elif outcome == "would_submit":
+            print("Approved. Still a dry run, so nothing was sent.")
+        elif outcome == "declined":
+            print("Passed. The autopilot will not send this one.")
+        else:
+            print(f"Not sent ({outcome}). It stays in the queue:")
+            for blocker in result["verdict"]["blockers"]:
+                print(f"  - {blocker}")
         return
 
     if action == "loop":
@@ -1076,9 +1148,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "action",
         nargs="?",
-        choices=["status", "enable", "disable", "set", "once", "loop", "install"],
-        help="status (default), enable, disable, set, once, loop, install",
+        choices=[
+            "status", "enable", "disable", "set", "once", "loop", "install",
+            "queue", "approve", "decline",
+        ],
+        help="status (default), enable, disable, set, once, loop, install, queue, approve, decline",
     )
+    p.add_argument("job_id", nargs="?", type=int, help="approve/decline: the job to act on")
+    p.add_argument("--require-approval", type=_boolish,
+                   help="live passes wait for your yes on each application (default yes)")
     p.add_argument("--live", action="store_true", help="stop dry-running and actually submit")
     p.add_argument("--dry-run", action="store_true", help="assemble and report, send nothing")
     p.add_argument("--interval-hours", type=float, help="how often to run (default 4)")

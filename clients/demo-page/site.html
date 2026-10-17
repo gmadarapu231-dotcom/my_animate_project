@@ -1,7 +1,7 @@
 <title>CareerOS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 /* ---------------------------------------------------------------------------
    CareerOS — product site with the working demo embedded.
@@ -10,70 +10,75 @@
    subpath, a sandboxed frame or file:// alike. Tabs inside the console toggle
    [hidden]; the site itself is one scrolling document with anchor links.
 
-   Type   Archivo for the interface and display, Source Serif 4 for prose,
-          IBM Plex Mono for figures, reference numbers and derived keywords.
-   Look   A records office: full-bleed hairlines, mono stage markers, and
-          verdicts rendered as stamps — the subject's own document furniture.
+   Type   Inter Tight for display, Inter for everything else, JetBrains Mono
+          for figures, stage markers ("01 · find") and log lines.
+   Look   Warm paper, ink-black type and controls, one green signal colour
+          for "the agent is working", and small product mock-ups built from
+          the captured fixtures rather than screenshots.
    --------------------------------------------------------------------------- */
 :root {
-  /* Neutrals biased toward the ultramarine accent rather than pure grey */
-  --bg: #eef1f6;
+  --bg: #f7f6f2;
   --panel: #ffffff;
-  --panel-2: #f5f7fa;
-  --ink: #10141f;
-  --ink-2: #555f74;
-  --line: #d8dee8;
-  --accent: #2a45c8;
-  --accent-bg: #e6eaf9;
+  --panel-2: #f2f1ec;
+  --ink: #0e0e10;
+  --ink-2: #6b6a66;
+  --line: #e4e2db;
+  --accent: #0e0e10;
+  --accent-bg: #ecebe5;
+  --signal: #14a35b;
+  --signal-bg: #e1f3e8;
   --ok: #0f6b3f;
   --ok-bg: #e3f1e9;
   --warn: #8f5c08;
   --warn-bg: #faeeda;
   --bad: #ac2a1d;
   --bad-bg: #fae7e4;
-  --chip: #e9edf3;
-  --shadow: 0 1px 2px rgba(16, 20, 31, .07);
-  --shadow-lg: 0 10px 40px -12px rgba(16, 20, 31, .28);
-  /* The hero band commits to dark in both themes */
-  --hero-bg: #10141f;
-  --hero-ink: #eef1f6;
-  --hero-ink-2: #93a0bb;
-  --hero-line: #262f45;
-  --hero-accent: #93a9ff;
+  --chip: #efeee8;
+  --shadow: 0 1px 2px rgba(14, 14, 16, .05);
+  --shadow-lg: 0 24px 60px -24px rgba(14, 14, 16, .25);
+  /* Code blocks and the closing band are ink in both themes */
+  --hero-bg: #0e0e10;
+  --hero-ink: #f2f1ec;
+  --hero-ink-2: #9b9a94;
+  --hero-line: #2a2a2d;
+  --hero-accent: #3ddc84;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c1017;
-    --panel: #141a24;
-    --panel-2: #1a212c;
-    --ink: #e8ecf3;
-    --ink-2: #939ead;
-    --line: #262e3b;
-    --accent: #8ba4ff;
-    --accent-bg: #1a2340;
+    --bg: #0c0c0d;
+    --panel: #161618;
+    --panel-2: #1d1d20;
+    --ink: #f2f1ec;
+    --ink-2: #9b9a94;
+    --line: #2a2a2d;
+    --accent: #f2f1ec;
+    --accent-bg: #26262a;
+    --signal: #3ddc84;
+    --signal-bg: #12301f;
     --ok: #56cc8e;
     --ok-bg: #14301f;
     --warn: #dfa84e;
     --warn-bg: #31250f;
     --bad: #f0857a;
     --bad-bg: #36201c;
-    --chip: #202733;
+    --chip: #232326;
     --shadow: none;
-    --shadow-lg: 0 10px 40px -12px rgba(0, 0, 0, .7);
-    --hero-bg: #070a10;
-    --hero-line: #1d2534;
+    --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, .8);
+    --hero-bg: #050506;
+    --hero-line: #222225;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0c1017; --panel: #141a24; --panel-2: #1a212c;
-  --ink: #e8ecf3; --ink-2: #939ead; --line: #262e3b;
-  --accent: #8ba4ff; --accent-bg: #1a2340;
+  --bg: #0c0c0d; --panel: #161618; --panel-2: #1d1d20;
+  --ink: #f2f1ec; --ink-2: #9b9a94; --line: #2a2a2d;
+  --accent: #f2f1ec; --accent-bg: #26262a;
+  --signal: #3ddc84; --signal-bg: #12301f;
   --ok: #56cc8e; --ok-bg: #14301f;
   --warn: #dfa84e; --warn-bg: #31250f;
   --bad: #f0857a; --bad-bg: #36201c;
-  --chip: #202733; --shadow: none;
-  --shadow-lg: 0 10px 40px -12px rgba(0, 0, 0, .7);
-  --hero-bg: #070a10; --hero-line: #1d2534;
+  --chip: #232326; --shadow: none;
+  --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, .8);
+  --hero-bg: #050506; --hero-line: #222225;
 }
 
 * { box-sizing: border-box; }
@@ -81,7 +86,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 400 15px/1.55 Archivo, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font: 400 15px/1.55 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -89,75 +94,121 @@ body {
 }
 html { scroll-behavior: smooth; }
 .mono, .kw, .num, .eyebrow, .stage i {
-  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
-.prose { font-family: "Source Serif 4", Georgia, "Times New Roman", serif; }
+.prose { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 
 .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; }
 .narrow { max-width: 640px; }
 
+/* --- top bar -------------------------------------------------------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar .wrap { display: flex; align-items: center; gap: 18px; height: 58px; }
+.logo { font: 800 17px/1 "Inter Tight", Inter, sans-serif; letter-spacing: -.03em; color: var(--ink); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+.logo i { width: 9px; height: 9px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px var(--signal-bg); }
+.toplinks { display: flex; gap: 4px; margin-left: 8px; }
+.toplinks a { color: var(--ink-2); text-decoration: none; font-size: 13.5px; font-weight: 500; padding: 6px 10px; border-radius: 999px; }
+.toplinks a:hover { color: var(--ink); background: var(--chip); }
+.topcta { margin-left: auto; }
+@media (max-width: 760px) { .toplinks { display: none; } }
+
+/* --- buttons shared by hero and closing band ------------------------------ */
+.pill {
+  font: 600 14px/1 Inter, sans-serif; text-decoration: none; display: inline-flex;
+  align-items: center; gap: 8px; padding: 13px 20px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink); background: var(--panel);
+}
+.pill:hover { border-color: var(--ink); }
+.pill.go { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pill.small { padding: 9px 15px; font-size: 13px; }
+
 /* --- hero ----------------------------------------------------------------- */
-.hero {
-  background: var(--hero-bg);
-  color: var(--hero-ink);
-  border-bottom: 1px solid var(--hero-line);
-  position: relative;
-  overflow: hidden;
+.hero { position: relative; overflow: hidden; }
+.hero::before {
+  /* one soft green bloom behind the headline -- the agent's "on" light */
+  content: ""; position: absolute; width: 760px; height: 760px; left: 50%; top: -420px;
+  transform: translateX(-50%); pointer-events: none;
+  background: radial-gradient(closest-side, var(--signal-bg), transparent);
 }
-.hero::after {
-  /* faint ruled ground, like form paper */
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(to bottom, transparent 0 47px, var(--hero-line) 47px 48px);
-  opacity: .5;
-}
-.hero .wrap { position: relative; z-index: 1; padding-block: 56px 44px; }
+.hero .wrap { position: relative; z-index: 1; padding-block: 76px 56px; text-align: center; }
 .eyebrow {
-  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--hero-accent); margin: 0 0 22px;
+  font-size: 11.5px; letter-spacing: .02em;
+  color: var(--signal); margin: 0 0 18px;
 }
+.hero .eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 12px; color: var(--ink-2);
+}
+.hero .eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
 .hero h1 {
-  font-size: clamp(34px, 6.4vw, 62px);
-  line-height: 1.04; letter-spacing: -.028em; font-weight: 800;
-  margin: 0; max-width: 16ch; text-wrap: balance;
+  font: 800 clamp(40px, 7.4vw, 78px)/1 "Inter Tight", Inter, sans-serif;
+  letter-spacing: -.04em; margin: 0 auto; max-width: 14ch; text-wrap: balance;
 }
-.hero h1 em { font-style: normal; color: var(--hero-accent); }
+.hero h1 em { font-style: normal; color: var(--ink-2); }
 .lede {
-  font-size: clamp(16px, 2.2vw, 19px); line-height: 1.58;
-  color: var(--hero-ink-2); max-width: 58ch; margin: 22px 0 0;
+  font-size: clamp(16px, 2.2vw, 19px); line-height: 1.55;
+  color: var(--ink-2); max-width: 56ch; margin: 22px auto 0;
 }
-.lede b { color: var(--hero-ink); font-weight: 600; }
-.cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
-.cta a {
-  font: 600 14px/1 Archivo, sans-serif; text-decoration: none;
-  padding: 13px 20px; border-radius: 6px; border: 1px solid var(--hero-line);
-  color: var(--hero-ink); display: inline-block;
-}
-.cta a.go { background: var(--hero-accent); border-color: var(--hero-accent); color: #0b1020; }
-.cta a:hover { border-color: var(--hero-accent); }
+.lede b { color: var(--ink); font-weight: 600; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; justify-content: center; }
 
 .facts {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-  gap: 1px; margin-top: 40px;
-  background: var(--hero-line); border: 1px solid var(--hero-line);
+  gap: 0; margin: 52px auto 0; max-width: 860px;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
 }
-.facts div { background: var(--hero-bg); padding: 14px 14px 12px; }
-.facts b { display: block; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
-.facts span { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--hero-ink-2); }
+.facts div { padding: 16px 10px 14px; }
+.facts b { display: block; font: 700 28px/1.1 "Inter Tight", Inter, sans-serif; letter-spacing: -.03em; }
+.facts span { font-size: 11px; color: var(--ink-2); }
+
+/* --- how it works: four steps, each with a small mock-up ------------------ */
+.steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 30px; }
+@media (max-width: 760px) { .steps { grid-template-columns: minmax(0, 1fr); } }
+.step {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+  padding: 22px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow);
+}
+.step .tag { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--signal); display: flex; align-items: center; gap: 7px; }
+.step .tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
+.step h3 { margin: 0; font: 700 22px/1.15 "Inter Tight", Inter, sans-serif; letter-spacing: -.025em; }
+.step p { margin: 0; color: var(--ink-2); font-size: 14.5px; line-height: 1.55; }
+.mock {
+  margin-top: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; font-size: 12.5px; min-height: 150px;
+}
+.mock.term { background: var(--hero-bg); border-color: var(--hero-line); color: var(--hero-ink); font-family: "JetBrains Mono", monospace; font-size: 11.5px; line-height: 1.75; overflow-x: auto; }
+.mock.term .t { color: var(--hero-ink-2); }
+.mock.term .g { color: var(--hero-accent); }
+.mock .ln { display: flex; gap: 10px; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.mock .ln:last-child { border-bottom: 0; }
+.mock .add { color: var(--ok); font-family: "JetBrains Mono", monospace; }
+.mock .tl { display: flex; gap: 10px; align-items: center; padding: 5px 0; }
+.mock .tl i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+.mock .tl.on i { background: var(--signal); box-shadow: 0 0 0 3px var(--signal-bg); }
+.mock .tl.on b { color: var(--ink); }
+.mock .tl b { font-weight: 500; color: var(--ink-2); }
 
 /* --- sections ------------------------------------------------------------- */
 section.band { border-top: 1px solid var(--line); }
-section.band > .wrap { padding-block: 60px; }
-.eyebrow.dark { color: var(--accent); }
+section.band > .wrap { padding-block: 72px; }
+.eyebrow.dark { color: var(--signal); }
 h2.sec {
-  font-size: clamp(24px, 3.6vw, 34px); line-height: 1.14;
-  letter-spacing: -.022em; font-weight: 700; margin: 0 0 16px;
-  max-width: 20ch; text-wrap: balance;
+  font: 700 clamp(28px, 4.4vw, 44px)/1.06 "Inter Tight", Inter, sans-serif;
+  letter-spacing: -.035em; margin: 0 0 16px;
+  max-width: 18ch; text-wrap: balance;
 }
 h3.sub { font-size: 18px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 8px; }
 p.body { font-size: 16.5px; line-height: 1.68; color: var(--ink-2); max-width: 66ch; margin: 0 0 14px; }
 p.body strong { color: var(--ink); font-weight: 600; }
-p.body code, .inline { font-family: "IBM Plex Mono", monospace; font-size: .88em; background: var(--chip); padding: 1px 5px; border-radius: 3px; }
+p.body code, .inline { font-family: "JetBrains Mono", monospace; font-size: .88em; background: var(--chip); padding: 1px 5px; border-radius: 3px; }
 
 /* --- the chain ------------------------------------------------------------ */
 ol.chain { list-style: none; margin: 26px 0 0; padding: 0; border-top: 1px solid var(--line); }
@@ -179,8 +230,8 @@ ol.chain span { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
 @media (max-width: 800px) { .split { grid-template-columns: minmax(0, 1fr); gap: 26px; } }
 
 .note {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  padding: 18px; box-shadow: var(--shadow);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 20px; box-shadow: var(--shadow);
 }
 .note h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
 .note p { margin: 0 0 8px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
@@ -192,7 +243,7 @@ ol.chain span { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
   transform: rotate(-3.5deg);
   border: 3px double var(--bad); color: var(--bad);
   border-radius: 6px; padding: 10px 18px; text-align: center;
-  font-family: "IBM Plex Mono", monospace; opacity: .92;
+  font-family: "JetBrains Mono", monospace; opacity: .92;
 }
 .stamp b { display: block; font-size: 17px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
 .stamp span { display: block; font-size: 10px; letter-spacing: .08em; margin-top: 4px; }
@@ -206,9 +257,10 @@ ol.chain span { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
 .quoteline em { display: block; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
 
 .codeblock {
-  background: var(--hero-bg); color: var(--hero-ink); border-radius: 10px;
+  background: var(--hero-bg); color: var(--hero-ink); border-radius: 14px;
   padding: 16px 18px; overflow-x: auto; margin: 18px 0 0;
-  font-family: "IBM Plex Mono", monospace; font-size: 13px; line-height: 1.85;
+  font-family: "JetBrains Mono", monospace; font-size: 13px; line-height: 1.85;
+  white-space: pre;
 }
 .codeblock .c { color: var(--hero-ink-2); }
 .codeblock .p { color: var(--hero-accent); }
@@ -219,17 +271,17 @@ ol.chain span { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
 #console-band > .wrap:first-of-type { padding-bottom: 0; }
 #console-band > .wrap:last-of-type { padding-top: 0; }
 .console {
-  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
   background: var(--bg); box-shadow: var(--shadow-lg);
   margin-top: 26px; scroll-margin-top: 12px;
 }
 .notice {
-  background: var(--accent-bg); border-bottom: 1px solid var(--line);
+  background: var(--signal-bg); border-bottom: 1px solid var(--line);
   padding: 9px 16px; display: flex; flex-wrap: wrap; gap: 8px;
   align-items: baseline; font-size: 12px; color: var(--ink-2);
 }
-.notice b { color: var(--accent); letter-spacing: .08em; font-size: 10px; font-family: "IBM Plex Mono", monospace; }
-.notice a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.notice b { color: var(--signal); letter-spacing: .08em; font-size: 10px; font-family: "JetBrains Mono", monospace; }
+.notice a { color: var(--ink); font-weight: 600; text-decoration: none; }
 .chrome {
   position: sticky; top: 0; z-index: 20;
   background: var(--panel); border-bottom: 1px solid var(--line);
@@ -237,15 +289,15 @@ ol.chain span { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
   align-items: center; justify-content: space-between;
 }
 .brand { font-weight: 700; font-size: 15px; letter-spacing: -.02em; }
-.brand span { font-weight: 400; color: var(--ink-2); font-size: 11.5px; margin-left: 8px; font-family: "IBM Plex Mono", monospace; }
+.brand span { font-weight: 400; color: var(--ink-2); font-size: 11.5px; margin-left: 8px; font-family: "JetBrains Mono", monospace; }
 nav { display: flex; gap: 2px; flex-wrap: wrap; }
 nav button {
-  font: 500 13px Archivo, sans-serif;
-  background: none; border: 0; border-radius: 6px;
+  font: 500 13px Inter, sans-serif;
+  background: none; border: 0; border-radius: 999px;
   color: var(--ink-2); padding: 7px 12px; cursor: pointer;
 }
 nav button:hover { background: var(--chip); color: var(--ink); }
-nav button[aria-selected="true"] { background: var(--accent); color: var(--panel); }
+nav button[aria-selected="true"] { background: var(--accent); color: var(--bg); }
 nav button:focus-visible, .card:focus-visible, .filter:focus-visible,
 .btn:focus-visible, .qbtn:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 main { padding: 16px; font-size: 14px; }
@@ -253,13 +305,13 @@ main { padding: 16px; font-size: 14px; }
 /* --- panels --------------------------------------------------------------- */
 .panel {
   background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 16px; margin-bottom: 14px;
+  border-radius: 14px; padding: 18px; margin-bottom: 14px;
   box-shadow: var(--shadow);
 }
 .panel > h2 {
   margin: 0 0 12px; font-size: 10.5px; font-weight: 600;
   letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "JetBrains Mono", monospace;
 }
 .panel p { margin: 0 0 8px; }
 .muted { color: var(--ink-2); }
@@ -270,7 +322,7 @@ main { padding: 16px; font-size: 14px; }
 .card {
   display: block; width: 100%; text-align: left;
   background: var(--panel); border: 1px solid var(--line);
-  border-left-width: 4px; border-radius: 10px;
+  border-left-width: 4px; border-radius: 14px;
   padding: 14px 16px; margin-bottom: 12px;
   font: inherit; color: inherit; cursor: pointer;
   box-shadow: var(--shadow);
@@ -284,7 +336,7 @@ main { padding: 16px; font-size: 14px; }
 .card-top { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
 .title { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
 .sub { color: var(--ink-2); font-size: 12.5px; margin-top: 1px; }
-.flag { font-size: 10px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; text-align: right; font-family: "IBM Plex Mono", monospace; }
+.flag { font-size: 10px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; text-align: right; font-family: "JetBrains Mono", monospace; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 0; }
 .chip { background: var(--chip); color: var(--ink-2); border-radius: 20px; padding: 2px 9px; font-size: 11.5px; }
@@ -294,7 +346,7 @@ main { padding: 16px; font-size: 14px; }
 .chip.bad { background: var(--bad-bg); color: var(--bad); }
 
 .scores { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 11px; }
-.score b { display: block; font-size: 17px; font-weight: 700; line-height: 1.15; font-family: "IBM Plex Mono", monospace; }
+.score b { display: block; font-size: 17px; font-weight: 700; line-height: 1.15; font-family: "JetBrains Mono", monospace; }
 .score span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
 
 .verdict {
@@ -314,23 +366,23 @@ main { padding: 16px; font-size: 14px; }
 /* --- controls ------------------------------------------------------------- */
 .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .filter {
-  font: 500 12.5px Archivo, sans-serif;
+  font: 500 12.5px Inter, sans-serif;
   background: var(--panel); color: var(--ink-2);
   border: 1px solid var(--line); border-radius: 20px;
   padding: 5px 12px; cursor: pointer;
 }
 .filter[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 .btn {
-  font: 600 13px Archivo, sans-serif;
+  font: 600 13px Inter, sans-serif;
   background: var(--panel); color: var(--ink);
-  border: 1px solid var(--line); border-radius: 7px;
-  padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 8px 16px; cursor: pointer;
 }
 .btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .qbtn {
-  font: 400 12px Archivo, sans-serif; text-align: left;
+  font: 400 12px Inter, sans-serif; text-align: left;
   background: var(--panel-2); color: var(--ink-2);
   border: 1px solid var(--line); border-radius: 7px;
   padding: 7px 10px; cursor: pointer;
@@ -340,14 +392,14 @@ main { padding: 16px; font-size: 14px; }
 /* --- tables / stats ------------------------------------------------------- */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(116px, 1fr)); gap: 10px; }
 .stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; }
-.stat b { display: block; font-size: 20px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+.stat b { display: block; font-size: 20px; font-weight: 700; font-family: "JetBrains Mono", monospace; }
 .stat span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
 .tw { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th {
   font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
-  color: var(--ink-2); font-weight: 600; font-family: "IBM Plex Mono", monospace;
+  color: var(--ink-2); font-weight: 600; font-family: "JetBrains Mono", monospace;
 }
 td.n, th.n { text-align: right; }
 tbody tr:last-child td { border-bottom: 0; }
@@ -356,26 +408,34 @@ ul.tight { margin: 6px 0; padding-left: 18px; }
 ul.tight li { margin-bottom: 3px; }
 pre.answer {
   white-space: pre-wrap; margin: 0;
-  font: 400 14px/1.7 "Source Serif 4", Georgia, serif;
+  font: 400 14px/1.7 Inter, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 .trace { font-size: 12px; line-height: 1.8; }
 .trace .m { color: var(--warn); }
 .trace .e { color: var(--bad); }
 h3.grp { margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
 .back {
-  font: 600 13px Archivo, sans-serif; color: var(--accent);
+  font: 600 13px Inter, sans-serif; color: var(--accent);
   background: none; border: 0; padding: 0 0 12px; cursor: pointer;
 }
 
 /* --- footer --------------------------------------------------------------- */
 footer { border-top: 1px solid var(--line); background: var(--hero-bg); color: var(--hero-ink-2); }
-footer .wrap { padding-block: 34px 40px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: baseline; }
+footer .closing { padding-block: 84px 40px; text-align: center; }
+footer .closing h2 {
+  font: 800 clamp(30px, 5.2vw, 54px)/1.04 "Inter Tight", Inter, sans-serif;
+  letter-spacing: -.04em; color: var(--hero-ink); margin: 0 auto; max-width: 16ch; text-wrap: balance;
+}
+footer .closing p { margin: 16px auto 0; max-width: 52ch; font-size: 15px; }
+footer .closing .cta .pill { background: var(--hero-ink); color: var(--hero-bg); border-color: var(--hero-ink); }
+footer .closing .cta .pill.ghost { background: transparent; color: var(--hero-ink); border-color: var(--hero-line); }
+footer .wrap.base { border-top: 1px solid var(--hero-line); padding-block: 22px 30px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: baseline; }
 footer b { color: var(--hero-ink); font-size: 15px; }
 footer a { color: var(--hero-accent); text-decoration: none; font-size: 13.5px; }
 footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6; }
 
 @media (max-width: 560px) {
-  .hero .wrap { padding-block: 40px 34px; }
+  .hero .wrap { padding-block: 48px 36px; }
   section.band > .wrap { padding-block: 44px; }
   main { padding: 12px; }
   .console { border-radius: 10px; }
@@ -383,26 +443,76 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 }
 </style>
 
-<header class="hero">
+<div class="topbar">
   <div class="wrap">
-    <p class="eyebrow">Career operating system &nbsp;·&nbsp; United States + India</p>
-    <h1>The job search runs on <em>evidence</em>, not adjectives.</h1>
-    <p class="lede">CareerOS reads a posting in <b>any</b> field, checks it against your actual work
-      authorization, ranks it by <b>deadline before score</b>, and assembles a résumé only from facts
-      you have personally verified. Where it is unsure, it says <b>unknown</b> — it does not guess on
-      your behalf.</p>
+    <a class="logo" href="#top"><i></i>CareerOS</a>
+    <nav class="toplinks" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#console-band">The app</a>
+      <a href="#autopilot">Autopilot</a>
+      <a href="#limits">Safety</a>
+    </nav>
+    <a class="pill go small topcta" href="#console">Open the demo</a>
+  </div>
+</div>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <p class="eyebrow"><i></i>Autopilot for your job search</p>
+    <h1>Your job search, <em>running itself.</em></h1>
+    <p class="lede">One agent finds the roles that fit you, tailors a résumé from facts you have
+      <b>verified</b>, applies wherever the employer published a route, and moves each application
+      along as the replies come in. <b>You decide how hands-off it is.</b></p>
     <div class="cta">
-      <a class="go" href="#console">Open the live demo ↓</a>
-      <a href="#autopilot">How it applies</a>
-      <a href="https://github.com/gmadarapu231-dotcom/my_animate_project" target="_blank" rel="noopener">Read the source →</a>
+      <a class="pill go" href="#console">Watch it run ↓</a>
+      <a class="pill" href="#how">How it works</a>
     </div>
     <div class="facts" id="facts"></div>
   </div>
 </header>
 
+<section class="band" id="how">
+  <div class="wrap">
+    <p class="eyebrow dark">01 · how it works</p>
+    <h2 class="sec">From posting to reply, without the busywork.</h2>
+    <p class="body prose">Every four hours one pass runs all four steps. Each card below is drawn
+      from that pass's real output, captured from the engines in this repository.</p>
+    <div class="steps">
+      <article class="step">
+        <span class="tag">01 · find</span>
+        <h3>It watches the boards so you don't.</h3>
+        <p>Searches every connected provider with terms taken from your own résumé, classifies each
+          posting, and ranks by deadline before score.</p>
+        <div class="mock term" id="mockFind"></div>
+      </article>
+      <article class="step">
+        <span class="tag">02 · prep</span>
+        <h3>A résumé per role, fact-checked.</h3>
+        <p>Assembled only from evidence you verified, reworded in the posting's own vocabulary, and
+          blocked if any claim cannot be traced back.</p>
+        <div class="mock" id="mockPrep"></div>
+      </article>
+      <article class="step">
+        <span class="tag">03 · apply</span>
+        <h3>Submitted, or waiting for your yes.</h3>
+        <p>Goes out through the employer's own API or published address. Until you switch it to
+          hands-off, each one waits for a tap.</p>
+        <div class="mock" id="mockApply"></div>
+      </article>
+      <article class="step">
+        <span class="tag">04 · track</span>
+        <h3>Replies move the pipeline.</h3>
+        <p>Recruiter mail is classified and linked to its application, so the status updates
+          itself. High-stakes replies stay drafts until you send them.</p>
+        <div class="mock" id="mockTrack"></div>
+      </article>
+    </div>
+  </div>
+</section>
+
 <section class="band" id="chain">
   <div class="wrap">
-    <p class="eyebrow dark">01 — The chain</p>
+    <p class="eyebrow dark">02 · the chain</p>
     <h2 class="sec">Nothing is evaluated out of order.</h2>
     <p class="body prose">A job is not a match until the steps before it have cleared. Country decides
       which rulebook applies; the rulebook decides whether you can legally hold the role at all; only
@@ -414,7 +524,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="console-band">
   <div class="wrap">
-    <p class="eyebrow dark">02 — The product</p>
+    <p class="eyebrow dark">03 · the product</p>
     <h2 class="sec">Here it is, running.</h2>
     <p class="body prose">Nine real postings across networking, cybersecurity, SAP, data, healthcare
       and one deliberately unclassifiable role — scored by the same engines that run on the server.
@@ -446,7 +556,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="sourcing">
   <div class="wrap">
-    <p class="eyebrow dark">03 — Where the jobs come from</p>
+    <p class="eyebrow dark">04 · where the jobs come from</p>
     <h2 class="sec">Every board, by a route it actually permits.</h2>
     <div class="split">
       <div>
@@ -487,7 +597,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="signin">
   <div class="wrap">
-    <p class="eyebrow dark">04 — Signing in</p>
+    <p class="eyebrow dark">05 · signing in</p>
     <h2 class="sec">Your email is the account. There is no password.</h2>
     <div class="split">
       <div>
@@ -521,7 +631,7 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="resume">
   <div class="wrap">
-    <p class="eyebrow dark">05 — Your résumé is the query</p>
+    <p class="eyebrow dark">06 · your résumé is the query</p>
     <h2 class="sec">Upload it once. The searches come from it.</h2>
     <div class="split">
       <div>
@@ -558,11 +668,15 @@ footer p { margin: 6px 0 0; font-size: 12.5px; max-width: 54ch; line-height: 1.6
 
 <section class="band" id="autopilot">
   <div class="wrap">
-    <p class="eyebrow dark">06 — Applying, every four hours</p>
+    <p class="eyebrow dark">07 · applying, every four hours</p>
     <h2 class="sec">It applies where the employer published a route.</h2>
-    <p class="body prose">Search, rank, tailor, apply — on a timer, within rules you set. Where a
+    <p class="body prose">Find, prep, apply, track — on a timer, within rules you set. Where a
       posting can legitimately be submitted to, it is. Where it cannot, the packet is finished and
       waiting, which is a click rather than an hour.</p>
+    <p class="body prose">Going live is two separate switches. Turning off the dry run makes each
+      ready application <strong>wait for your yes</strong>; only turning off “ask before each send”
+      as well makes it fully hands-off. Approving re-runs every guardrail at that moment, so a
+      deadline that passed overnight still stops it.</p>
 
     <div class="tw" style="margin-top:26px">
       <table id="channelTable"></table>
@@ -612,14 +726,17 @@ careeros resume ~/Documents/my_resume.docx
 careeros verify-evidence <span class="c">--list</span>
 careeros autopilot enable <span class="c">--min-match-score 75</span>
 careeros autopilot once          <span class="c"># see what it would send</span>
-careeros autopilot set <span class="p">--live</span>    <span class="c"># when the reports look right</span>
+careeros autopilot set <span class="p">--live</span>    <span class="c"># live, but each one waits for you</span>
+careeros autopilot queue         <span class="c"># what is waiting</span>
+careeros autopilot approve <span class="p">12</span>    <span class="c"># send that one</span>
+careeros autopilot set <span class="p">--require-approval no</span>  <span class="c"># fully hands-off</span>
 careeros autopilot install       <span class="c"># cron + systemd timer, every 4h</span></div>
   </div>
 </section>
 
 <section class="band" id="ats">
   <div class="wrap">
-    <p class="eyebrow dark">07 — Getting past the screen</p>
+    <p class="eyebrow dark">08 · getting past the screen</p>
     <h2 class="sec">Their words for your experience. Not their words for someone else's.</h2>
     <div class="split">
       <div>
@@ -669,7 +786,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="evidence">
   <div class="wrap">
-    <p class="eyebrow dark">08 — Evidence</p>
+    <p class="eyebrow dark">09 · evidence</p>
     <h2 class="sec">A résumé is a query over verified facts.</h2>
     <div class="split">
       <div>
@@ -698,7 +815,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="auth">
   <div class="wrap">
-    <p class="eyebrow dark">09 — Authorization</p>
+    <p class="eyebrow dark">10 · authorization</p>
     <h2 class="sec">Silence is never read as a yes.</h2>
     <div class="split">
       <div>
@@ -730,7 +847,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="domains">
   <div class="wrap">
-    <p class="eyebrow dark">10 — Coverage</p>
+    <p class="eyebrow dark">11 · coverage</p>
     <h2 class="sec">No job category is written into the code.</h2>
     <div class="split">
       <div>
@@ -757,7 +874,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="limits">
   <div class="wrap">
-    <p class="eyebrow dark">11 — Limits</p>
+    <p class="eyebrow dark">12 · limits</p>
     <h2 class="sec">The safest tool is the one that does not exist.</h2>
     <p class="body prose">The agent is not restricted from these actions by a prompt or a policy check.
       The tools were never built, so there is nothing to jailbreak. Every registry build asserts the list
@@ -771,7 +888,7 @@ careeros autopilot install       <span class="c"># cron + systemd timer, every 4
 
 <section class="band" id="run">
   <div class="wrap">
-    <p class="eyebrow dark">12 — Running it</p>
+    <p class="eyebrow dark">13 · running it</p>
     <h2 class="sec">The demo is frozen. The system is not.</h2>
     <p class="body prose">Everything above is captured output. To run the real thing — live job sources,
       a real agent loop, Gmail drafts that wait for your approval — clone the repository and start the
@@ -787,11 +904,19 @@ cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
 </section>
 
 <footer>
-  <div class="wrap">
+  <div class="wrap closing">
+    <h2>Let it run tonight. Approve over coffee.</h2>
+    <p>Off and dry-run by default. Assisted where a board needs you, automatic where the employer
+      published a route, and never past a CAPTCHA.</p>
+    <div class="cta">
+      <a class="pill" href="#console">Open the demo</a>
+      <a class="pill ghost" href="https://github.com/gmadarapu231-dotcom/my_animate_project" target="_blank" rel="noopener">Read the source →</a>
+    </div>
+  </div>
+  <div class="wrap base">
     <div>
       <b>CareerOS</b>
-      <p>Domain-agnostic career automation for the United States and India. Assisted by default: it
-        assembles, you submit.</p>
+      <p>Domain-agnostic career automation for the United States and India.</p>
     </div>
     <a href="https://github.com/gmadarapu231-dotcom/my_animate_project" target="_blank" rel="noopener">github.com/gmadarapu231-dotcom/my_animate_project →</a>
   </div>
@@ -922,14 +1047,16 @@ cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
     `<tbody>` + [
       ["Jobs considered", rc.considered],
       ["Résumés tailored", rc.tailored],
-      ["Would submit", rc.would_submit],
+      ["Would submit (dry run)", rc.would_submit],
       ["Actually submitted", rc.submitted],
-      ["Waiting for you", rc.assisted],
+      ["Waiting for your yes", rc.awaiting_approval || 0],
+      ["Need you to submit", rc.assisted],
     ].map(([label, value]) => `<tr>
       <td>${esc(label)}</td><td class="n mono">${esc(String(value))}</td></tr>`).join("") + `</tbody>`;
   const acted = run.verdicts.filter((v) => v.allowed);
+  const held = acted.length && acted.every((v) => !v.submission);
   document.getElementById("passNote").innerHTML = acted.length
-    ? "Would apply: " + acted.map((v) => `${esc(v.company)} <span class="chip">${esc(v.tier)}</span>`).join(", ")
+    ? (held ? "Ready and waiting for your yes: " : "Would apply: ") + acted.map((v) => `${esc(v.company)} <span class="chip">${esc(v.tier)}</span>`).join(", ")
     : "Nothing cleared the guardrails in this pass.";
   document.getElementById("neverList").innerHTML =
     F.autopilot.never_configurable.map((line) => `<li>${esc(line)}</li>`).join("");
@@ -941,6 +1068,40 @@ cd clients/app &amp;&amp; npm install &amp;&amp; npx expo start</div>
 
   /* --- ATS ------------------------------------------------------------- */
   const ats = F.atsReport;
+
+  /* --- how it works: the four mock-ups ---------------------------------- */
+  const ranked = F.jobs.jobs.slice(0, 5);
+  document.getElementById("mockFind").innerHTML =
+    `<span class="t">$ careeros autopilot once</span><br>` +
+    ranked.map((j, i) => {
+      const pr = j.priority || {};
+      return `<span class="t">${String(i + 1).padStart(2, "0")}</span> ` +
+        `${esc(j.title.length > 34 ? j.title.slice(0, 34) + "…" : j.title)} ` +
+        `<span class="t">@ ${esc(j.company)}</span> ` +
+        `<span class="g">${pr.overall != null ? Number(pr.overall).toFixed(1) : ""}</span>`;
+    }).join("<br>") +
+    `<br><span class="g">✓</span> <span class="t">${run.counts.classified} classified · ranked deadline-first</span>`;
+
+  document.getElementById("mockPrep").innerHTML =
+    `<div class="ln"><b>${esc(ats.job)}</b></div>` +
+    (ats.alignment.added.slice(0, 4).map((t) => `<div class="ln"><span class="add">+ ${esc(t)}</span><span class="muted small">posting's wording</span></div>`).join("")) +
+    `<div class="ln"><span>ATS keyword match</span><span class="mono">${ats.baseline ? ats.baseline.keyword_match + "% → " : ""}<b>${ats.tailored ? ats.tailored.keyword_match : "—"}%</b></span></div>` +
+    `<div class="ln"><span>Factuality</span><span class="chip ok">${esc(F.tailor["4"].factuality.passed ? "passed" : "blocked")}</span></div>`;
+
+  const queue = (F.autopilotQueue && F.autopilotQueue.items) || [];
+  document.getElementById("mockApply").innerHTML = queue.length
+    ? queue.map((q) => `<div class="ln"><span><b>${esc(q.company)}</b><br><span class="muted small">${esc(q.title)} · via ${esc(q.tier)}</span></span>` +
+        `<span class="row" style="flex-wrap:nowrap"><span class="btn primary" style="padding:6px 12px">Approve</span><span class="btn" style="padding:6px 12px">Pass</span></span></div>`).join("") +
+      `<div class="ln"><span class="muted small">${rc.assisted} others stopped at a guardrail or need you to submit</span></div>`
+    : `<div class="ln muted">Nothing waiting in this pass.</div>`;
+
+  const TRACK = ["applied", "application_received", "recruiter_screen", "interview", "offer"];
+  document.getElementById("mockTrack").innerHTML =
+    `<div class="ln"><span><b>Interview invitation</b><br><span class="muted small">“Are you free on Thursday at 2pm?”</span></span><span class="chip ok">interview</span></div>` +
+    TRACK.filter((st) => F.applications.lifecycle.includes(st)).map((st, i) =>
+      `<div class="tl${i <= 3 ? " on" : ""}"><i></i><b>${esc(st.replace(/_/g, " "))}</b></div>`).join("") +
+    `<div class="ln"><span class="muted small">Example message. Linking is conservative: an email it cannot match stays unlinked.</span></div>`;
+
   document.getElementById("atsHead").textContent =
     `${ats.keyword_count} keywords from one posting`;
   document.getElementById("atsScoreTable").innerHTML =

@@ -39,6 +39,9 @@ class AutopilotPolicy:
     enabled: bool = False
     #: Assemble and report, submit nothing. The honest default for a new user.
     dry_run: bool = True
+    #: Live passes queue each application for a yes/no before it goes out.
+    #: Turning this off is the separate, explicit step to fully hands-off.
+    require_approval: bool = True
 
     interval_hours: float = 4.0
     max_per_run: int = 5
@@ -91,7 +94,12 @@ class AutopilotPolicy:
     def summary(self) -> str:
         if not self.enabled:
             return "Autopilot is off. It searches nothing and applies to nothing."
-        mode = "assembling only (dry run)" if self.dry_run else "submitting"
+        if self.dry_run:
+            mode = "assembling only (dry run)"
+        elif self.require_approval:
+            mode = "queueing for your approval"
+        else:
+            mode = "submitting"
         return (
             f"Every {self.interval_hours:g}h: search, rank, then {mode} up to "
             f"{self.max_per_run} per run and {self.max_per_day} per day, at "
@@ -222,6 +230,8 @@ def evaluate(
     }
     if status in terminal:
         blockers.append(f"already {status}")
+    if getattr(application, "approval", None) == "declined":
+        blockers.append("you passed on this one")
 
     # -- channel -----------------------------------------------------------
     if not channel.tier.automatable:

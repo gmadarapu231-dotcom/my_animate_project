@@ -12,10 +12,16 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
+from careeros.sources.http import Response
+
 from careeros.apply.guardrails import AutopilotPolicy
 from careeros.autopilot import (
     AlreadyRunning,
+    NotQueued,
     PassReport,
+    approval_queue,
+    approve,
+    decline,
     RunLock,
     load_policy,
     run_forever,
@@ -158,7 +164,7 @@ def test_a_live_pass_submits_and_records_the_reference(ready):
 
     transport = Accepts()
     sent: list = []
-    enable(ready["db"], ready["user"], dry_run=False, max_per_run=2)
+    enable(ready["db"], ready["user"], dry_run=False, require_approval=False, max_per_run=2)
 
     report = run_once(
         ready["db"],
@@ -195,7 +201,7 @@ def test_the_run_cap_holds_in_a_live_pass(ready):
         def request(self, method, url, *, headers, body, timeout):
             return Response(status=200, body="{}", url=url, headers={})
 
-    enable(ready["db"], ready["user"], dry_run=False, max_per_run=1)
+    enable(ready["db"], ready["user"], dry_run=False, require_approval=False, max_per_run=1)
     report = run_once(
         ready["db"],
         ready["user"],
@@ -215,7 +221,7 @@ def test_a_submission_failure_does_not_end_the_pass(ready):
         def request(self, method, url, *, headers, body, timeout):
             return Response(status=500, body="server error", url=url, headers={})
 
-    enable(ready["db"], ready["user"], dry_run=False)
+    enable(ready["db"], ready["user"], dry_run=False, require_approval=False)
     report = run_once(
         ready["db"],
         ready["user"],
@@ -235,7 +241,7 @@ def test_unverified_evidence_stops_a_live_pass_entirely(ready):
         item.verification = VerificationState.UNVERIFIED.value
     ready["db"].flush()
 
-    enable(ready["db"], ready["user"], dry_run=False)
+    enable(ready["db"], ready["user"], dry_run=False, require_approval=False)
     report = run_once(ready["db"], ready["user"], discover_jobs=False, use_ai=False)
 
     assert report.submitted == 0
@@ -278,7 +284,7 @@ def test_a_second_pass_does_not_re_apply(ready):
             return Response(status=200, body="{}", url=url, headers={})
 
     transport = Accepts()
-    enable(ready["db"], ready["user"], dry_run=False)
+    enable(ready["db"], ready["user"], dry_run=False, require_approval=False)
     client = HttpClient(transport=transport, rate_limit_per_minute=0)
 
     first = run_once(
@@ -292,6 +298,161 @@ def test_a_second_pass_does_not_re_apply(ready):
     assert first.submitted >= 1
     assert second.submitted == 0
     assert any("already applied" in b for v in second.verdicts for b in v.blockers)
+
+
+# ---------------------------------------------------------------------------
+# the approval queue
+# ---------------------------------------------------------------------------
+class _Accepts:
+    def __init__(self):
+        self.calls = []
+
+    def request(self, method, url, *, headers, body, timeout):
+        self.calls.append(url)
+        return Response(status=200, body='{"id": "gh-1"}', url=url, headers={})
+
+
+def _live_pass(ready, transport, sent, **policy):
+    from careeros.sources.http import HttpClient
+
+    enable(ready["db"], ready["user"], dry_run=False, **policy)
+    return run_once(
+        ready["db"],
+        ready["user"],
+        discover_jobs=False,
+        use_ai=False,
+        client=HttpClient(transport=transport, rate_limit_per_minute=0),
+        send_email=lambda message, attachment: sent.append(message) or "mail-1",
+    )
+
+
+def test_live_is_still_gated_on_approval_by_default():
+    assert AutopilotPolicy().require_approval is True
+    live = AutopilotPolicy(enabled=True, dry_run=False)
+    assert "approval" in live.summary()
+
+
+def test_a_live_pass_queues_instead_of_sending(ready):
+    transport, sent = _Accepts(), []
+    report = _live_pass(ready, transport, sent)
+
+    assert report.submitted == 0
+    assert report.awaiting_approval >= 1
+    assert not transport.calls and not sent
+
+    queue = approval_queue(ready["db"], ready["user"])
+    assert len(queue) == report.awaiting_approval
+    assert all(row["tier"] in ("api", "email") for row in queue)
+
+
+def test_a_second_pass_does_not_double_queue(ready):
+    transport, sent = _Accepts(), []
+    first = _live_pass(ready, transport, sent)
+    _live_pass(ready, transport, sent)
+    assert len(approval_queue(ready["db"], ready["user"])) == first.awaiting_approval
+    waiting = ready["db"].query(ApplicationEvent).filter(
+        ApplicationEvent.detail.like("%Waiting for your approval%")
+    ).count()
+    assert waiting == first.awaiting_approval
+
+
+def test_approving_sends_that_one_application(ready):
+    from careeros.sources.http import HttpClient
+
+    transport, sent = _Accepts(), []
+    _live_pass(ready, transport, sent)
+    job_id = approval_queue(ready["db"], ready["user"])[0]["job_id"]
+
+    result = approve(
+        ready["db"],
+        ready["user"],
+        job_id,
+        client=HttpClient(transport=transport, rate_limit_per_minute=0),
+        send_email=lambda message, attachment: sent.append(message) or "mail-1",
+    )
+    assert result["outcome"] == "submitted"
+    assert transport.calls or sent
+    row = ready["db"].query(Application).filter(Application.job_id == job_id).one()
+    assert row.status == ApplicationStatus.APPLIED.value
+    assert row.approval == "approved"
+    assert job_id not in [q["job_id"] for q in approval_queue(ready["db"], ready["user"])]
+
+
+def test_declining_keeps_it_out_of_every_later_pass(ready):
+    transport, sent = _Accepts(), []
+    _live_pass(ready, transport, sent)
+    job_id = approval_queue(ready["db"], ready["user"])[0]["job_id"]
+    decline(ready["db"], ready["user"], job_id)
+
+    later = _live_pass(ready, transport, sent, require_approval=False)
+    verdict = next(v for v in later.verdicts if v.job_id == job_id)
+    assert not verdict.allowed
+    assert "you passed on this one" in verdict.blockers
+
+
+def test_only_queued_jobs_can_be_approved(ready):
+    with pytest.raises(NotQueued):
+        approve(ready["db"], ready["user"], ready["cobalt"].id)
+    with pytest.raises(NotQueued):
+        decline(ready["db"], ready["user"], ready["cobalt"].id)
+
+
+def test_an_approval_the_guardrails_now_refuse_goes_back_in_the_queue(ready):
+    transport, sent = _Accepts(), []
+    _live_pass(ready, transport, sent)
+    job_id = approval_queue(ready["db"], ready["user"])[0]["job_id"]
+    # The user tightened the rules after the pass queued it.
+    enable(ready["db"], ready["user"], dry_run=False, min_match_score=100.0)
+
+    result = approve(ready["db"], ready["user"], job_id)
+    assert result["outcome"] == "blocked"
+    assert job_id in [q["job_id"] for q in approval_queue(ready["db"], ready["user"])]
+
+
+# ---------------------------------------------------------------------------
+# tracking replies
+# ---------------------------------------------------------------------------
+def test_the_pass_reads_the_mailbox_and_moves_applications(ready, tmp_path):
+    from careeros.gmail.client import LocalMailboxClient
+
+    transport, sent = _Accepts(), []
+    _live_pass(ready, transport, sent, require_approval=False)
+    applied = ready["db"].query(Application).filter(
+        Application.status == ApplicationStatus.APPLIED.value
+    ).first()
+    company = applied.job.company
+
+    mailbox = tmp_path / "mail.json"
+    mailbox.write_text(json.dumps([{
+        "id": "m1",
+        "from": "talent@example.com",
+        "subject": f"Interview invitation - {company}",
+        "body": f"Thanks for applying to {company}. Can we schedule an interview on 2026-11-02 14:00?",
+        "received_at": "2026-10-17T09:00:00",
+    }]))
+
+    enable(ready["db"], ready["user"])
+    report = run_once(
+        ready["db"], ready["user"], discover_jobs=False, use_ai=False,
+        mail_client=LocalMailboxClient(mailbox),
+    )
+    assert report.tracking["fetched"] == 1
+    assert report.tracking["advanced"] == 1
+    ready["db"].refresh(applied)
+    assert applied.status == ApplicationStatus.INTERVIEW.value
+    track = next(s for s in report.to_dict()["stages"] if s["key"] == "track")
+    assert track["done"] and "1 application(s) moved" in track["detail"]
+
+
+def test_no_mailbox_is_reported_as_a_skipped_stage(ready, monkeypatch, tmp_path):
+    monkeypatch.delenv("CAREEROS_LOCAL_MAILBOX", raising=False)
+    monkeypatch.setenv("CAREEROS_GMAIL_TOKEN", str(tmp_path / "absent.json"))
+    enable(ready["db"], ready["user"])
+    report = run_once(ready["db"], ready["user"], discover_jobs=False, use_ai=False)
+    assert report.tracking == {"skipped": "no mailbox connected"}
+    stages = report.to_dict()["stages"]
+    assert [s["key"] for s in stages] == ["find", "prep", "apply", "track"]
+    assert stages[-1]["done"] is False
 
 
 # ---------------------------------------------------------------------------
