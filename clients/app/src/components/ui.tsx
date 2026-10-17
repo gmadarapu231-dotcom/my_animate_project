@@ -12,6 +12,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextStyle,
   View,
@@ -171,13 +172,13 @@ export function Button({
       ]}
     >
       {pending ? (
-        <ActivityIndicator size="small" color={isPrimary ? '#fff' : p.accent} />
+        <ActivityIndicator size="small" color={isPrimary ? p.onAccent : p.accent} />
       ) : (
         <Text
           style={{
             fontSize: small ? 12.5 : 14,
             fontWeight: '600',
-            color: isPrimary ? '#fff' : variant === 'danger' ? p.bad : p.ink,
+            color: isPrimary ? p.onAccent : variant === 'danger' ? p.bad : p.ink,
           }}
         >
           {label}
@@ -215,6 +216,53 @@ export function FilterChip({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+/** "01 · find" -- the numbered stage label used across the autopilot. */
+export function StepLabel({ index, label, live }: { index: number; label: string; live?: boolean }) {
+  const p = usePalette();
+  return (
+    <Row gap={6}>
+      {live ? <View style={[styles.dot, { backgroundColor: p.signal }]} /> : null}
+      <Text style={[type.mono, { color: live ? p.signal : p.muted, fontSize: 11.5 }]}>
+        {`${String(index).padStart(2, '0')} · ${label.toLowerCase()}`}
+      </Text>
+    </Row>
+  );
+}
+
+/** A labelled on/off row. Uses the platform switch so it is native everywhere. */
+export function Toggle({
+  label,
+  hint,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+}) {
+  const p = usePalette();
+  return (
+    <View style={[styles.toggle, { borderTopColor: p.line }]}>
+      <View style={{ flex: 1, paddingRight: spacing.md }}>
+        <Body style={{ fontWeight: '600' }}>{label}</Body>
+        {hint ? <Small style={{ marginTop: 2 }}>{hint}</Small> : null}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        accessibilityLabel={label}
+        trackColor={{ false: p.line, true: p.signal }}
+        thumbColor="#ffffff"
+        {...({ activeThumbColor: '#ffffff' } as object)}
+      />
+    </View>
   );
 }
 
@@ -358,8 +406,8 @@ export const styles = StyleSheet.create({
   centreBox: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   panel: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.lg,
+    borderRadius: radius.lg,
+    padding: spacing.xl - 4,
     marginBottom: spacing.md,
   },
   chip: {
@@ -369,23 +417,30 @@ export const styles = StyleSheet.create({
   },
   button: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.sm + 1,
-    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 38,
+    minHeight: 40,
   },
-  buttonSmall: { paddingHorizontal: spacing.sm + 2, paddingVertical: 5, minHeight: 30 },
+  buttonSmall: { paddingHorizontal: spacing.md, paddingVertical: 5, minHeight: 30 },
   filterChip: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
   },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  toggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: spacing.md,
+  },
   statTile: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     padding: spacing.md,
     minWidth: 104,
     flexGrow: 1,

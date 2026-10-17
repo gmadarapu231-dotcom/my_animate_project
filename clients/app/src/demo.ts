@@ -25,12 +25,17 @@ import {
   Analytics,
   ApiError,
   ApplicationRow,
+  ApprovalResult,
+  AutopilotDescription,
+  AutopilotPolicy,
+  AutopilotReport,
   CareerOsClient,
   Facets,
   Health,
   JobCard,
   LearningSignal,
   Profile,
+  QueueItem,
   Recommendation,
   SearchResult,
   TailorResult,
@@ -257,4 +262,49 @@ export class DemoClient extends CareerOsClient {
   emails = () => settle({ count: 0, messages: [] as any[] });
 
   drafts = () => settle({ count: 0, drafts: [] as any[] });
+
+  // The autopilot: a real live pass, captured while every application waited
+  // for approval, so nothing in it ever reached an employer. Toggles and
+  // decisions are in-memory; approving cannot send anything from here.
+  private policy: AutopilotPolicy = { ...F.autopilot.policy };
+  private decided = new Set<number>();
+
+  private describe = (): AutopilotDescription => {
+    const policy = this.policy;
+    const live = policy.enabled && !policy.dry_run;
+    return {
+      ...F.autopilot,
+      policy,
+      submits_for_real: live,
+      hands_off: live && !policy.require_approval,
+    };
+  };
+
+  autopilot = () => settle(this.describe());
+
+  setAutopilot = (patch: Partial<AutopilotPolicy>) => {
+    this.policy = { ...this.policy, ...patch };
+    return settle({ ...this.describe(), changed: Object.keys(patch) });
+  };
+
+  runAutopilot = () => settle<AutopilotReport>(F.autopilotRun, 900);
+
+  autopilotQueue = () => {
+    const items = (F.autopilotQueue.items as QueueItem[]).filter((q) => !this.decided.has(q.job_id));
+    return settle({ count: items.length, items });
+  };
+
+  approve = (jobId: number) =>
+    Promise.reject(
+      new ApiError(
+        'The demo has no server, so approving cannot send anything. On your own server ' +
+          'this re-checks the guardrails and submits this one application.',
+        501,
+      ),
+    );
+
+  decline = (jobId: number) => {
+    this.decided.add(jobId);
+    return settle<ApprovalResult>({ outcome: 'declined', job_id: jobId });
+  };
 }

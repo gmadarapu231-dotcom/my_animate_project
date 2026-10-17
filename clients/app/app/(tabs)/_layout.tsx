@@ -19,9 +19,11 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: p.accent,
         tabBarInactiveTintColor: p.muted,
-        tabBarStyle: { backgroundColor: p.panel, borderTopColor: p.line },
-        headerStyle: { backgroundColor: p.panel },
-        headerTitleStyle: { color: p.ink, fontSize: 16 },
+        tabBarStyle: { backgroundColor: p.bg, borderTopColor: p.line },
+        tabBarLabelStyle: { fontWeight: '600', fontSize: 10.5 },
+        headerStyle: { backgroundColor: p.bg, borderBottomColor: p.line },
+        headerShadowVisible: false,
+        headerTitleStyle: { color: p.ink, fontSize: 16, fontWeight: '700' },
         sceneStyle: { backgroundColor: p.bg },
         headerRight: () => (
           <Link href="/settings" asChild>
@@ -36,6 +38,15 @@ export default function TabLayout() {
         ),
       }}
     >
+      <Tabs.Screen
+        name="autopilot"
+        options={{
+          title: 'Autopilot',
+          // Seven tabs share a phone's width; the header still says Autopilot.
+          tabBarLabel: 'Auto',
+          tabBarIcon: ({ color }) => <TabIcon glyph="▶︎" color={color} />,
+        }}
+      />
       <Tabs.Screen
         name="index"
         options={{

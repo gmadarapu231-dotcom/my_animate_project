@@ -11242,7 +11242,8 @@
  "autopilot": {
   "policy": {
    "enabled": true,
-   "dry_run": true,
+   "dry_run": false,
+   "require_approval": true,
    "interval_hours": 4.0,
    "max_per_run": 5,
    "max_per_day": 15,
@@ -11262,7 +11263,9 @@
    "skip_if_applicants_over": null,
    "quiet_hours": []
   },
-  "summary": "Every 4h: search, rank, then assembling only (dry run) up to 5 per run and 15 per day, at match 50+ via api, email.",
+  "summary": "Every 4h: search, rank, then queueing for your approval up to 5 per run and 15 per day, at match 50+ via api, email.",
+  "submits_for_real": true,
+  "hands_off": false,
   "never_configurable": [
    "The tailored résumé must pass the factuality check.",
    "It must cite at least one verified evidence item.",
@@ -11271,12 +11274,13 @@
   ]
  },
  "autopilotRun": {
-  "started_at": "2026-09-22T03:45:29.624154+00:00",
-  "finished_at": "2026-09-22T03:45:31.947802+00:00",
-  "duration_seconds": 2.3,
+  "started_at": "2026-10-17T04:05:01.366171+00:00",
+  "finished_at": "2026-10-17T04:05:03.189921+00:00",
+  "duration_seconds": 1.8,
   "policy": {
    "enabled": true,
-   "dry_run": true,
+   "dry_run": false,
+   "require_approval": true,
    "interval_hours": 4.0,
    "max_per_run": 5,
    "max_per_day": 15,
@@ -11303,8 +11307,38 @@
    "tailored": 6,
    "considered": 9,
    "submitted": 0,
-   "would_submit": 2,
-   "assisted": 7
+   "would_submit": 0,
+   "assisted": 7,
+   "awaiting_approval": 2
+  },
+  "stages": [
+   {
+    "key": "find",
+    "label": "Find",
+    "done": false,
+    "detail": "search skipped, 10 classified"
+   },
+   {
+    "key": "prep",
+    "label": "Prep",
+    "done": true,
+    "detail": "6 résumé(s) tailored and fact-checked"
+   },
+   {
+    "key": "apply",
+    "label": "Apply",
+    "done": true,
+    "detail": "0 sent, 2 waiting for you, 0 dry-run, 7 need a human"
+   },
+   {
+    "key": "track",
+    "label": "Track",
+    "done": false,
+    "detail": "no mailbox connected"
+   }
+  ],
+  "tracking": {
+   "skipped": "no mailbox connected"
   },
   "blocked_by": {
    "assisted: No application endpoint or address found for this posting, so it is assembled for you to submit.": 7,
@@ -11321,43 +11355,9 @@
     "allowed": true,
     "blockers": [],
     "notes": [
-     "Dry run: this would be submitted, but nothing is sent."
+     "Waiting for your approval before it is sent."
     ],
-    "submission": {
-     "ok": true,
-     "tier": "api",
-     "provider": "greenhouse",
-     "dry_run": true,
-     "reference": null,
-     "message": "Would POST to https://boards-api.greenhouse.io/v1/boards/cobaltbank/jobs/5550001",
-     "downgraded_to": null,
-     "artifacts": {
-      "endpoint": "https://boards-api.greenhouse.io/v1/boards/cobaltbank/jobs/5550001",
-      "fields": [
-       "email",
-       "first_name",
-       "last_name",
-       "phone"
-      ],
-      "resume_filename": "priya-raman-senior-network-security-engineer.txt",
-      "docs": "https://developers.greenhouse.io/job-board.html#submit-an-application",
-      "ats_overall": 77.0,
-      "ats_keyword_match": 42.1,
-      "ats_missing": [
-       "incident response",
-       "administration palo alto",
-       "alto or cisco",
-       "asa and cisco",
-       "bachelor s degree",
-       "deep hands-on bgp",
-       "firewall administration palo",
-       "hands-on bgp ospf",
-       "ospf and vlan",
-       "trust and microsegmentation"
-      ]
-     },
-     "submitted_at": null
-    }
+    "submission": null
    },
    {
     "job_id": 3,
@@ -11367,38 +11367,9 @@
     "allowed": true,
     "blockers": [],
     "notes": [
-     "Dry run: this would be submitted, but nothing is sent."
+     "Waiting for your approval before it is sent."
     ],
-    "submission": {
-     "ok": true,
-     "tier": "email",
-     "provider": "email",
-     "dry_run": true,
-     "reference": null,
-     "message": "Would email careers@halden.example.com",
-     "downgraded_to": null,
-     "artifacts": {
-      "to": "careers@halden.example.com",
-      "subject": "Application: Senior SAP Security Consultant — Halden Consulting",
-      "body_characters": 336,
-      "attachment": "priya-raman-senior-sap-security-consultant.txt",
-      "ats_overall": 32.1,
-      "ats_keyword_match": 3.2,
-      "ats_missing": [
-       "sap",
-       "composite roles",
-       "sap grc access control",
-       "sap security",
-       "firefighter",
-       "segregation of duties",
-       "sap security consultant",
-       "senior sap security",
-       "access management configuration",
-       "design derived roles"
-      ]
-     },
-     "submitted_at": null
-    }
+    "submission": null
    },
    {
     "job_id": 4,
@@ -11993,5 +11964,34 @@
     }
    ]
   }
+ },
+ "autopilotQueue": {
+  "count": 2,
+  "items": [
+   {
+    "job_id": 1,
+    "application_id": 1,
+    "title": "Senior Network Security Engineer",
+    "company": "Cobalt Bank",
+    "url": "https://boards.greenhouse.io/cobaltbank/jobs/5550001",
+    "tier": "api",
+    "resume_id": 1,
+    "match_score": 88.8,
+    "priority": 85.6,
+    "deadline_on": "2026-10-17"
+   },
+   {
+    "job_id": 3,
+    "application_id": 2,
+    "title": "Senior SAP Security Consultant",
+    "company": "Halden Consulting",
+    "url": null,
+    "tier": "email",
+    "resume_id": 2,
+    "match_score": 56.8,
+    "priority": 64.9,
+    "deadline_on": "2026-10-22"
+   }
+  ]
  }
 }

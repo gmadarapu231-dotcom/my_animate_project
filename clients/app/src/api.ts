@@ -404,6 +404,88 @@ export type SearchPlanView = {
   note: string;
 };
 
+// ---------------------------------------------------------------------------
+// Autopilot
+// ---------------------------------------------------------------------------
+export type AutopilotPolicy = {
+  enabled: boolean;
+  dry_run: boolean;
+  require_approval: boolean;
+  interval_hours: number;
+  max_per_run: number;
+  max_per_day: number;
+  min_match_score: number;
+  channels: string[];
+  [key: string]: unknown;
+};
+
+export type AutopilotDescription = {
+  policy: AutopilotPolicy;
+  summary: string;
+  submits_for_real: boolean;
+  hands_off: boolean;
+  never_configurable: string[];
+  changed?: string[];
+};
+
+export type AutopilotStage = {
+  key: 'find' | 'prep' | 'apply' | 'track';
+  label: string;
+  done: boolean;
+  detail: string;
+};
+
+export type AutopilotVerdict = {
+  job_id: number;
+  title: string;
+  company: string;
+  tier: string;
+  allowed: boolean;
+  blockers: string[];
+  notes: string[];
+  submission: { ok: boolean; dry_run: boolean; message: string; reference: string | null } | null;
+};
+
+export type AutopilotReport = {
+  started_at: string;
+  finished_at: string | null;
+  duration_seconds: number | null;
+  skipped_reason: string | null;
+  counts: {
+    classified: number;
+    tailored: number;
+    considered: number;
+    submitted: number;
+    would_submit: number;
+    assisted: number;
+    awaiting_approval?: number;
+  };
+  stages?: AutopilotStage[];
+  tracking?: Record<string, unknown> | null;
+  blocked_by: Record<string, number>;
+  verdicts: AutopilotVerdict[];
+  errors: string[];
+};
+
+export type QueueItem = {
+  job_id: number;
+  application_id: number;
+  title: string;
+  company: string;
+  url: string | null;
+  tier: string;
+  resume_id: number | null;
+  match_score: number | null;
+  priority: number | null;
+  deadline_on: string | null;
+};
+
+export type ApprovalResult = {
+  outcome: string;
+  verdict?: AutopilotVerdict;
+  job_id?: number;
+};
+
 export type ClientConfig = { baseUrl: string; token?: string | null };
 
 const TIMEOUT_MS = 120_000;   // the agent loop can legitimately take a while
@@ -580,6 +662,27 @@ export class CareerOsClient {
 
   discover = (body: { only?: string[]; terms?: string[]; countries?: string[]; per_provider?: number } = {}) =>
     this.request<DiscoveryReport>('/api/sources/discover', { method: 'POST', body });
+
+  // -- autopilot ---------------------------------------------------------
+  autopilot = () => this.request<AutopilotDescription>('/api/autopilot');
+
+  setAutopilot = (patch: Partial<AutopilotPolicy>) =>
+    this.request<AutopilotDescription>('/api/autopilot', { method: 'POST', body: patch });
+
+  runAutopilot = (discover = true) =>
+    this.request<AutopilotReport>('/api/autopilot/run', {
+      method: 'POST',
+      body: { discover, use_ai: true },
+    });
+
+  autopilotQueue = () =>
+    this.request<{ count: number; items: QueueItem[] }>('/api/autopilot/queue');
+
+  approve = (jobId: number) =>
+    this.request<ApprovalResult>(`/api/autopilot/queue/${jobId}/approve`, { method: 'POST' });
+
+  decline = (jobId: number) =>
+    this.request<ApprovalResult>(`/api/autopilot/queue/${jobId}/decline`, { method: 'POST' });
 
   // -- email -------------------------------------------------------------
   emails = () =>
